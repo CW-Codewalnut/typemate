@@ -65,6 +65,28 @@ void main() {
       expect(platformBridge.lastInsertedText, controller.latestTranscript);
     },
   );
+
+  test('uses the recorder provided when listening starts', () async {
+    final selectedRecorder = FakeAudioRecorder(
+      recording: const AudioRecording(
+        path: 'selected-microphone.wav',
+        duration: Duration(seconds: 3),
+      ),
+    );
+    final sttEngine = FakeSttEngine();
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: sttEngine,
+      audioRecorderProvider: () => selectedRecorder,
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(selectedRecorder.started, isTrue);
+    expect(selectedRecorder.stopped, isTrue);
+    expect(sttEngine.lastRecording?.path, 'selected-microphone.wav');
+  });
 }
 
 class FakeAudioRecorder implements AudioRecorder {

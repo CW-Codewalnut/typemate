@@ -5,23 +5,38 @@ import '../models/dictation_state.dart';
 import '../platform/platform_bridge.dart';
 import '../stt/stt_engine.dart';
 
+typedef AudioRecorderProvider = AudioRecorder Function();
+
 class DictationController extends ChangeNotifier {
-  DictationController({
+  factory DictationController({
     required PlatformBridge platformBridge,
     required SttEngine sttEngine,
-    required AudioRecorder audioRecorder,
-  }) : this._(platformBridge, sttEngine, audioRecorder);
+    AudioRecorder? audioRecorder,
+    AudioRecorderProvider? audioRecorderProvider,
+  }) {
+    assert(
+      audioRecorder != null || audioRecorderProvider != null,
+      'Provide either audioRecorder or audioRecorderProvider.',
+    );
+
+    return DictationController._(
+      platformBridge,
+      sttEngine,
+      audioRecorderProvider ?? (() => audioRecorder!),
+    );
+  }
 
   DictationController._(
     this._platformBridge,
     this._sttEngine,
-    this._audioRecorder,
+    this._audioRecorderProvider,
   );
 
   final PlatformBridge _platformBridge;
   final SttEngine _sttEngine;
-  final AudioRecorder _audioRecorder;
+  final AudioRecorderProvider _audioRecorderProvider;
 
+  AudioRecorder? _activeRecorder;
   DictationPhase _phase = DictationPhase.idle;
   String _latestTranscript = '';
   String _statusMessage = 'Ready to set up local dictation.';
@@ -45,7 +60,10 @@ class DictationController extends ChangeNotifier {
     _latestTranscript = '';
     _setPhase(DictationPhase.listening, 'Listening while shortcut is held...');
     await _platformBridge.showListeningOverlay();
-    await _audioRecorder.start();
+
+    final recorder = _audioRecorderProvider();
+    _activeRecorder = recorder;
+    await recorder.start();
   }
 
   Future<void> stopListening() async {
@@ -53,7 +71,12 @@ class DictationController extends ChangeNotifier {
       return;
     }
 
-    final recording = await _audioRecorder.stop();
+    final recorder = _activeRecorder;
+    final recording = recorder == null
+        ? const AudioRecording(path: '', duration: Duration.zero)
+        : await recorder.stop();
+    _activeRecorder = null;
+
     await _platformBridge.hideListeningOverlay();
     _setPhase(DictationPhase.transcribing, 'Transcribing locally...');
 

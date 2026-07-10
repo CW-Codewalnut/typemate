@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'audio/ffmpeg_microphone_discovery.dart';
+import 'audio/microphone_audio_recorder_factory.dart';
 import 'audio/mock_audio_recorder.dart';
 import 'core/dictation_controller.dart';
 import 'core/microphone_settings_controller.dart';
@@ -22,13 +25,23 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
   @override
   void initState() {
     super.initState();
-    controller = DictationController(
-      platformBridge: MockPlatformBridge(),
-      sttEngine: MockSttEngine(),
-      audioRecorder: MockAudioRecorder(),
+    final recorderFactory = MicrophoneAudioRecorderFactory.windows(
+      outputDirectory: Directory('build/recordings'),
     );
     microphoneController = MicrophoneSettingsController(
       discovery: const FfmpegMicrophoneDiscovery(),
+    );
+    controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: MockSttEngine(),
+      audioRecorderProvider: () {
+        final selectedMicrophone = microphoneController.selectedMicrophone;
+        if (selectedMicrophone == null) {
+          return MockAudioRecorder();
+        }
+
+        return recorderFactory.create(selectedMicrophone);
+      },
     );
   }
 
