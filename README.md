@@ -23,10 +23,23 @@ Initial Flutter scaffold. The current app contains the product shell, dictation 
 flutter pub get
 flutter analyze
 flutter test
+flutter test integration_test
 flutter run -d windows
 ```
 
+Install local git hooks once per clone:
+
+```bash
+bash scripts/install-git-hooks.sh
+```
+
+The hooks run formatting, analyzer, tests, and conventional commit checks before code reaches GitHub.
+
 ## Documentation
 
+- `AGENTS.md`
+- `CLAUDE.md`
+- `PLAN.md`
+- `DESIGN.md`
 - `docs/requirements.md`
 - `docs/architecture.md`

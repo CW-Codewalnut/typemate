@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+FLUTTER="R:/Tools/flutter/bin/flutter"
+if [ ! -x "$FLUTTER" ]; then
+  FLUTTER="flutter"
+fi
+
+$FLUTTER test

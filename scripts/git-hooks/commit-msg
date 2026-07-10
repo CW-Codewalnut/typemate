@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+message_file="$1"
+first_line="$(head -n 1 "$message_file")"
+
+pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_-]+\))?: .+'
+
+if [[ ! "$first_line" =~ $pattern ]]; then
+  echo "Commit message must follow Conventional Commits."
+  echo "Example: feat: add microphone discovery"
+  echo "Actual: $first_line"
+  exit 1
+fi
