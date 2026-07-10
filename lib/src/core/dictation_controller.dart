@@ -5,7 +5,7 @@ import '../models/dictation_state.dart';
 import '../platform/platform_bridge.dart';
 import '../stt/stt_engine.dart';
 
-typedef AudioRecorderProvider = AudioRecorder Function();
+typedef AudioRecorderProvider = AudioRecorder? Function();
 
 class DictationController extends ChangeNotifier {
   factory DictationController({
@@ -58,11 +58,16 @@ class DictationController extends ChangeNotifier {
     }
 
     _latestTranscript = '';
-    _setPhase(DictationPhase.listening, 'Listening while shortcut is held...');
-    await _platformBridge.showListeningOverlay();
-
     final recorder = _audioRecorderProvider();
+    if (recorder == null) {
+      _statusMessage = 'Select a microphone before dictating.';
+      notifyListeners();
+      return;
+    }
+
+    _setPhase(DictationPhase.listening, 'Listening while shortcut is held...');
     _activeRecorder = recorder;
+    await _platformBridge.showListeningOverlay();
     await recorder.start();
   }
 

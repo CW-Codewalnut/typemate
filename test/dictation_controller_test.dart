@@ -87,6 +87,23 @@ void main() {
     expect(selectedRecorder.stopped, isTrue);
     expect(sttEngine.lastRecording?.path, 'selected-microphone.wav');
   });
+
+  test('does not start listening when no recorder is available', () async {
+    final platformBridge = MockPlatformBridge();
+    final sttEngine = FakeSttEngine();
+    final controller = DictationController(
+      platformBridge: platformBridge,
+      sttEngine: sttEngine,
+      audioRecorderProvider: () => null,
+    );
+
+    await controller.startListening();
+
+    expect(controller.phase, DictationPhase.idle);
+    expect(controller.statusMessage, 'Select a microphone before dictating.');
+    expect(platformBridge.overlayVisible, isFalse);
+    expect(sttEngine.lastRecording, isNull);
+  });
 }
 
 class FakeAudioRecorder implements AudioRecorder {

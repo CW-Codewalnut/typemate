@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import 'audio/ffmpeg_microphone_discovery.dart';
 import 'audio/microphone_audio_recorder_factory.dart';
-import 'audio/mock_audio_recorder.dart';
 import 'core/dictation_controller.dart';
 import 'core/microphone_settings_controller.dart';
 import 'platform/mock_platform_bridge.dart';
@@ -40,7 +39,7 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
       audioRecorderProvider: () {
         final selectedMicrophone = microphoneController.selectedMicrophone;
         if (selectedMicrophone == null) {
-          return MockAudioRecorder();
+          return null;
         }
 
         return recorderFactory.create(selectedMicrophone);
