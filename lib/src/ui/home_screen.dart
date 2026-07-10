@@ -30,7 +30,10 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: widget.controller,
+      animation: Listenable.merge([
+        widget.controller,
+        widget.microphoneController,
+      ]),
       builder: (context, _) {
         return Scaffold(
           body: SafeArea(
@@ -69,6 +72,9 @@ class _HomeContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final canToggleListening =
+        microphoneController.selectedMicrophone != null ||
+        controller.phase == DictationPhase.listening;
 
     return Center(
       child: ConstrainedBox(
@@ -123,7 +129,8 @@ class _HomeContent extends StatelessWidget {
                           ),
                           OutlinedButton.icon(
                             onPressed:
-                                controller.phase ==
+                                !canToggleListening ||
+                                    controller.phase ==
                                         DictationPhase.transcribing ||
                                     controller.phase == DictationPhase.inserting
                                 ? null

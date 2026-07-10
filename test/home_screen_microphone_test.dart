@@ -40,6 +40,36 @@ void main() {
     expect(find.text('2 microphones found.'), findsOneWidget);
   });
 
+  testWidgets('disables dictation preview until a microphone is selected', (
+    tester,
+  ) async {
+    final dictationController = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: MockSttEngine(),
+      audioRecorder: MockAudioRecorder(),
+    );
+    final microphoneController = MicrophoneSettingsController(
+      discovery: FakeMicrophoneDiscovery(const []),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          controller: dictationController,
+          microphoneController: microphoneController,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final button = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'Hold shortcut preview'),
+    );
+
+    expect(find.text('No microphones found.'), findsOneWidget);
+    expect(button.onPressed, isNull);
+  });
+
   testWidgets('shows discovered microphones in settings panel', (tester) async {
     final dictationController = DictationController(
       platformBridge: MockPlatformBridge(),
