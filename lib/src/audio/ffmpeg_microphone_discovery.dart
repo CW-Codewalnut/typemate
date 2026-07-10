@@ -18,13 +18,18 @@ abstract interface class DiscoveryProcessRunner {
   Future<DiscoveryProcessResult> run(String executable, List<String> arguments);
 }
 
-class FfmpegMicrophoneDiscovery {
+abstract interface class MicrophoneDiscovery {
+  Future<List<MicrophoneDevice>> listMicrophones();
+}
+
+class FfmpegMicrophoneDiscovery implements MicrophoneDiscovery {
   const FfmpegMicrophoneDiscovery({
     this.processRunner = const DartDiscoveryProcessRunner(),
   });
 
   final DiscoveryProcessRunner processRunner;
 
+  @override
   Future<List<MicrophoneDevice>> listMicrophones() async {
     final result = await processRunner.run('ffmpeg', [
       '-hide_banner',

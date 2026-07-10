@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
 
 import '../core/dictation_controller.dart';
+import '../core/microphone_settings_controller.dart';
+import '../audio/ffmpeg_microphone_discovery.dart';
 import '../models/dictation_state.dart';
 import 'listening_overlay_preview.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key, required this.controller});
+  const HomeScreen({
+    super.key,
+    required this.controller,
+    required this.microphoneController,
+  });
 
   final DictationController controller;
+  final MicrophoneSettingsController microphoneController;
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +25,10 @@ class HomeScreen extends StatelessWidget {
           body: SafeArea(
             child: Stack(
               children: [
-                _HomeContent(controller: controller),
+                _HomeContent(
+                  controller: controller,
+                  microphoneController: microphoneController,
+                ),
                 if (controller.phase == DictationPhase.listening)
                   const Align(
                     alignment: Alignment.topCenter,
@@ -37,9 +47,13 @@ class HomeScreen extends StatelessWidget {
 }
 
 class _HomeContent extends StatelessWidget {
-  const _HomeContent({required this.controller});
+  const _HomeContent({
+    required this.controller,
+    required this.microphoneController,
+  });
 
   final DictationController controller;
+  final MicrophoneSettingsController microphoneController;
 
   @override
   Widget build(BuildContext context) {
@@ -121,6 +135,8 @@ class _HomeContent extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
+              _MicrophoneSelectionPanel(controller: microphoneController),
+              const SizedBox(height: 24),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -142,7 +158,6 @@ class _HomeContent extends StatelessWidget {
                       title: 'Settings planned',
                       items: const [
                         'Shortcut selection',
-                        'Microphone selection',
                         'Default local model setup',
                         'Start at login',
                         'Privacy and local storage controls',
@@ -161,6 +176,94 @@ class _HomeContent extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _MicrophoneSelectionPanel extends StatelessWidget {
+  const _MicrophoneSelectionPanel({required this.controller});
+
+  final MicrophoneSettingsController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final selected = controller.selectedMicrophone;
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Microphone selection',
+                        style: theme.textTheme.titleMedium,
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: controller.isLoading
+                          ? null
+                          : controller.loadMicrophones,
+                      icon: const Icon(Icons.refresh),
+                      label: Text(
+                        controller.isLoading
+                            ? 'Scanning...'
+                            : 'Refresh microphones',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(controller.statusMessage),
+                if (controller.microphones.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  DropdownButton<MicrophoneDevice>(
+                    value: selected,
+                    isExpanded: true,
+                    items: [
+                      for (final microphone in controller.microphones)
+                        DropdownMenuItem(
+                          value: microphone,
+                          child: Text(microphone.name),
+                        ),
+                    ],
+                    onChanged: (microphone) {
+                      if (microphone != null) {
+                        controller.selectMicrophone(microphone);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  for (final microphone in controller.microphones)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Icon(
+                            microphone == selected
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_unchecked,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(microphone.name)),
+                        ],
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

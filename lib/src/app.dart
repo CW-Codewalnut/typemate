@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'audio/ffmpeg_microphone_discovery.dart';
 import 'audio/mock_audio_recorder.dart';
 import 'core/dictation_controller.dart';
+import 'core/microphone_settings_controller.dart';
 import 'platform/mock_platform_bridge.dart';
 import 'stt/mock_stt_engine.dart';
 import 'ui/home_screen.dart';
@@ -15,6 +17,7 @@ class DictationFlowApp extends StatefulWidget {
 
 class _DictationFlowAppState extends State<DictationFlowApp> {
   late final DictationController controller;
+  late final MicrophoneSettingsController microphoneController;
 
   @override
   void initState() {
@@ -24,10 +27,14 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
       sttEngine: MockSttEngine(),
       audioRecorder: MockAudioRecorder(),
     );
+    microphoneController = MicrophoneSettingsController(
+      discovery: const FfmpegMicrophoneDiscovery(),
+    );
   }
 
   @override
   void dispose() {
+    microphoneController.dispose();
     controller.dispose();
     super.dispose();
   }
@@ -41,7 +48,10 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5B6CFF)),
         useMaterial3: true,
       ),
-      home: HomeScreen(controller: controller),
+      home: HomeScreen(
+        controller: controller,
+        microphoneController: microphoneController,
+      ),
     );
   }
 }
