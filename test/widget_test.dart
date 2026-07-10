@@ -1,9 +1,13 @@
 import 'package:dictation_flow/src/app.dart';
+import 'package:dictation_flow/src/audio/ffmpeg_microphone_discovery.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('renders the desktop dictation shell', (tester) async {
-    await tester.pumpWidget(const DictationFlowApp());
+    await tester.pumpWidget(
+      DictationFlowApp(microphoneDiscovery: FakeMicrophoneDiscovery()),
+    );
+    await tester.pumpAndSettle();
 
     expect(find.text('TypeMate'), findsOneWidget);
     expect(
@@ -12,4 +16,9 @@ void main() {
     );
     expect(find.text('Prepare local engine'), findsOneWidget);
   });
+}
+
+class FakeMicrophoneDiscovery implements MicrophoneDiscovery {
+  @override
+  Future<List<MicrophoneDevice>> listMicrophones() async => const [];
 }

@@ -9,6 +9,37 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('automatically scans microphones when the shell opens', (
+    tester,
+  ) async {
+    final dictationController = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: MockSttEngine(),
+      audioRecorder: MockAudioRecorder(),
+    );
+    final microphoneController = MicrophoneSettingsController(
+      discovery: FakeMicrophoneDiscovery([
+        const MicrophoneDevice(name: 'Microphone (Brio 100)'),
+        const MicrophoneDevice(name: 'Headset (Tribit XSound Go)'),
+      ]),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          controller: dictationController,
+          microphoneController: microphoneController,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Microphone selection'), findsOneWidget);
+    expect(find.text('Microphone (Brio 100)'), findsWidgets);
+    expect(find.text('Headset (Tribit XSound Go)'), findsOneWidget);
+    expect(find.text('2 microphones found.'), findsOneWidget);
+  });
+
   testWidgets('shows discovered microphones in settings panel', (tester) async {
     final dictationController = DictationController(
       platformBridge: MockPlatformBridge(),
@@ -30,6 +61,7 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Refresh microphones'));
     await tester.pumpAndSettle();

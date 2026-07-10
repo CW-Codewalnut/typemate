@@ -12,7 +12,9 @@ import 'stt/mock_stt_engine.dart';
 import 'ui/home_screen.dart';
 
 class DictationFlowApp extends StatefulWidget {
-  const DictationFlowApp({super.key});
+  const DictationFlowApp({super.key, this.microphoneDiscovery});
+
+  final MicrophoneDiscovery? microphoneDiscovery;
 
   @override
   State<DictationFlowApp> createState() => _DictationFlowAppState();
@@ -29,7 +31,8 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
       outputDirectory: Directory('build/recordings'),
     );
     microphoneController = MicrophoneSettingsController(
-      discovery: const FfmpegMicrophoneDiscovery(),
+      discovery:
+          widget.microphoneDiscovery ?? const FfmpegMicrophoneDiscovery(),
     );
     controller = DictationController(
       platformBridge: MockPlatformBridge(),

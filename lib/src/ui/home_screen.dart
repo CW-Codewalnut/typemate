@@ -6,7 +6,7 @@ import '../audio/ffmpeg_microphone_discovery.dart';
 import '../models/dictation_state.dart';
 import 'listening_overlay_preview.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
     required this.controller,
@@ -17,19 +17,30 @@ class HomeScreen extends StatelessWidget {
   final MicrophoneSettingsController microphoneController;
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    widget.microphoneController.loadMicrophones();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: controller,
+      animation: widget.controller,
       builder: (context, _) {
         return Scaffold(
           body: SafeArea(
             child: Stack(
               children: [
                 _HomeContent(
-                  controller: controller,
-                  microphoneController: microphoneController,
+                  controller: widget.controller,
+                  microphoneController: widget.microphoneController,
                 ),
-                if (controller.phase == DictationPhase.listening)
+                if (widget.controller.phase == DictationPhase.listening)
                   const Align(
                     alignment: Alignment.topCenter,
                     child: Padding(
