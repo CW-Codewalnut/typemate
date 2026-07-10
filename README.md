@@ -1,6 +1,6 @@
-# VoiceMate
+# TypeMate
 
-A desktop first local voice typing app for developers, AI agent users, and heavy typers.
+A desktop first local speech powered typing app for developers, AI agent users, and heavy typers.
 
 Focus a text field, hold a shortcut, speak, release, and the transcript appears in the focused field.
 

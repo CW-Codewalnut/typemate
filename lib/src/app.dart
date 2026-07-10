@@ -33,7 +33,7 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'VoiceMate',
+      title: 'TypeMate',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5B6CFF)),

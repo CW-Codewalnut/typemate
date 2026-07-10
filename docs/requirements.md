@@ -1,4 +1,4 @@
-# VoiceMate Requirements
+# TypeMate Requirements
 
 ## Product goal
 
