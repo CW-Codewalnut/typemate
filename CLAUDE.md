@@ -101,4 +101,4 @@ Before asking for push approval, show:
 5. Git status showing the change is local only.
 6. Anything not yet proven.
 
-Use screenshots for terminal-only proof and video only for actual UI behavior.
+Use text or screenshots for terminal-only proof. For UI proof, use an actual app screenshot or video where icons and text render correctly. Do not create synthetic UI proof images or golden-test screenshots unless Ranjan explicitly asks for them.
