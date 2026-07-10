@@ -1,4 +1,4 @@
-# Dictation Flow Requirements
+# VoiceMate Requirements
 
 ## Product goal
 

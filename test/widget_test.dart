@@ -5,7 +5,7 @@ void main() {
   testWidgets('renders the desktop dictation shell', (tester) async {
     await tester.pumpWidget(const DictationFlowApp());
 
-    expect(find.text('Dictation Flow'), findsOneWidget);
+    expect(find.text('VoiceMate'), findsOneWidget);
     expect(
       find.text('Local hold to dictate for developers and heavy typers.'),
       findsOneWidget,

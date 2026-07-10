@@ -1,8 +1,8 @@
-# Dictation Flow Architecture
+# VoiceMate Architecture
 
 ## Overview
 
-Dictation Flow is one Flutter app with a desktop first implementation. Flutter owns the product shell, state, onboarding, settings, and overlay. Platform specific code owns global shortcuts, focused field tracking, and direct text insertion. The local STT runtime owns transcription.
+VoiceMate is one Flutter app with a desktop first implementation. Flutter owns the product shell, state, onboarding, settings, and overlay. Platform specific code owns global shortcuts, focused field tracking, and direct text insertion. The local STT runtime owns transcription.
 
 ## Layers
 

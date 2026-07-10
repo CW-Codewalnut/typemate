@@ -54,7 +54,7 @@ class _HomeContent extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Dictation Flow',
+                'VoiceMate',
                 style: theme.textTheme.displaySmall?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),

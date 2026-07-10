@@ -1,6 +1,6 @@
-# Dictation Flow
+# VoiceMate
 
-A desktop first local dictation app for developers, AI agent users, and heavy typers.
+A desktop first local voice typing app for developers, AI agent users, and heavy typers.
 
 Focus a text field, hold a shortcut, speak, release, and the transcript appears in the focused field.
 
