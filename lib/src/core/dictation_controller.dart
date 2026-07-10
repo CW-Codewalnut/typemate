@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../audio/audio_recorder.dart';
 import '../models/dictation_state.dart';
 import '../platform/platform_bridge.dart';
 import '../stt/stt_engine.dart';
@@ -8,12 +9,18 @@ class DictationController extends ChangeNotifier {
   DictationController({
     required PlatformBridge platformBridge,
     required SttEngine sttEngine,
-  }) : this._(platformBridge, sttEngine);
+    required AudioRecorder audioRecorder,
+  }) : this._(platformBridge, sttEngine, audioRecorder);
 
-  DictationController._(this._platformBridge, this._sttEngine);
+  DictationController._(
+    this._platformBridge,
+    this._sttEngine,
+    this._audioRecorder,
+  );
 
   final PlatformBridge _platformBridge;
   final SttEngine _sttEngine;
+  final AudioRecorder _audioRecorder;
 
   DictationPhase _phase = DictationPhase.idle;
   String _latestTranscript = '';
@@ -38,6 +45,7 @@ class DictationController extends ChangeNotifier {
     _latestTranscript = '';
     _setPhase(DictationPhase.listening, 'Listening while shortcut is held...');
     await _platformBridge.showListeningOverlay();
+    await _audioRecorder.start();
   }
 
   Future<void> stopListening() async {
@@ -45,10 +53,11 @@ class DictationController extends ChangeNotifier {
       return;
     }
 
+    final recording = await _audioRecorder.stop();
     await _platformBridge.hideListeningOverlay();
     _setPhase(DictationPhase.transcribing, 'Transcribing locally...');
 
-    final transcript = await _sttEngine.transcribeLatestRecording();
+    final transcript = await _sttEngine.transcribe(recording);
     _latestTranscript = transcript;
 
     _setPhase(DictationPhase.inserting, 'Inserting into focused text field...');

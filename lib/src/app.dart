@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'audio/mock_audio_recorder.dart';
 import 'core/dictation_controller.dart';
 import 'platform/mock_platform_bridge.dart';
 import 'stt/mock_stt_engine.dart';
@@ -21,6 +22,7 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
     controller = DictationController(
       platformBridge: MockPlatformBridge(),
       sttEngine: MockSttEngine(),
+      audioRecorder: MockAudioRecorder(),
     );
   }
 

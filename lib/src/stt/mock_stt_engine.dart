@@ -1,3 +1,4 @@
+import '../audio/audio_recorder.dart';
 import 'stt_engine.dart';
 
 class MockSttEngine implements SttEngine {
@@ -13,7 +14,7 @@ class MockSttEngine implements SttEngine {
   }
 
   @override
-  Future<String> transcribeLatestRecording() async {
+  Future<String> transcribe(AudioRecording recording) async {
     await Future<void>.delayed(const Duration(milliseconds: 250));
     return 'This is a local dictation preview. The production build will insert the real transcript here.';
   }
