@@ -20,6 +20,22 @@ void main() {
     expect(controller.statusMessage, contains('Ready'));
   });
 
+  test('recovers when preparing the local speech engine fails', () async {
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: ThrowingPrepareSttEngine(),
+      audioRecorder: FakeAudioRecorder(),
+    );
+
+    await controller.prepare();
+
+    expect(controller.phase, DictationPhase.idle);
+    expect(
+      controller.statusMessage,
+      'Unable to prepare local speech engine. Check the speech runtime and model file, then try again.',
+    );
+  });
+
   test('startListening starts recording and shows overlay', () async {
     final platformBridge = MockPlatformBridge();
     final audioRecorder = FakeAudioRecorder();
@@ -290,6 +306,21 @@ class ThrowingSttEngine implements SttEngine {
   @override
   Future<String> transcribe(AudioRecording recording) async {
     throw StateError('model failed');
+  }
+}
+
+class ThrowingPrepareSttEngine implements SttEngine {
+  @override
+  Future<bool> isReady() async => false;
+
+  @override
+  Future<void> prepare() async {
+    throw StateError('runtime missing');
+  }
+
+  @override
+  Future<String> transcribe(AudioRecording recording) async {
+    throw StateError('should not transcribe when prepare fails');
   }
 }
 

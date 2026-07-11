@@ -48,7 +48,15 @@ class DictationController extends ChangeNotifier {
 
   Future<void> prepare() async {
     _setPhase(DictationPhase.preparing, 'Preparing local speech engine...');
-    await _sttEngine.prepare();
+    try {
+      await _sttEngine.prepare();
+    } catch (_) {
+      _setPhase(
+        DictationPhase.idle,
+        'Unable to prepare local speech engine. Check the speech runtime and model file, then try again.',
+      );
+      return;
+    }
     _setPhase(DictationPhase.idle, 'Ready. Hold the shortcut and speak.');
   }
 
