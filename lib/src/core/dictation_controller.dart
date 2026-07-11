@@ -67,8 +67,18 @@ class DictationController extends ChangeNotifier {
 
     _setPhase(DictationPhase.listening, 'Listening while shortcut is held...');
     _activeRecorder = recorder;
-    await _platformBridge.showListeningOverlay();
-    await recorder.start();
+
+    try {
+      await _platformBridge.showListeningOverlay();
+      await recorder.start();
+    } catch (_) {
+      _activeRecorder = null;
+      await _platformBridge.hideListeningOverlay();
+      _setPhase(
+        DictationPhase.idle,
+        'Unable to start recording. Check FFmpeg and microphone permissions, then try again.',
+      );
+    }
   }
 
   Future<void> stopListening() async {
