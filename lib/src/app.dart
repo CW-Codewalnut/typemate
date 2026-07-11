@@ -95,7 +95,7 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
 
 PlatformBridge createDefaultPlatformBridge({bool? isWindows}) {
   if (isWindows ?? Platform.isWindows) {
-    return const WindowsClipboardPastePlatformBridge();
+    return WindowsClipboardPastePlatformBridge();
   }
 
   return MockPlatformBridge();

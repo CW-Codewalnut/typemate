@@ -56,4 +56,37 @@ void main() {
       throwsA(isA<StateError>()),
     );
   });
+
+  test('shows one overlay process and kills it on hide', () async {
+    final started = <({String executable, List<String> arguments})>[];
+    final overlayProcess = FakeOverlayProcess();
+    final bridge = WindowsClipboardPastePlatformBridge(
+      overlayProcessStarter: (executable, arguments) async {
+        started.add((executable: executable, arguments: arguments));
+        return overlayProcess;
+      },
+    );
+
+    await bridge.showListeningOverlay();
+    await bridge.showListeningOverlay();
+    await bridge.hideListeningOverlay();
+
+    expect(started, hasLength(1));
+    expect(started.single.executable, 'powershell.exe');
+    expect(started.single.arguments, contains('-WindowStyle'));
+    expect(
+      started.single.arguments.join(' '),
+      contains('TypeMate is listening'),
+    );
+    expect(overlayProcess.killCount, 1);
+  });
+}
+
+class FakeOverlayProcess implements OverlayProcess {
+  int killCount = 0;
+
+  @override
+  void kill() {
+    killCount += 1;
+  }
 }
