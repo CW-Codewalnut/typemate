@@ -38,6 +38,16 @@ Rules:
 - Direct insertion into the focused field is the product path. Clipboard can be an internal fallback, not the primary UX.
 - Desktop first. Mobile/tablet ideas belong in docs until the desktop loop works.
 
+## Local STT runtime
+
+- App runtime selection uses `TYPEMATE_WHISPER_CLI` and `TYPEMATE_WHISPER_MODEL`.
+- If either env var is missing, the app intentionally falls back to `MockSttEngine` preview mode.
+- Current verified Windows paths are:
+  - `R:/Tools/whisper.cpp/v1.9.1-x64/Release/whisper-cli.exe`
+  - `R:/Models/whisper/ggml-tiny.en.bin`
+- Use `tool/benchmark_whisper_cli.dart` to prove real transcription with a WAV sample.
+- Keep stderr diagnostics out of successful transcripts; whisper.cpp writes model/timing logs to stderr.
+
 ## Design principles
 
 - YAGNI: build only the next needed v1 slice.
