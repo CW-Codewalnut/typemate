@@ -70,6 +70,38 @@ void main() {
     expect(button.onPressed, isNull);
   });
 
+  testWidgets('shows a microphone scanning error with recovery action', (
+    tester,
+  ) async {
+    final dictationController = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: MockSttEngine(),
+      audioRecorder: MockAudioRecorder(),
+    );
+    final microphoneController = MicrophoneSettingsController(
+      discovery: ThrowingMicrophoneDiscovery(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          controller: dictationController,
+          microphoneController: microphoneController,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'Unable to scan microphones. Check FFmpeg and microphone permissions, then refresh.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+    expect(find.text('Refresh microphones'), findsOneWidget);
+  });
+
   testWidgets('shows discovered microphones in settings panel', (tester) async {
     final dictationController = DictationController(
       platformBridge: MockPlatformBridge(),
@@ -110,4 +142,11 @@ class FakeMicrophoneDiscovery implements MicrophoneDiscovery {
 
   @override
   Future<List<MicrophoneDevice>> listMicrophones() async => devices;
+}
+
+class ThrowingMicrophoneDiscovery implements MicrophoneDiscovery {
+  @override
+  Future<List<MicrophoneDevice>> listMicrophones() async {
+    throw StateError('ffmpeg unavailable');
+  }
 }

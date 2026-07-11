@@ -38,6 +38,22 @@ void main() {
 
     expect(controller.selectedMicrophone, headset);
   });
+
+  test('shows an actionable error when microphone discovery fails', () async {
+    final controller = MicrophoneSettingsController(
+      discovery: ThrowingMicrophoneDiscovery(),
+    );
+
+    await controller.loadMicrophones();
+
+    expect(controller.microphones, isEmpty);
+    expect(controller.selectedMicrophone, isNull);
+    expect(controller.hasError, isTrue);
+    expect(
+      controller.statusMessage,
+      'Unable to scan microphones. Check FFmpeg and microphone permissions, then refresh.',
+    );
+  });
 }
 
 class FakeMicrophoneDiscovery implements MicrophoneDiscovery {
@@ -47,4 +63,11 @@ class FakeMicrophoneDiscovery implements MicrophoneDiscovery {
 
   @override
   Future<List<MicrophoneDevice>> listMicrophones() async => devices;
+}
+
+class ThrowingMicrophoneDiscovery implements MicrophoneDiscovery {
+  @override
+  Future<List<MicrophoneDevice>> listMicrophones() async {
+    throw StateError('ffmpeg unavailable');
+  }
 }

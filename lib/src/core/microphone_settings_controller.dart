@@ -10,15 +10,18 @@ class MicrophoneSettingsController extends ChangeNotifier {
   List<MicrophoneDevice> _microphones = const [];
   MicrophoneDevice? _selectedMicrophone;
   bool _isLoading = false;
+  bool _hasError = false;
   String _statusMessage = 'Microphones not scanned yet.';
 
   List<MicrophoneDevice> get microphones => List.unmodifiable(_microphones);
   MicrophoneDevice? get selectedMicrophone => _selectedMicrophone;
   bool get isLoading => _isLoading;
+  bool get hasError => _hasError;
   String get statusMessage => _statusMessage;
 
   Future<void> loadMicrophones() async {
     _isLoading = true;
+    _hasError = false;
     _statusMessage = 'Scanning microphones...';
     notifyListeners();
 
@@ -26,6 +29,7 @@ class MicrophoneSettingsController extends ChangeNotifier {
       final discovered = await discovery.listMicrophones();
       _microphones = discovered;
       _selectedMicrophone = _selectDefault(discovered);
+      _hasError = false;
       _statusMessage = switch (discovered.length) {
         0 => 'No microphones found.',
         1 => '1 microphone found.',
@@ -34,7 +38,9 @@ class MicrophoneSettingsController extends ChangeNotifier {
     } catch (error) {
       _microphones = const [];
       _selectedMicrophone = null;
-      _statusMessage = 'Unable to scan microphones.';
+      _hasError = true;
+      _statusMessage =
+          'Unable to scan microphones. Check FFmpeg and microphone permissions, then refresh.';
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -47,6 +53,7 @@ class MicrophoneSettingsController extends ChangeNotifier {
     }
 
     _selectedMicrophone = microphone;
+    _hasError = false;
     _statusMessage = 'Selected ${microphone.name}.';
     notifyListeners();
   }

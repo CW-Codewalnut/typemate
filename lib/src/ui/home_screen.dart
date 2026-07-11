@@ -240,7 +240,26 @@ class _MicrophoneSelectionPanel extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Text(controller.statusMessage),
+                if (controller.hasError)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        color: theme.colorScheme.error,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          controller.statusMessage,
+                          style: TextStyle(color: theme.colorScheme.error),
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Text(controller.statusMessage),
                 if (controller.microphones.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   DropdownButton<MicrophoneDevice>(
