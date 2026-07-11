@@ -9,6 +9,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets(
+    'automatically prepares the local speech engine when the shell opens',
+    (tester) async {
+      final sttEngine = MockSttEngine();
+      final dictationController = DictationController(
+        platformBridge: MockPlatformBridge(),
+        sttEngine: sttEngine,
+        audioRecorder: MockAudioRecorder(),
+      );
+      final microphoneController = MicrophoneSettingsController(
+        discovery: FakeMicrophoneDiscovery(const []),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomeScreen(
+            controller: dictationController,
+            microphoneController: microphoneController,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(await sttEngine.isReady(), isTrue);
+      expect(find.text('Ready. Hold the shortcut and speak.'), findsOneWidget);
+    },
+  );
+
   testWidgets('automatically scans microphones when the shell opens', (
     tester,
   ) async {
