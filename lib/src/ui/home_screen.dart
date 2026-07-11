@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/dictation_controller.dart';
+import '../core/hold_shortcut_controller.dart';
 import '../core/microphone_settings_controller.dart';
 import '../audio/ffmpeg_microphone_discovery.dart';
 import '../models/dictation_state.dart';
@@ -11,10 +12,12 @@ class HomeScreen extends StatefulWidget {
     super.key,
     required this.controller,
     required this.microphoneController,
+    this.shortcutController,
   });
 
   final DictationController controller;
   final MicrophoneSettingsController microphoneController;
+  final HoldShortcutController? shortcutController;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -34,6 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
       animation: Listenable.merge([
         widget.controller,
         widget.microphoneController,
+        if (widget.shortcutController != null) widget.shortcutController!,
       ]),
       builder: (context, _) {
         return Scaffold(
@@ -43,6 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _HomeContent(
                   controller: widget.controller,
                   microphoneController: widget.microphoneController,
+                  shortcutController: widget.shortcutController,
                 ),
                 if (widget.controller.phase == DictationPhase.listening)
                   const Align(
@@ -65,10 +70,12 @@ class _HomeContent extends StatelessWidget {
   const _HomeContent({
     required this.controller,
     required this.microphoneController,
+    this.shortcutController,
   });
 
   final DictationController controller;
   final MicrophoneSettingsController microphoneController;
+  final HoldShortcutController? shortcutController;
 
   @override
   Widget build(BuildContext context) {
@@ -115,6 +122,23 @@ class _HomeContent extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       Text(controller.statusMessage),
+                      if (shortcutController != null) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(
+                              shortcutController!.isRegistered
+                                  ? Icons.keyboard_command_key
+                                  : Icons.keyboard_command_key_outlined,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(shortcutController!.statusMessage),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 24),
                       Wrap(
                         spacing: 12,

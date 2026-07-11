@@ -5,20 +5,27 @@ import 'package:flutter/material.dart';
 import 'audio/ffmpeg_microphone_discovery.dart';
 import 'audio/microphone_audio_recorder_factory.dart';
 import 'core/dictation_controller.dart';
+import 'core/hold_shortcut_controller.dart';
 import 'core/microphone_settings_controller.dart';
 import 'core/microphone_settings_store.dart';
 import 'platform/mock_platform_bridge.dart';
 import 'platform/platform_bridge.dart';
 import 'platform/windows_clipboard_paste_platform_bridge.dart';
+import 'platform/windows_polling_hold_shortcut_registrar.dart';
 import 'stt/mock_stt_engine.dart';
 import 'stt/stt_engine.dart';
 import 'stt/whisper_cli_stt_engine.dart';
 import 'ui/home_screen.dart';
 
 class DictationFlowApp extends StatefulWidget {
-  const DictationFlowApp({super.key, this.microphoneDiscovery});
+  const DictationFlowApp({
+    super.key,
+    this.microphoneDiscovery,
+    this.holdShortcutRegistrar,
+  });
 
   final MicrophoneDiscovery? microphoneDiscovery;
+  final HoldShortcutRegistrar? holdShortcutRegistrar;
 
   @override
   State<DictationFlowApp> createState() => _DictationFlowAppState();
@@ -27,6 +34,7 @@ class DictationFlowApp extends StatefulWidget {
 class _DictationFlowAppState extends State<DictationFlowApp> {
   late final DictationController controller;
   late final MicrophoneSettingsController microphoneController;
+  late final HoldShortcutController shortcutController;
 
   @override
   void initState() {
@@ -51,10 +59,17 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
         return recorderFactory.create(selectedMicrophone);
       },
     );
+    shortcutController = HoldShortcutController(
+      dictationController: controller,
+      registrar:
+          widget.holdShortcutRegistrar ?? createDefaultHoldShortcutRegistrar(),
+    );
+    shortcutController.register();
   }
 
   @override
   void dispose() {
+    shortcutController.dispose();
     microphoneController.dispose();
     controller.dispose();
     super.dispose();
@@ -72,6 +87,7 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
       home: HomeScreen(
         controller: controller,
         microphoneController: microphoneController,
+        shortcutController: shortcutController,
       ),
     );
   }
@@ -83,6 +99,14 @@ PlatformBridge createDefaultPlatformBridge({bool? isWindows}) {
   }
 
   return MockPlatformBridge();
+}
+
+HoldShortcutRegistrar createDefaultHoldShortcutRegistrar({bool? isWindows}) {
+  if (isWindows ?? Platform.isWindows) {
+    return WindowsPollingHoldShortcutRegistrar();
+  }
+
+  return const NoopHoldShortcutRegistrar();
 }
 
 MicrophoneSettingsStore createDefaultMicrophoneSettingsStore({
