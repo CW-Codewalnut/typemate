@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:dictation_flow/src/audio/ffmpeg_audio_recorder.dart';
+import 'package:typemate/src/audio/ffmpeg_audio_recorder.dart';
 
 Future<void> main(List<String> arguments) async {
   final deviceName = arguments.isNotEmpty

@@ -1,10 +1,10 @@
-import 'package:dictation_flow/src/audio/ffmpeg_microphone_discovery.dart';
-import 'package:dictation_flow/src/core/dictation_controller.dart';
-import 'package:dictation_flow/src/core/microphone_settings_controller.dart';
-import 'package:dictation_flow/src/audio/mock_audio_recorder.dart';
-import 'package:dictation_flow/src/platform/mock_platform_bridge.dart';
-import 'package:dictation_flow/src/stt/mock_stt_engine.dart';
-import 'package:dictation_flow/src/ui/home_screen.dart';
+import 'package:typemate/src/audio/ffmpeg_microphone_discovery.dart';
+import 'package:typemate/src/core/dictation_controller.dart';
+import 'package:typemate/src/core/microphone_settings_controller.dart';
+import 'package:typemate/src/audio/mock_audio_recorder.dart';
+import 'package:typemate/src/platform/mock_platform_bridge.dart';
+import 'package:typemate/src/stt/mock_stt_engine.dart';
+import 'package:typemate/src/ui/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

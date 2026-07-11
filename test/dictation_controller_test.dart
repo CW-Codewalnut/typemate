@@ -1,9 +1,9 @@
-import 'package:dictation_flow/src/audio/audio_recorder.dart';
-import 'package:dictation_flow/src/core/dictation_controller.dart';
-import 'package:dictation_flow/src/models/dictation_state.dart';
-import 'package:dictation_flow/src/platform/platform_bridge.dart';
-import 'package:dictation_flow/src/platform/mock_platform_bridge.dart';
-import 'package:dictation_flow/src/stt/stt_engine.dart';
+import 'package:typemate/src/audio/audio_recorder.dart';
+import 'package:typemate/src/core/dictation_controller.dart';
+import 'package:typemate/src/models/dictation_state.dart';
+import 'package:typemate/src/platform/platform_bridge.dart';
+import 'package:typemate/src/platform/mock_platform_bridge.dart';
+import 'package:typemate/src/stt/stt_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

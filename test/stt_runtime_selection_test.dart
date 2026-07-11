@@ -1,6 +1,6 @@
-import 'package:dictation_flow/src/app.dart';
-import 'package:dictation_flow/src/stt/mock_stt_engine.dart';
-import 'package:dictation_flow/src/stt/whisper_cli_stt_engine.dart';
+import 'package:typemate/src/app.dart';
+import 'package:typemate/src/stt/mock_stt_engine.dart';
+import 'package:typemate/src/stt/whisper_cli_stt_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

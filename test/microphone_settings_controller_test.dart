@@ -1,5 +1,5 @@
-import 'package:dictation_flow/src/audio/ffmpeg_microphone_discovery.dart';
-import 'package:dictation_flow/src/core/microphone_settings_controller.dart';
+import 'package:typemate/src/audio/ffmpeg_microphone_discovery.dart';
+import 'package:typemate/src/core/microphone_settings_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

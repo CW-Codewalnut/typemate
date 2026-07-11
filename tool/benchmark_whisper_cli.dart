@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:dictation_flow/src/audio/audio_recorder.dart';
-import 'package:dictation_flow/src/stt/whisper_cli_stt_engine.dart';
+import 'package:typemate/src/audio/audio_recorder.dart';
+import 'package:typemate/src/stt/whisper_cli_stt_engine.dart';
 
 Future<void> main(List<String> arguments) async {
   if (arguments.contains('--help') || arguments.contains('-h')) {
