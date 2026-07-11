@@ -1,11 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../audio/ffmpeg_microphone_discovery.dart';
+import 'microphone_settings_store.dart';
 
 class MicrophoneSettingsController extends ChangeNotifier {
-  MicrophoneSettingsController({required this.discovery});
+  MicrophoneSettingsController({
+    required this.discovery,
+    this.store = const NoopMicrophoneSettingsStore(),
+  });
 
   final MicrophoneDiscovery discovery;
+  final MicrophoneSettingsStore store;
 
   List<MicrophoneDevice> _microphones = const [];
   MicrophoneDevice? _selectedMicrophone;
@@ -26,9 +33,13 @@ class MicrophoneSettingsController extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final persistedName = await store.loadSelectedMicrophoneName();
       final discovered = await discovery.listMicrophones();
       _microphones = discovered;
-      _selectedMicrophone = _selectDefault(discovered);
+      _selectedMicrophone = _selectDefault(
+        discovered,
+        preferredName: persistedName,
+      );
       _hasError = false;
       _statusMessage = switch (discovered.length) {
         0 => 'No microphones found.',
@@ -55,12 +66,25 @@ class MicrophoneSettingsController extends ChangeNotifier {
     _selectedMicrophone = microphone;
     _hasError = false;
     _statusMessage = 'Selected ${microphone.name}.';
+    unawaited(store.saveSelectedMicrophoneName(microphone.name));
     notifyListeners();
   }
 
-  MicrophoneDevice? _selectDefault(List<MicrophoneDevice> discovered) {
+  MicrophoneDevice? _selectDefault(
+    List<MicrophoneDevice> discovered, {
+    String? preferredName,
+  }) {
     if (discovered.isEmpty) {
       return null;
+    }
+
+    final preferred = preferredName?.trim();
+    if (preferred != null && preferred.isNotEmpty) {
+      for (final microphone in discovered) {
+        if (microphone.name == preferred) {
+          return microphone;
+        }
+      }
     }
 
     final current = _selectedMicrophone;

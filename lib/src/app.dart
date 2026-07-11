@@ -6,6 +6,7 @@ import 'audio/ffmpeg_microphone_discovery.dart';
 import 'audio/microphone_audio_recorder_factory.dart';
 import 'core/dictation_controller.dart';
 import 'core/microphone_settings_controller.dart';
+import 'core/microphone_settings_store.dart';
 import 'platform/mock_platform_bridge.dart';
 import 'platform/platform_bridge.dart';
 import 'platform/windows_clipboard_paste_platform_bridge.dart';
@@ -36,6 +37,7 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
     microphoneController = MicrophoneSettingsController(
       discovery:
           widget.microphoneDiscovery ?? const FfmpegMicrophoneDiscovery(),
+      store: createDefaultMicrophoneSettingsStore(),
     );
     controller = DictationController(
       platformBridge: createDefaultPlatformBridge(),
@@ -81,6 +83,19 @@ PlatformBridge createDefaultPlatformBridge({bool? isWindows}) {
   }
 
   return MockPlatformBridge();
+}
+
+MicrophoneSettingsStore createDefaultMicrophoneSettingsStore({
+  Map<String, String>? environment,
+}) {
+  final values = environment ?? Platform.environment;
+  final baseDirectory = values['APPDATA']?.trim().isNotEmpty == true
+      ? Directory(values['APPDATA']!.trim())
+      : Directory('build/settings');
+
+  return FileMicrophoneSettingsStore(
+    file: File('${baseDirectory.path}/TypeMate/settings.json'),
+  );
 }
 
 SttEngine createDefaultSttEngine({Map<String, String>? environment}) {

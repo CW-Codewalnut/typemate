@@ -7,6 +7,7 @@ void main() {
     await tester.pumpWidget(
       DictationFlowApp(microphoneDiscovery: FakeMicrophoneDiscovery()),
     );
+    await tester.pump(const Duration(milliseconds: 200));
     await tester.pumpAndSettle();
 
     expect(find.text('TypeMate'), findsOneWidget);
