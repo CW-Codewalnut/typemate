@@ -8,6 +8,8 @@ import 'core/dictation_controller.dart';
 import 'core/microphone_settings_controller.dart';
 import 'platform/mock_platform_bridge.dart';
 import 'stt/mock_stt_engine.dart';
+import 'stt/stt_engine.dart';
+import 'stt/whisper_cli_stt_engine.dart';
 import 'ui/home_screen.dart';
 
 class DictationFlowApp extends StatefulWidget {
@@ -35,7 +37,7 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
     );
     controller = DictationController(
       platformBridge: MockPlatformBridge(),
-      sttEngine: MockSttEngine(),
+      sttEngine: createDefaultSttEngine(),
       audioRecorderProvider: () {
         final selectedMicrophone = microphoneController.selectedMicrophone;
         if (selectedMicrophone == null) {
@@ -69,4 +71,16 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
       ),
     );
   }
+}
+
+SttEngine createDefaultSttEngine({Map<String, String>? environment}) {
+  final values = environment ?? Platform.environment;
+  final executable = values['TYPEMATE_WHISPER_CLI']?.trim() ?? '';
+  final modelPath = values['TYPEMATE_WHISPER_MODEL']?.trim() ?? '';
+
+  if (executable.isEmpty || modelPath.isEmpty) {
+    return MockSttEngine();
+  }
+
+  return WhisperCliSttEngine(executable: executable, modelPath: modelPath);
 }
