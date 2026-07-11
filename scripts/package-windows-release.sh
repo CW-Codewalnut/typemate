@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+FLUTTER_BIN="${FLUTTER_BIN:-R:/Tools/flutter/bin/flutter}"
+RELEASE_DIR="build/windows/x64/runner/Release"
+DIST_DIR="dist"
+PACKAGE_NAME="typemate-windows-x64"
+STAGING_DIR="build/package/$PACKAGE_NAME"
+ZIP_PATH="$DIST_DIR/$PACKAGE_NAME.zip"
+
+"$FLUTTER_BIN" build windows
+
+test -f "$RELEASE_DIR/typemate.exe"
+rm -rf "$STAGING_DIR"
+mkdir -p "$STAGING_DIR" "$DIST_DIR"
+cp -R "$RELEASE_DIR"/. "$STAGING_DIR"/
+
+cat > "$STAGING_DIR/README.txt" <<'README'
+TypeMate Windows x64
+===================
+
+Run typemate.exe.
+
+Optional local speech runtime environment variables:
+- TYPEMATE_WHISPER_CLI: path to whisper.cpp CLI executable
+- TYPEMATE_WHISPER_MODEL: path to the local whisper model file
+
+Default hold shortcut on Windows: Ctrl+Alt+Space.
+README
+
+rm -f "$ZIP_PATH"
+(
+  cd "build/package"
+  if command -v 7z >/dev/null 2>&1; then
+    7z a -tzip "../../$ZIP_PATH" "$PACKAGE_NAME" >/dev/null
+  elif command -v zip >/dev/null 2>&1; then
+    zip -qr "../../$ZIP_PATH" "$PACKAGE_NAME"
+  else
+    python - <<'PY'
+from pathlib import Path
+from zipfile import ZipFile, ZIP_DEFLATED
+package = Path('typemate-windows-x64')
+out = Path('../../dist/typemate-windows-x64.zip')
+with ZipFile(out, 'w', ZIP_DEFLATED) as zf:
+    for path in package.rglob('*'):
+        if path.is_file():
+            zf.write(path, path.as_posix())
+PY
+  fi
+)
+
+test -f "$ZIP_PATH"
+printf '%s\n' "$ZIP_PATH"
