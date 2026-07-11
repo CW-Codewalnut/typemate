@@ -95,7 +95,16 @@ class DictationController extends ChangeNotifier {
     await _platformBridge.hideListeningOverlay();
     _setPhase(DictationPhase.transcribing, 'Transcribing locally...');
 
-    final transcript = await _sttEngine.transcribe(recording);
+    final String transcript;
+    try {
+      transcript = await _sttEngine.transcribe(recording);
+    } catch (_) {
+      _setPhase(
+        DictationPhase.idle,
+        'Unable to transcribe locally. Check the speech runtime and model file, then try again.',
+      );
+      return;
+    }
     _latestTranscript = transcript;
 
     _setPhase(DictationPhase.inserting, 'Inserting into focused text field...');

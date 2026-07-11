@@ -125,6 +125,34 @@ void main() {
     expect(platformBridge.overlayVisible, isFalse);
     expect(sttEngine.lastRecording, isNull);
   });
+
+  test('recovers when local transcription fails', () async {
+    final platformBridge = MockPlatformBridge();
+    final audioRecorder = FakeAudioRecorder(
+      recording: const AudioRecording(
+        path: 'voice.wav',
+        duration: Duration(seconds: 2),
+      ),
+    );
+    final sttEngine = ThrowingSttEngine();
+    final controller = DictationController(
+      platformBridge: platformBridge,
+      sttEngine: sttEngine,
+      audioRecorder: audioRecorder,
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(controller.phase, DictationPhase.idle);
+    expect(
+      controller.statusMessage,
+      'Unable to transcribe locally. Check the speech runtime and model file, then try again.',
+    );
+    expect(platformBridge.overlayVisible, isFalse);
+    expect(platformBridge.lastInsertedText, isEmpty);
+    expect(controller.latestTranscript, isEmpty);
+  });
 }
 
 class FakeAudioRecorder implements AudioRecorder {
@@ -182,5 +210,18 @@ class ThrowingAudioRecorder implements AudioRecorder {
   @override
   Future<AudioRecording> stop() async {
     throw StateError('should not stop when start fails');
+  }
+}
+
+class ThrowingSttEngine implements SttEngine {
+  @override
+  Future<bool> isReady() async => true;
+
+  @override
+  Future<void> prepare() async {}
+
+  @override
+  Future<String> transcribe(AudioRecording recording) async {
+    throw StateError('model failed');
   }
 }
