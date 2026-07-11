@@ -87,9 +87,20 @@ class DictationController extends ChangeNotifier {
     }
 
     final recorder = _activeRecorder;
-    final recording = recorder == null
-        ? const AudioRecording(path: '', duration: Duration.zero)
-        : await recorder.stop();
+    late final AudioRecording recording;
+    try {
+      recording = recorder == null
+          ? const AudioRecording(path: '', duration: Duration.zero)
+          : await recorder.stop();
+    } catch (_) {
+      _activeRecorder = null;
+      await _platformBridge.hideListeningOverlay();
+      _setPhase(
+        DictationPhase.idle,
+        'Unable to finish recording. Check FFmpeg and microphone permissions, then try again.',
+      );
+      return;
+    }
     _activeRecorder = null;
 
     await _platformBridge.hideListeningOverlay();

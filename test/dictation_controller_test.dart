@@ -127,6 +127,30 @@ void main() {
     expect(sttEngine.lastRecording, isNull);
   });
 
+  test('recovers when the recorder fails to stop', () async {
+    final platformBridge = MockPlatformBridge();
+    final sttEngine = FakeSttEngine();
+    final audioRecorder = ThrowingStopAudioRecorder();
+    final controller = DictationController(
+      platformBridge: platformBridge,
+      sttEngine: sttEngine,
+      audioRecorder: audioRecorder,
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(controller.phase, DictationPhase.idle);
+    expect(
+      controller.statusMessage,
+      'Unable to finish recording. Check FFmpeg and microphone permissions, then try again.',
+    );
+    expect(platformBridge.overlayVisible, isFalse);
+    expect(audioRecorder.started, isTrue);
+    expect(sttEngine.lastRecording, isNull);
+    expect(controller.latestTranscript, isEmpty);
+  });
+
   test('recovers when local transcription fails', () async {
     final platformBridge = MockPlatformBridge();
     final audioRecorder = FakeAudioRecorder(
@@ -239,6 +263,20 @@ class ThrowingAudioRecorder implements AudioRecorder {
   @override
   Future<AudioRecording> stop() async {
     throw StateError('should not stop when start fails');
+  }
+}
+
+class ThrowingStopAudioRecorder implements AudioRecorder {
+  bool started = false;
+
+  @override
+  Future<void> start() async {
+    started = true;
+  }
+
+  @override
+  Future<AudioRecording> stop() async {
+    throw StateError('ffmpeg failed to finish recording');
   }
 }
 
