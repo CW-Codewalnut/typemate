@@ -1,6 +1,7 @@
 import 'package:dictation_flow/src/audio/audio_recorder.dart';
 import 'package:dictation_flow/src/core/dictation_controller.dart';
 import 'package:dictation_flow/src/models/dictation_state.dart';
+import 'package:dictation_flow/src/platform/platform_bridge.dart';
 import 'package:dictation_flow/src/platform/mock_platform_bridge.dart';
 import 'package:dictation_flow/src/stt/stt_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -153,6 +154,34 @@ void main() {
     expect(platformBridge.lastInsertedText, isEmpty);
     expect(controller.latestTranscript, isEmpty);
   });
+
+  test('recovers when focused-field insertion fails', () async {
+    final platformBridge = ThrowingInsertPlatformBridge();
+    final audioRecorder = FakeAudioRecorder(
+      recording: const AudioRecording(
+        path: 'voice.wav',
+        duration: Duration(seconds: 2),
+      ),
+    );
+    final sttEngine = FakeSttEngine(transcript: 'Insert this text.');
+    final controller = DictationController(
+      platformBridge: platformBridge,
+      sttEngine: sttEngine,
+      audioRecorder: audioRecorder,
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(controller.phase, DictationPhase.idle);
+    expect(
+      controller.statusMessage,
+      'Unable to insert text into the focused field. Copy the latest transcript manually and try again.',
+    );
+    expect(platformBridge.overlayVisible, isFalse);
+    expect(platformBridge.insertAttempted, isTrue);
+    expect(controller.latestTranscript, 'Insert this text.');
+  });
 }
 
 class FakeAudioRecorder implements AudioRecorder {
@@ -223,5 +252,29 @@ class ThrowingSttEngine implements SttEngine {
   @override
   Future<String> transcribe(AudioRecording recording) async {
     throw StateError('model failed');
+  }
+}
+
+class ThrowingInsertPlatformBridge implements PlatformBridge {
+  bool overlayVisible = false;
+  bool insertAttempted = false;
+
+  @override
+  Future<bool> isGlobalShortcutAvailable() async => true;
+
+  @override
+  Future<void> showListeningOverlay() async {
+    overlayVisible = true;
+  }
+
+  @override
+  Future<void> hideListeningOverlay() async {
+    overlayVisible = false;
+  }
+
+  @override
+  Future<void> insertTextIntoFocusedField(String text) async {
+    insertAttempted = true;
+    throw StateError('focused field unavailable');
   }
 }

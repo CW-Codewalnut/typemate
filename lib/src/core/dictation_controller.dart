@@ -108,7 +108,15 @@ class DictationController extends ChangeNotifier {
     _latestTranscript = transcript;
 
     _setPhase(DictationPhase.inserting, 'Inserting into focused text field...');
-    await _platformBridge.insertTextIntoFocusedField(transcript);
+    try {
+      await _platformBridge.insertTextIntoFocusedField(transcript);
+    } catch (_) {
+      _setPhase(
+        DictationPhase.idle,
+        'Unable to insert text into the focused field. Copy the latest transcript manually and try again.',
+      );
+      return;
+    }
 
     _setPhase(
       DictationPhase.idle,
