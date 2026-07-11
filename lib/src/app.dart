@@ -7,6 +7,8 @@ import 'audio/microphone_audio_recorder_factory.dart';
 import 'core/dictation_controller.dart';
 import 'core/microphone_settings_controller.dart';
 import 'platform/mock_platform_bridge.dart';
+import 'platform/platform_bridge.dart';
+import 'platform/windows_clipboard_paste_platform_bridge.dart';
 import 'stt/mock_stt_engine.dart';
 import 'stt/stt_engine.dart';
 import 'stt/whisper_cli_stt_engine.dart';
@@ -36,7 +38,7 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
           widget.microphoneDiscovery ?? const FfmpegMicrophoneDiscovery(),
     );
     controller = DictationController(
-      platformBridge: MockPlatformBridge(),
+      platformBridge: createDefaultPlatformBridge(),
       sttEngine: createDefaultSttEngine(),
       audioRecorderProvider: () {
         final selectedMicrophone = microphoneController.selectedMicrophone;
@@ -71,6 +73,14 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
       ),
     );
   }
+}
+
+PlatformBridge createDefaultPlatformBridge({bool? isWindows}) {
+  if (isWindows ?? Platform.isWindows) {
+    return const WindowsClipboardPastePlatformBridge();
+  }
+
+  return MockPlatformBridge();
 }
 
 SttEngine createDefaultSttEngine({Map<String, String>? environment}) {
