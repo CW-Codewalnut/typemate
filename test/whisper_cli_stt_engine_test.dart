@@ -88,6 +88,29 @@ void main() {
     ]);
   });
 
+  test('transcribe ignores stderr diagnostics on success', () async {
+    final runner = FakeSttProcessRunner(
+      result: const SttProcessResult(
+        exitCode: 0,
+        output: 'Clean transcript.\n',
+        diagnostics:
+            'whisper_model_load: loading model\nwhisper_print_timings: total time = 123 ms',
+      ),
+    );
+    final engine = WhisperCliSttEngine(
+      executable: 'whisper-cli',
+      modelPath: 'models/ggml-tiny.en.bin',
+      processRunner: runner,
+    );
+
+    final transcript = await engine.transcribe(
+      const AudioRecording(path: 'voice.wav', duration: Duration(seconds: 1)),
+    );
+
+    expect(transcript, 'Clean transcript.');
+    expect(transcript, isNot(contains('whisper_model_load')));
+  });
+
   test('transcribe surfaces an actionable error when whisper fails', () async {
     final runner = FakeSttProcessRunner(
       result: const SttProcessResult(exitCode: 2, output: 'model load failed'),

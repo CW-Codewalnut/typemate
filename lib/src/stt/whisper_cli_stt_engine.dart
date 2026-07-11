@@ -4,10 +4,15 @@ import '../audio/audio_recorder.dart';
 import 'stt_engine.dart';
 
 class SttProcessResult {
-  const SttProcessResult({required this.exitCode, required this.output});
+  const SttProcessResult({
+    required this.exitCode,
+    required this.output,
+    this.diagnostics = '',
+  });
 
   final int exitCode;
   final String output;
+  final String diagnostics;
 }
 
 abstract interface class SttProcessRunner {
@@ -99,7 +104,8 @@ class DartSttProcessRunner implements SttProcessRunner {
     final result = await Process.run(executable, arguments);
     return SttProcessResult(
       exitCode: result.exitCode,
-      output: '${result.stdout}${result.stderr}',
+      output: '${result.stdout}',
+      diagnostics: '${result.stderr}',
     );
   }
 }
