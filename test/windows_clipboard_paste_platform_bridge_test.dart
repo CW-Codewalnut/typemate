@@ -112,11 +112,18 @@ void main() {
       expect(script, contains(r"param([string]$State"));
       expect(script, contains('Application]::Run'));
       expect(script, contains('System.Windows.Forms.Timer'));
-      expect(script, contains(r'$script:barCount = 9'));
-      expect(script, contains(r'$script:barWidth = 6'));
-      expect(script, contains(r'$script:maxHeight = 22'));
+      expect(script, contains(r'$form.Width = 210'));
+      expect(script, contains(r'$form.Height = 58'));
+      expect(
+        script,
+        contains(r'$form.Top = [int]($screen.Bottom - $form.Height - 28)'),
+      );
+      expect(script, contains(r'$script:barCount = 7'));
+      expect(script, contains(r'$script:barWidth = 5'));
+      expect(script, contains(r'$script:maxHeight = 18'));
       expect(script, contains('System.Drawing.Drawing2D.GraphicsPath'));
-      expect(script, contains('Set-RoundedControlRegion'));
+      expect(script, contains('Set-CapsuleControlRegion'));
+      expect(script, contains(r'Set-CapsuleControlRegion $bar'));
       expect(script, contains('[Math]::Sin'));
       expect(script, contains('SetWindowPos'));
       expect(overlayProcess.killCount, 1);
@@ -141,6 +148,21 @@ void main() {
     expect(started.last.arguments.last, 'transcribing');
     expect(listeningProcess.killCount, 1);
     expect(transcribingProcess.killCount, 0);
+  });
+
+  test('native Windows overlay is bottom anchored, compact, and rounded', () {
+    final source = File(
+      'windows/runner/type_mate_overlay.cpp',
+    ).readAsStringSync();
+
+    expect(source, contains('constexpr int kOverlayWidth = 210;'));
+    expect(source, contains('constexpr int kOverlayHeight = 58;'));
+    expect(source, contains('work_area.bottom - kOverlayHeight - 28'));
+    expect(source, contains('CreateRoundRectRgn'));
+    expect(source, contains('constexpr int bar_count = 7;'));
+    expect(source, contains('constexpr int bar_width = 5;'));
+    expect(source, contains('constexpr int max_height = 18;'));
+    expect(source, contains('RoundRect(hdc, left, top'));
   });
 
   test(
