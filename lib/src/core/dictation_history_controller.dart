@@ -4,14 +4,20 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 class DictationHistoryEntry {
-  const DictationHistoryEntry({required this.text, required this.createdAt});
+  const DictationHistoryEntry({
+    required this.text,
+    required this.createdAt,
+    this.duration = Duration.zero,
+  });
 
   final String text;
   final DateTime createdAt;
+  final Duration duration;
 
   Map<String, Object?> toJson() => {
     'text': text,
     'createdAt': createdAt.toIso8601String(),
+    'durationMs': duration.inMilliseconds,
   };
 
   static DictationHistoryEntry? fromJson(Object? value) {
@@ -25,7 +31,14 @@ class DictationHistoryEntry {
         return null;
       }
 
-      return DictationHistoryEntry(text: trimmedText, createdAt: createdAt);
+      final durationMs = value['durationMs'];
+      return DictationHistoryEntry(
+        text: trimmedText,
+        createdAt: createdAt,
+        duration: durationMs is int
+            ? Duration(milliseconds: durationMs)
+            : Duration.zero,
+      );
     }
 
     return null;
@@ -92,6 +105,25 @@ class DictationHistoryController extends ChangeNotifier {
 
   List<DictationHistoryEntry> get entries => _entries;
   bool get isLoading => _isLoading;
+  int get totalWords => _entries.fold(0, (total, entry) {
+    final words = entry.text
+        .split(RegExp(r'\s+'))
+        .where((word) => word.trim().isNotEmpty)
+        .length;
+    return total + words;
+  });
+
+  Duration get totalDuration =>
+      _entries.fold(Duration.zero, (total, entry) => total + entry.duration);
+
+  int get averageWordsPerMinute {
+    final minutes =
+        totalDuration.inMilliseconds / Duration.millisecondsPerMinute;
+    if (minutes <= 0) {
+      return 0;
+    }
+    return (totalWords / minutes).round();
+  }
 
   Future<void> load() async {
     _isLoading = true;
@@ -101,14 +133,21 @@ class DictationHistoryController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addTranscript(String text) async {
+  Future<void> addTranscript(
+    String text, {
+    Duration duration = Duration.zero,
+  }) async {
     final trimmedText = text.trim();
     if (trimmedText.isEmpty) {
       return;
     }
 
     _entries = [
-      DictationHistoryEntry(text: trimmedText, createdAt: DateTime.now()),
+      DictationHistoryEntry(
+        text: trimmedText,
+        createdAt: DateTime.now(),
+        duration: duration,
+      ),
       ..._entries,
     ].take(maxEntries).toList(growable: false);
     notifyListeners();

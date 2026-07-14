@@ -125,6 +125,36 @@ void main() {
     expect(find.text('Ship the local dictation flow.'), findsOneWidget);
   });
 
+  testWidgets('history page hides the scrollbar chrome', (tester) async {
+    await tester.pumpHome();
+
+    expect(find.byKey(const Key('history-scrollbar-hidden')), findsOneWidget);
+  });
+
+  testWidgets('history page shows report metrics on the right side', (
+    tester,
+  ) async {
+    final historyController = DictationHistoryController();
+
+    await tester.pumpHome(historyController: historyController);
+    await historyController.addTranscript(
+      'Ship local dictation quickly',
+      duration: const Duration(seconds: 30),
+    );
+    await historyController.addTranscript(
+      'Create reports',
+      duration: const Duration(seconds: 30),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('history-report-card')), findsOneWidget);
+    expect(find.text('6'), findsNWidgets(2));
+    expect(find.text('total words'), findsOneWidget);
+    expect(find.text('wpm'), findsOneWidget);
+    expect(find.text('Voice Profile Unlocked!'), findsNothing);
+    expect(find.text('Create report'), findsNothing);
+  });
+
   testWidgets('top animation appears while listening and transcribing', (
     tester,
   ) async {

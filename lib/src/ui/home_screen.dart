@@ -136,51 +136,166 @@ class _HistoryPage extends StatelessWidget {
     final theme = Theme.of(context);
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 920),
-        child: ListView(
-          padding: const EdgeInsets.all(32),
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Speech history',
-                    style: theme.textTheme.displaySmall?.copyWith(
-                      fontWeight: FontWeight.w800,
+        constraints: const BoxConstraints(maxWidth: 1180),
+        child: ScrollConfiguration(
+          key: const Key('history-scrollbar-hidden'),
+          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(32),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final historyContent = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Speech history',
+                            style: theme.textTheme.displaySmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 24),
+                        Flexible(
+                          child: _ShortcutInstructionCard(
+                            instruction: _shortcutInstruction(
+                              shortcutController,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ),
-                const SizedBox(width: 24),
-                Flexible(
-                  child: _ShortcutInstructionCard(
-                    instruction: _shortcutInstruction(shortcutController),
-                  ),
-                ),
-              ],
+                    if (historyController.entries.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      TextButton.icon(
+                        onPressed: historyController.clear,
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('Clear history'),
+                      ),
+                    ],
+                    const SizedBox(height: 28),
+                    if (historyController.isLoading)
+                      const Center(child: CircularProgressIndicator())
+                    else if (historyController.entries.isEmpty)
+                      const _EmptyHistoryCard()
+                    else
+                      for (final entry in historyController.entries)
+                        _HistoryEntryCard(entry: entry),
+                  ],
+                );
+
+                final reportCard = _HistoryReportCard(
+                  totalWords: historyController.totalWords,
+                  wordsPerMinute: historyController.averageWordsPerMinute,
+                );
+
+                if (constraints.maxWidth < 780) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      historyContent,
+                      const SizedBox(height: 24),
+                      reportCard,
+                    ],
+                  );
+                }
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: historyContent),
+                    const SizedBox(width: 28),
+                    SizedBox(width: 300, child: reportCard),
+                  ],
+                );
+              },
             ),
-            if (historyController.entries.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: historyController.clear,
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('Clear history'),
-                ),
-              ),
-            ],
-            const SizedBox(height: 28),
-            if (historyController.isLoading)
-              const Center(child: CircularProgressIndicator())
-            else if (historyController.entries.isEmpty)
-              const _EmptyHistoryCard()
-            else
-              for (final entry in historyController.entries)
-                _HistoryEntryCard(entry: entry),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HistoryReportCard extends StatelessWidget {
+  const _HistoryReportCard({
+    required this.totalWords,
+    required this.wordsPerMinute,
+  });
+
+  final int totalWords;
+  final int wordsPerMinute;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      key: const Key('history-report-card'),
+      elevation: 0,
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.72),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _HistoryMetricRow(
+              value: _formatMetric(totalWords),
+              label: 'total words',
+            ),
+            const SizedBox(height: 18),
+            _HistoryMetricRow(value: wordsPerMinute.toString(), label: 'wpm'),
           ],
         ),
       ),
+    );
+  }
+
+  String _formatMetric(int value) {
+    if (value >= 1000000) {
+      return '${(value / 1000000).toStringAsFixed(1)}M';
+    }
+    if (value >= 1000) {
+      return '${(value / 1000).toStringAsFixed(1)}K';
+    }
+    return value.toString();
+  }
+}
+
+class _HistoryMetricRow extends StatelessWidget {
+  const _HistoryMetricRow({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          value,
+          style: theme.textTheme.headlineLarge?.copyWith(
+            fontWeight: FontWeight.w500,
+            letterSpacing: -1.2,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 5),
+          child: Text(
+            label,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

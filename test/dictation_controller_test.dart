@@ -65,10 +65,14 @@ void main() {
       final sttEngine = FakeSttEngine(
         transcript: 'Run the tests and fix the failure.',
       );
+      Duration? storedDuration;
       final controller = DictationController(
         platformBridge: platformBridge,
         sttEngine: sttEngine,
         audioRecorder: audioRecorder,
+        onTranscriptGenerated: (transcript, {duration = Duration.zero}) async {
+          storedDuration = duration;
+        },
       );
 
       await controller.startListening();
@@ -81,6 +85,7 @@ void main() {
       expect(sttEngine.lastRecording?.path, 'voice.wav');
       expect(controller.latestTranscript, 'Run the tests and fix the failure.');
       expect(platformBridge.lastInsertedText, controller.latestTranscript);
+      expect(storedDuration, const Duration(seconds: 2));
     },
   );
 

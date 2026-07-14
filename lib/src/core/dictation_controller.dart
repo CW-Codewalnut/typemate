@@ -6,7 +6,8 @@ import '../platform/platform_bridge.dart';
 import '../stt/stt_engine.dart';
 
 typedef AudioRecorderProvider = AudioRecorder? Function();
-typedef TranscriptGeneratedCallback = Future<void> Function(String transcript);
+typedef TranscriptGeneratedCallback =
+    Future<void> Function(String transcript, {Duration duration});
 
 class DictationController extends ChangeNotifier {
   factory DictationController({
@@ -141,7 +142,10 @@ class DictationController extends ChangeNotifier {
       return;
     }
     _latestTranscript = usableTranscript;
-    await _onTranscriptGenerated?.call(usableTranscript);
+    await _onTranscriptGenerated?.call(
+      usableTranscript,
+      duration: recording.duration,
+    );
 
     _setPhase(DictationPhase.inserting, 'Inserting into focused text field...');
     try {
