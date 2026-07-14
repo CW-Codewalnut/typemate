@@ -514,11 +514,6 @@ class _SpeechSettingsPanel extends StatelessWidget {
                 }
               },
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Model: Whisper.cpp multilingual local transcription. Language is passed directly to whisper.cpp.',
-              style: theme.textTheme.bodyMedium,
-            ),
           ],
         ),
       ),

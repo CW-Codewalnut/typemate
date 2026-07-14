@@ -96,12 +96,8 @@ void main() {
 
     expect(find.text('Speech recognition'), findsOneWidget);
     expect(find.text('Auto'), findsOneWidget);
-    expect(
-      find.text(
-        'Model: Whisper.cpp multilingual local transcription. Language is passed directly to whisper.cpp.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Model:'), findsNothing);
+    expect(find.textContaining('Whisper.cpp'), findsNothing);
 
     await tester.tap(find.text('Auto'));
     await tester.pumpAndSettle();
