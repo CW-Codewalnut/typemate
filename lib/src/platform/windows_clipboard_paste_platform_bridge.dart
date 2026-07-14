@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 
 import 'platform_bridge.dart';
 
+const _nativeChannel = MethodChannel('typemate/windows');
+
 typedef PlatformProcessRunner =
     Future<PlatformProcessResult> Function(
       String executable,
@@ -64,14 +66,19 @@ Future<OverlayProcess> startOverlayProcess(
   return StartedOverlayProcess(process);
 }
 
+typedef NativeMethodInvoker =
+    Future<T?> Function<T>(String method, [Object? arguments]);
+
 class WindowsClipboardPastePlatformBridge implements PlatformBridge {
   WindowsClipboardPastePlatformBridge({
     this.processRunner = runPlatformProcess,
     this.overlayProcessStarter = startOverlayProcess,
-  });
+    NativeMethodInvoker? nativeMethodInvoker,
+  }) : nativeMethodInvoker = nativeMethodInvoker ?? _nativeChannel.invokeMethod;
 
   final PlatformProcessRunner processRunner;
   final OverlayProcessStarter overlayProcessStarter;
+  final NativeMethodInvoker nativeMethodInvoker;
 
   OverlayProcess? _overlayProcess;
   String? _overlayState;
@@ -90,8 +97,19 @@ class WindowsClipboardPastePlatformBridge implements PlatformBridge {
   }
 
   Future<void> _showOverlay(String state) async {
-    if (_overlayProcess != null && _overlayState == state) {
+    if (_overlayState == state) {
       return;
+    }
+
+    try {
+      await nativeMethodInvoker<void>('showOverlay', {'state': state});
+      _overlayProcess?.kill();
+      _overlayProcess = null;
+      _overlayState = state;
+      return;
+    } on MissingPluginException {
+      // Development fallback for older Windows runners before the native method
+      // channel is available.
     }
 
     if (_overlayProcess != null) {
@@ -120,6 +138,11 @@ class WindowsClipboardPastePlatformBridge implements PlatformBridge {
 
   @override
   Future<void> hideListeningOverlay() async {
+    try {
+      await nativeMethodInvoker<void>('hideOverlay');
+    } on MissingPluginException {
+      // Ignore: older runners only have the PowerShell fallback below.
+    }
     _overlayProcess?.kill();
     _overlayProcess = null;
     _overlayState = null;

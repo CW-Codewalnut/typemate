@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import '../audio/audio_recorder.dart';
@@ -113,7 +114,12 @@ class DartSttProcessRunner implements SttProcessRunner {
     String executable,
     List<String> arguments,
   ) async {
-    final result = await Process.run(executable, arguments);
+    final result = await Process.run(
+      executable,
+      arguments,
+      stdoutEncoding: utf8,
+      stderrEncoding: utf8,
+    );
     return SttProcessResult(
       exitCode: result.exitCode,
       output: '${result.stdout}',

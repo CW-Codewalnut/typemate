@@ -108,6 +108,24 @@ void main() {
     expect(runner.arguments, containsAllInOrder(['-l', 'hi']));
   });
 
+  test('transcribe preserves Hindi UTF-8 transcript text', () async {
+    final runner = FakeSttProcessRunner(
+      result: const SttProcessResult(exitCode: 0, output: 'आज लिए\n'),
+    );
+    final engine = WhisperCliSttEngine(
+      executable: 'whisper-cli',
+      modelPath: 'models/ggml-base.bin',
+      processRunner: runner,
+    );
+
+    final transcript = await engine.transcribe(
+      const AudioRecording(path: 'hindi.wav', duration: Duration(seconds: 1)),
+    );
+
+    expect(transcript, 'आज लिए');
+    expect(transcript, isNot(contains('à¤')));
+  });
+
   test('transcribe ignores stderr diagnostics on success', () async {
     final runner = FakeSttProcessRunner(
       result: const SttProcessResult(

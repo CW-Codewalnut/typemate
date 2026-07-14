@@ -1,6 +1,9 @@
 #include "flutter_window.h"
 
+#include <flutter/method_channel.h>
+#include <flutter/standard_method_codec.h>
 #include <optional>
+#include <string>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -25,6 +28,39 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+
+  windows_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+      flutter_controller_->engine()->messenger(), "typemate/windows",
+      &flutter::StandardMethodCodec::GetInstance());
+  windows_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        if (call.method_name() == "showOverlay") {
+          std::wstring state = L"listening";
+          const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+          if (arguments) {
+            auto state_it = arguments->find(flutter::EncodableValue("state"));
+            if (state_it != arguments->end()) {
+              if (const auto* state_string =
+                      std::get_if<std::string>(&state_it->second)) {
+                state = std::wstring(state_string->begin(), state_string->end());
+              }
+            }
+          }
+          overlay_.Show(state);
+          result->Success();
+          return;
+        }
+        if (call.method_name() == "hideOverlay") {
+          overlay_.Hide();
+          result->Success();
+          return;
+        }
+        result->NotImplemented();
+      });
+
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -40,6 +76,8 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  overlay_.Hide();
+  windows_channel_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }

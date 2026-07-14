@@ -59,38 +59,65 @@ void main() {
     );
   });
 
-  test('shows one overlay process and kills it on hide', () async {
-    final started = <({String executable, List<String> arguments})>[];
-    final overlayProcess = FakeOverlayProcess();
+  test('shows native overlay through Windows method channel', () async {
+    final calls = <({String method, Object? arguments})>[];
     final bridge = WindowsClipboardPastePlatformBridge(
-      overlayProcessStarter: (executable, arguments) async {
-        started.add((executable: executable, arguments: arguments));
-        return overlayProcess;
+      nativeMethodInvoker: <T>(method, [arguments]) async {
+        calls.add((method: method, arguments: arguments));
+        return null;
       },
     );
 
     await bridge.showListeningOverlay();
     await bridge.showListeningOverlay();
+    await bridge.showTranscribingOverlay();
     await bridge.hideListeningOverlay();
 
-    expect(started, hasLength(1));
-    expect(started.single.executable, 'powershell.exe');
-    expect(started.single.arguments, contains('-File'));
-    expect(started.single.arguments.last, 'listening');
-    final scriptPath =
-        started.single.arguments[started.single.arguments.length - 2];
-    expect(scriptPath, endsWith('typemate-listening-overlay.ps1'));
-    final script = File(scriptPath).readAsStringSync();
-    expect(script, contains('TypeMate is listening'));
-    expect(script, contains('Transcribing locally'));
-    expect(script, contains(r"param([string]$State"));
-    expect(script, contains('Application]::Run'));
-    expect(script, contains('System.Windows.Forms.Timer'));
-    expect(script, contains(r'$script:barCount = 13'));
-    expect(script, contains('[Math]::Sin'));
-    expect(script, contains('SetWindowPos'));
-    expect(overlayProcess.killCount, 1);
+    expect(calls.map((call) => call.method), [
+      'showOverlay',
+      'showOverlay',
+      'hideOverlay',
+    ]);
+    expect(calls[0].arguments, {'state': 'listening'});
+    expect(calls[1].arguments, {'state': 'transcribing'});
+    expect(calls[2].arguments, isNull);
   });
+
+  test(
+    'falls back to PowerShell overlay when native channel is unavailable',
+    () async {
+      final started = <({String executable, List<String> arguments})>[];
+      final overlayProcess = FakeOverlayProcess();
+      final bridge = WindowsClipboardPastePlatformBridge(
+        overlayProcessStarter: (executable, arguments) async {
+          started.add((executable: executable, arguments: arguments));
+          return overlayProcess;
+        },
+      );
+
+      await bridge.showListeningOverlay();
+      await bridge.showListeningOverlay();
+      await bridge.hideListeningOverlay();
+
+      expect(started, hasLength(1));
+      expect(started.single.executable, 'powershell.exe');
+      expect(started.single.arguments, contains('-File'));
+      expect(started.single.arguments.last, 'listening');
+      final scriptPath =
+          started.single.arguments[started.single.arguments.length - 2];
+      expect(scriptPath, endsWith('typemate-listening-overlay.ps1'));
+      final script = File(scriptPath).readAsStringSync();
+      expect(script, contains('TypeMate is listening'));
+      expect(script, contains('Transcribing locally'));
+      expect(script, contains(r"param([string]$State"));
+      expect(script, contains('Application]::Run'));
+      expect(script, contains('System.Windows.Forms.Timer'));
+      expect(script, contains(r'$script:barCount = 13'));
+      expect(script, contains('[Math]::Sin'));
+      expect(script, contains('SetWindowPos'));
+      expect(overlayProcess.killCount, 1);
+    },
+  );
   test('shows transcribing overlay as a native overlay state', () async {
     final started = <({String executable, List<String> arguments})>[];
     final listeningProcess = FakeOverlayProcess();
