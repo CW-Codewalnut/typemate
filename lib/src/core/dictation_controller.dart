@@ -6,6 +6,7 @@ import '../platform/platform_bridge.dart';
 import '../stt/stt_engine.dart';
 
 typedef AudioRecorderProvider = AudioRecorder? Function();
+typedef TranscriptGeneratedCallback = Future<void> Function(String transcript);
 
 class DictationController extends ChangeNotifier {
   factory DictationController({
@@ -13,6 +14,7 @@ class DictationController extends ChangeNotifier {
     required SttEngine sttEngine,
     AudioRecorder? audioRecorder,
     AudioRecorderProvider? audioRecorderProvider,
+    TranscriptGeneratedCallback? onTranscriptGenerated,
   }) {
     assert(
       audioRecorder != null || audioRecorderProvider != null,
@@ -23,6 +25,7 @@ class DictationController extends ChangeNotifier {
       platformBridge,
       sttEngine,
       audioRecorderProvider ?? (() => audioRecorder!),
+      onTranscriptGenerated,
     );
   }
 
@@ -30,11 +33,13 @@ class DictationController extends ChangeNotifier {
     this._platformBridge,
     this._sttEngine,
     this._audioRecorderProvider,
+    this._onTranscriptGenerated,
   );
 
   final PlatformBridge _platformBridge;
   final SttEngine _sttEngine;
   final AudioRecorderProvider _audioRecorderProvider;
+  final TranscriptGeneratedCallback? _onTranscriptGenerated;
 
   AudioRecorder? _activeRecorder;
   DictationPhase _phase = DictationPhase.idle;
@@ -124,11 +129,21 @@ class DictationController extends ChangeNotifier {
       );
       return;
     }
-    _latestTranscript = transcript;
+    final usableTranscript = transcript.trim();
+    if (usableTranscript.isEmpty) {
+      _latestTranscript = '';
+      _setPhase(
+        DictationPhase.idle,
+        'No speech was detected. Ready for the next dictation.',
+      );
+      return;
+    }
+    _latestTranscript = usableTranscript;
+    await _onTranscriptGenerated?.call(usableTranscript);
 
     _setPhase(DictationPhase.inserting, 'Inserting into focused text field...');
     try {
-      await _platformBridge.insertTextIntoFocusedField(transcript);
+      await _platformBridge.insertTextIntoFocusedField(usableTranscript);
     } catch (_) {
       _setPhase(
         DictationPhase.idle,

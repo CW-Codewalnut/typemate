@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -5,9 +6,11 @@ import 'package:flutter/material.dart';
 import 'audio/ffmpeg_microphone_discovery.dart';
 import 'audio/microphone_audio_recorder_factory.dart';
 import 'core/dictation_controller.dart';
+import 'core/dictation_history_controller.dart';
 import 'core/hold_shortcut_controller.dart';
 import 'core/microphone_settings_controller.dart';
 import 'core/microphone_settings_store.dart';
+import 'core/speech_settings_controller.dart';
 import 'platform/mock_platform_bridge.dart';
 import 'platform/platform_bridge.dart';
 import 'platform/windows_clipboard_paste_platform_bridge.dart';
@@ -33,8 +36,11 @@ class DictationFlowApp extends StatefulWidget {
 
 class _DictationFlowAppState extends State<DictationFlowApp> {
   late final DictationController controller;
+  late final DictationHistoryController historyController;
   late final MicrophoneSettingsController microphoneController;
+  late final SpeechSettingsController speechSettingsController;
   late final HoldShortcutController shortcutController;
+  late final PlatformBridge platformBridge;
 
   @override
   void initState() {
@@ -47,9 +53,17 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
           widget.microphoneDiscovery ?? const FfmpegMicrophoneDiscovery(),
       store: createDefaultMicrophoneSettingsStore(),
     );
+    historyController = DictationHistoryController(
+      store: createDefaultDictationHistoryStore(),
+    );
+    speechSettingsController = SpeechSettingsController(
+      store: createDefaultSpeechSettingsStore(),
+    );
+    platformBridge = createDefaultPlatformBridge();
     controller = DictationController(
-      platformBridge: createDefaultPlatformBridge(),
+      platformBridge: platformBridge,
       sttEngine: createDefaultSttEngine(),
+      onTranscriptGenerated: historyController.addTranscript,
       audioRecorderProvider: () {
         final selectedMicrophone = microphoneController.selectedMicrophone;
         if (selectedMicrophone == null) {
@@ -63,13 +77,19 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
       dictationController: controller,
       registrar:
           widget.holdShortcutRegistrar ?? createDefaultHoldShortcutRegistrar(),
+      store: createDefaultHoldShortcutSettingsStore(),
     );
     shortcutController.register();
+    unawaited(platformBridge.ensureLaunchAtStartup());
+    historyController.load();
+    speechSettingsController.load();
   }
 
   @override
   void dispose() {
     shortcutController.dispose();
+    speechSettingsController.dispose();
+    historyController.dispose();
     microphoneController.dispose();
     controller.dispose();
     super.dispose();
@@ -86,7 +106,9 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
       ),
       home: HomeScreen(
         controller: controller,
+        historyController: historyController,
         microphoneController: microphoneController,
+        speechSettingsController: speechSettingsController,
         shortcutController: shortcutController,
       ),
     );
@@ -109,27 +131,83 @@ HoldShortcutRegistrar createDefaultHoldShortcutRegistrar({bool? isWindows}) {
   return const NoopHoldShortcutRegistrar();
 }
 
+HoldShortcutSettingsStore createDefaultHoldShortcutSettingsStore({
+  Map<String, String>? environment,
+}) {
+  return FileHoldShortcutSettingsStore(
+    file: File(
+      '${_typeMateDataDirectory(environment: environment).path}/shortcut-settings.json',
+    ),
+  );
+}
+
 MicrophoneSettingsStore createDefaultMicrophoneSettingsStore({
   Map<String, String>? environment,
 }) {
+  return FileMicrophoneSettingsStore(
+    file: File(
+      '${_typeMateDataDirectory(environment: environment).path}/settings.json',
+    ),
+  );
+}
+
+DictationHistoryStore createDefaultDictationHistoryStore({
+  Map<String, String>? environment,
+}) {
+  return FileDictationHistoryStore(
+    file: File(
+      '${_typeMateDataDirectory(environment: environment).path}/history.json',
+    ),
+  );
+}
+
+SpeechSettingsStore createDefaultSpeechSettingsStore({
+  Map<String, String>? environment,
+}) {
+  return FileSpeechSettingsStore(
+    file: File(
+      '${_typeMateDataDirectory(environment: environment).path}/speech-settings.json',
+    ),
+  );
+}
+
+Directory _typeMateDataDirectory({Map<String, String>? environment}) {
   final values = environment ?? Platform.environment;
   final baseDirectory = values['APPDATA']?.trim().isNotEmpty == true
       ? Directory(values['APPDATA']!.trim())
       : Directory('build/settings');
 
-  return FileMicrophoneSettingsStore(
-    file: File('${baseDirectory.path}/TypeMate/settings.json'),
-  );
+  return Directory('${baseDirectory.path}/TypeMate');
 }
 
-SttEngine createDefaultSttEngine({Map<String, String>? environment}) {
+typedef PathExists = bool Function(String path);
+
+const verifiedWhisperCliPath =
+    'R:/Tools/whisper.cpp/v1.9.1-x64/Release/whisper-cli.exe';
+const verifiedWhisperModelPath = 'R:/Models/whisper/ggml-tiny.en.bin';
+
+SttEngine createDefaultSttEngine({
+  Map<String, String>? environment,
+  PathExists? pathExists,
+}) {
   final values = environment ?? Platform.environment;
   final executable = values['TYPEMATE_WHISPER_CLI']?.trim() ?? '';
   final modelPath = values['TYPEMATE_WHISPER_MODEL']?.trim() ?? '';
 
-  if (executable.isEmpty || modelPath.isEmpty) {
-    return MockSttEngine();
+  if (executable.isNotEmpty && modelPath.isNotEmpty) {
+    return WhisperCliSttEngine(executable: executable, modelPath: modelPath);
   }
 
-  return WhisperCliSttEngine(executable: executable, modelPath: modelPath);
+  final exists = pathExists ?? (path) => File(path).existsSync();
+  if (executable.isEmpty &&
+      modelPath.isEmpty &&
+      exists(verifiedWhisperCliPath) &&
+      exists(verifiedWhisperModelPath)) {
+    return WhisperCliSttEngine(
+      executable: verifiedWhisperCliPath,
+      modelPath: verifiedWhisperModelPath,
+    );
+  }
+
+  return MockSttEngine();
 }

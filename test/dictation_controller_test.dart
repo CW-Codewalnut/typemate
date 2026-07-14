@@ -83,6 +83,23 @@ void main() {
     },
   );
 
+  test('trims local transcript before storing and inserting it', () async {
+    final platformBridge = MockPlatformBridge();
+    final audioRecorder = FakeAudioRecorder();
+    final sttEngine = FakeSttEngine(transcript: '  Keep this text.\n');
+    final controller = DictationController(
+      platformBridge: platformBridge,
+      sttEngine: sttEngine,
+      audioRecorder: audioRecorder,
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(controller.latestTranscript, 'Keep this text.');
+    expect(platformBridge.lastInsertedText, 'Keep this text.');
+  });
+
   test('uses the recorder provided when listening starts', () async {
     final selectedRecorder = FakeAudioRecorder(
       recording: const AudioRecording(
@@ -194,6 +211,36 @@ void main() {
     expect(platformBridge.lastInsertedText, isEmpty);
     expect(controller.latestTranscript, isEmpty);
   });
+
+  test(
+    'does not insert when local transcription returns no usable text',
+    () async {
+      final platformBridge = MockPlatformBridge();
+      final audioRecorder = FakeAudioRecorder(
+        recording: const AudioRecording(
+          path: 'silence.wav',
+          duration: Duration(seconds: 2),
+        ),
+      );
+      final sttEngine = FakeSttEngine(transcript: '   \n  ');
+      final controller = DictationController(
+        platformBridge: platformBridge,
+        sttEngine: sttEngine,
+        audioRecorder: audioRecorder,
+      );
+
+      await controller.startListening();
+      await controller.stopListening();
+
+      expect(controller.phase, DictationPhase.idle);
+      expect(controller.latestTranscript, isEmpty);
+      expect(platformBridge.lastInsertedText, isEmpty);
+      expect(
+        controller.statusMessage,
+        'No speech was detected. Ready for the next dictation.',
+      );
+    },
+  );
 
   test('recovers when focused-field insertion fails', () async {
     final platformBridge = ThrowingInsertPlatformBridge();
@@ -346,4 +393,7 @@ class ThrowingInsertPlatformBridge implements PlatformBridge {
     insertAttempted = true;
     throw StateError('focused field unavailable');
   }
+
+  @override
+  Future<void> ensureLaunchAtStartup() async {}
 }

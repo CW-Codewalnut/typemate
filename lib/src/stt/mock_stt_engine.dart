@@ -15,7 +15,8 @@ class MockSttEngine implements SttEngine {
 
   @override
   Future<String> transcribe(AudioRecording recording) async {
-    await Future<void>.delayed(const Duration(milliseconds: 250));
-    return 'This is a local dictation preview. The production build will insert the real transcript here.';
+    throw StateError(
+      'No local speech runtime is configured. Set up Whisper before dictating.',
+    );
   }
 }

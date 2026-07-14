@@ -12,14 +12,10 @@ void main() {
       ),
     );
     await tester.pump(const Duration(milliseconds: 200));
-    await tester.pumpAndSettle();
 
-    expect(find.text('TypeMate'), findsOneWidget);
-    expect(
-      find.text('Local hold to dictate for developers and heavy typers.'),
-      findsOneWidget,
-    );
-    expect(find.text('Prepare local engine'), findsOneWidget);
+    expect(find.text('Speech history'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Prepare local engine'), findsNothing);
   });
 }
 

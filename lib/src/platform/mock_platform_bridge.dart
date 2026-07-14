@@ -3,6 +3,7 @@ import 'platform_bridge.dart';
 class MockPlatformBridge implements PlatformBridge {
   String lastInsertedText = '';
   bool overlayVisible = false;
+  bool launchAtStartupEnsured = false;
 
   @override
   Future<bool> isGlobalShortcutAvailable() async => true;
@@ -20,5 +21,10 @@ class MockPlatformBridge implements PlatformBridge {
   @override
   Future<void> insertTextIntoFocusedField(String text) async {
     lastInsertedText = text;
+  }
+
+  @override
+  Future<void> ensureLaunchAtStartup() async {
+    launchAtStartupEnsured = true;
   }
 }

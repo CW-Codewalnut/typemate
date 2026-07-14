@@ -6,4 +6,6 @@ abstract interface class PlatformBridge {
   Future<void> hideListeningOverlay();
 
   Future<void> insertTextIntoFocusedField(String text);
+
+  Future<void> ensureLaunchAtStartup();
 }

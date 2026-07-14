@@ -5,14 +5,13 @@ import 'package:integration_test/integration_test.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('app shell loads with TypeMate title and prepare action', (
-    tester,
-  ) async {
+  testWidgets('app shell loads with history and settings', (tester) async {
     await tester.pumpWidget(const DictationFlowApp());
     await tester.pumpAndSettle();
 
     expect(find.text('TypeMate'), findsOneWidget);
-    expect(find.text('Prepare local engine'), findsOneWidget);
-    expect(find.text('Hold shortcut preview'), findsOneWidget);
+    expect(find.text('Speech history'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Prepare local engine'), findsNothing);
   });
 }

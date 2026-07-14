@@ -6,20 +6,66 @@ import 'package:typemate/src/platform/mock_platform_bridge.dart';
 import 'package:typemate/src/stt/stt_engine.dart';
 
 void main() {
-  test('registers global hold shortcut and reports ready status', () async {
+  test(
+    'registers double-tap Ctrl then hold as the safe default shortcut',
+    () async {
+      final registrar = FakeHoldShortcutRegistrar();
+      final controller = HoldShortcutController(
+        dictationController: createDictationController(),
+        registrar: registrar,
+      );
+
+      await controller.register();
+
+      expect(registrar.isRegistered, isTrue);
+      expect(controller.isRegistered, isTrue);
+      expect(
+        controller.statusMessage,
+        'Global shortcut ready: double-tap Ctrl, then hold Ctrl to dictate.',
+      );
+      expect(registrar.shortcut?.id, defaultHoldShortcutId);
+      expect(registrar.shortcut?.virtualKeyCodes, [0x11]);
+    },
+  );
+
+  test('migrates old shortcuts to double-tap Ctrl then hold', () async {
+    for (final legacyShortcutId in legacyShortcutIds) {
+      final registrar = FakeHoldShortcutRegistrar();
+      final store = MemoryHoldShortcutSettingsStore(legacyShortcutId);
+      final controller = HoldShortcutController(
+        dictationController: createDictationController(),
+        registrar: registrar,
+        store: store,
+      );
+
+      await controller.register();
+
+      expect(controller.shortcut.id, defaultHoldShortcutId);
+      expect(registrar.shortcut?.id, defaultHoldShortcutId);
+      expect(store.savedShortcutId, defaultHoldShortcutId);
+    }
+  });
+
+  test('changing shortcut re-registers with the selected option', () async {
     final registrar = FakeHoldShortcutRegistrar();
+    final store = MemoryHoldShortcutSettingsStore();
     final controller = HoldShortcutController(
       dictationController: createDictationController(),
       registrar: registrar,
+      store: store,
     );
 
     await controller.register();
+    await controller.selectShortcut('ctrl-shift-f9');
 
-    expect(registrar.isRegistered, isTrue);
-    expect(controller.isRegistered, isTrue);
+    expect(controller.shortcut.id, 'ctrl-shift-f9');
+    expect(registrar.registerCount, 2);
+    expect(registrar.shortcut?.label, 'Ctrl+Shift+F9');
+    expect(registrar.shortcut?.virtualKeyCodes, isNot(contains(0x20)));
+    expect(store.savedShortcutId, 'ctrl-shift-f9');
     expect(
       controller.statusMessage,
-      'Global shortcut ready: hold Ctrl+Alt+Space.',
+      'Global shortcut ready: hold Ctrl+Shift+F9.',
     );
   });
 
@@ -81,16 +127,21 @@ DictationController createDictationController({
 class FakeHoldShortcutRegistrar implements HoldShortcutRegistrar {
   ShortcutCallback? onPressed;
   ShortcutCallback? onReleased;
+  HoldShortcutOption? shortcut;
   bool isRegistered = false;
+  int registerCount = 0;
 
   @override
   Future<void> registerHoldShortcut({
+    required HoldShortcutOption shortcut,
     required ShortcutCallback onPressed,
     required ShortcutCallback onReleased,
   }) async {
+    this.shortcut = shortcut;
     this.onPressed = onPressed;
     this.onReleased = onReleased;
     isRegistered = true;
+    registerCount += 1;
   }
 
   @override
@@ -100,6 +151,22 @@ class FakeHoldShortcutRegistrar implements HoldShortcutRegistrar {
 
   Future<void> press() async => onPressed!();
   Future<void> release() async => onReleased!();
+}
+
+class MemoryHoldShortcutSettingsStore implements HoldShortcutSettingsStore {
+  MemoryHoldShortcutSettingsStore([
+    this.savedShortcutId = defaultHoldShortcutId,
+  ]);
+
+  String savedShortcutId;
+
+  @override
+  Future<String> loadShortcutId() async => savedShortcutId;
+
+  @override
+  Future<void> saveShortcutId(String shortcutId) async {
+    savedShortcutId = shortcutId;
+  }
 }
 
 class FakeAudioRecorder implements AudioRecorder {

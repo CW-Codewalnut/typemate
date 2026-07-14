@@ -4,8 +4,29 @@ import 'package:typemate/src/stt/whisper_cli_stt_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('uses mock STT when whisper environment is not configured', () {
-    final engine = createDefaultSttEngine(environment: const {});
+  test(
+    'uses verified local Whisper paths when environment is not configured',
+    () {
+      final engine = createDefaultSttEngine(
+        environment: const {},
+        pathExists: (_) => true,
+      );
+
+      expect(engine, isA<WhisperCliSttEngine>());
+      final whisper = engine as WhisperCliSttEngine;
+      expect(
+        whisper.executable,
+        'R:/Tools/whisper.cpp/v1.9.1-x64/Release/whisper-cli.exe',
+      );
+      expect(whisper.modelPath, 'R:/Models/whisper/ggml-tiny.en.bin');
+    },
+  );
+
+  test('falls back to mock STT when no configured or verified paths exist', () {
+    final engine = createDefaultSttEngine(
+      environment: const {},
+      pathExists: (_) => false,
+    );
 
     expect(engine, isA<MockSttEngine>());
   });
@@ -17,6 +38,7 @@ void main() {
         environment: const {
           'TYPEMATE_WHISPER_CLI': 'R:/Tools/whisper/whisper-cli.exe',
         },
+        pathExists: (_) => false,
       );
 
       expect(engine, isA<MockSttEngine>());

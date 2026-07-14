@@ -1,123 +1,69 @@
-import 'package:typemate/src/audio/ffmpeg_microphone_discovery.dart';
-import 'package:typemate/src/core/dictation_controller.dart';
-import 'package:typemate/src/core/microphone_settings_controller.dart';
-import 'package:typemate/src/audio/mock_audio_recorder.dart';
-import 'package:typemate/src/platform/mock_platform_bridge.dart';
-import 'package:typemate/src/stt/mock_stt_engine.dart';
-import 'package:typemate/src/ui/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:typemate/src/audio/ffmpeg_microphone_discovery.dart';
+import 'package:typemate/src/audio/mock_audio_recorder.dart';
+import 'package:typemate/src/core/dictation_controller.dart';
+import 'package:typemate/src/core/dictation_history_controller.dart';
+import 'package:typemate/src/core/microphone_settings_controller.dart';
+import 'package:typemate/src/core/speech_settings_controller.dart';
+import 'package:typemate/src/platform/mock_platform_bridge.dart';
+import 'package:typemate/src/stt/mock_stt_engine.dart';
+import 'package:typemate/src/stt/stt_engine.dart';
+import 'package:typemate/src/ui/home_screen.dart';
 
 void main() {
   testWidgets(
-    'automatically prepares the local speech engine when the shell opens',
+    'history home prepares the local speech engine when the shell opens',
     (tester) async {
       final sttEngine = MockSttEngine();
-      final dictationController = DictationController(
-        platformBridge: MockPlatformBridge(),
-        sttEngine: sttEngine,
-        audioRecorder: MockAudioRecorder(),
-      );
-      final microphoneController = MicrophoneSettingsController(
-        discovery: FakeMicrophoneDiscovery(const []),
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: HomeScreen(
-            controller: dictationController,
-            microphoneController: microphoneController,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
+      await tester.pumpHome(sttEngine: sttEngine);
 
       expect(await sttEngine.isReady(), isTrue);
+      expect(find.text('Speech history'), findsOneWidget);
       expect(find.text('Ready. Hold the shortcut and speak.'), findsOneWidget);
     },
   );
 
-  testWidgets('automatically scans microphones when the shell opens', (
-    tester,
-  ) async {
-    final dictationController = DictationController(
-      platformBridge: MockPlatformBridge(),
-      sttEngine: MockSttEngine(),
-      audioRecorder: MockAudioRecorder(),
-    );
-    final microphoneController = MicrophoneSettingsController(
-      discovery: FakeMicrophoneDiscovery([
+  testWidgets('settings page scans and shows microphones', (tester) async {
+    await tester.pumpHome(
+      microphoneDiscovery: FakeMicrophoneDiscovery([
         const MicrophoneDevice(name: 'Microphone (Brio 100)'),
         const MicrophoneDevice(name: 'Headset (Tribit XSound Go)'),
       ]),
     );
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: HomeScreen(
-          controller: dictationController,
-          microphoneController: microphoneController,
-        ),
-      ),
-    );
+    await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Microphone selection'), findsOneWidget);
-    expect(find.text('Microphone (Brio 100)'), findsWidgets);
-    expect(find.text('Headset (Tribit XSound Go)'), findsOneWidget);
+    expect(find.text('Microphone'), findsOneWidget);
+    expect(find.text('Microphone (Brio 100)'), findsOneWidget);
     expect(find.text('2 microphones found.'), findsOneWidget);
   });
 
   testWidgets('disables dictation preview until a microphone is selected', (
     tester,
   ) async {
-    final dictationController = DictationController(
-      platformBridge: MockPlatformBridge(),
-      sttEngine: MockSttEngine(),
-      audioRecorder: MockAudioRecorder(),
+    await tester.pumpHome(
+      microphoneDiscovery: FakeMicrophoneDiscovery(const []),
     );
-    final microphoneController = MicrophoneSettingsController(
-      discovery: FakeMicrophoneDiscovery(const []),
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: HomeScreen(
-          controller: dictationController,
-          microphoneController: microphoneController,
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
 
     final button = tester.widget<OutlinedButton>(
       find.widgetWithText(OutlinedButton, 'Hold shortcut preview'),
     );
+    expect(button.onPressed, isNull);
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
 
     expect(find.text('No microphones found.'), findsOneWidget);
-    expect(button.onPressed, isNull);
   });
 
-  testWidgets('shows a microphone scanning error with recovery action', (
+  testWidgets('settings page shows a microphone scanning error', (
     tester,
   ) async {
-    final dictationController = DictationController(
-      platformBridge: MockPlatformBridge(),
-      sttEngine: MockSttEngine(),
-      audioRecorder: MockAudioRecorder(),
-    );
-    final microphoneController = MicrophoneSettingsController(
-      discovery: ThrowingMicrophoneDiscovery(),
-    );
+    await tester.pumpHome(microphoneDiscovery: ThrowingMicrophoneDiscovery());
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: HomeScreen(
-          controller: dictationController,
-          microphoneController: microphoneController,
-        ),
-      ),
-    );
+    await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
 
     expect(
@@ -126,41 +72,65 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
     expect(find.text('Refresh microphones'), findsOneWidget);
   });
 
-  testWidgets('shows discovered microphones in settings panel', (tester) async {
+  testWidgets('settings page lets user choose language appropriate model', (
+    tester,
+  ) async {
+    await tester.pumpHome();
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('English'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Hindi').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Base Hindi'), findsOneWidget);
+    expect(find.text('Hindi-focused local dictation model.'), findsOneWidget);
+  });
+
+  testWidgets('history page shows generated speech text', (tester) async {
+    final historyController = DictationHistoryController();
+
+    await tester.pumpHome(historyController: historyController);
+    await historyController.addTranscript('Ship the local dictation flow.');
+    await tester.pump();
+
+    expect(find.text('Ship the local dictation flow.'), findsOneWidget);
+  });
+}
+
+extension on WidgetTester {
+  Future<void> pumpHome({
+    SttEngine? sttEngine,
+    MicrophoneDiscovery? microphoneDiscovery,
+    DictationHistoryController? historyController,
+  }) async {
     final dictationController = DictationController(
       platformBridge: MockPlatformBridge(),
-      sttEngine: MockSttEngine(),
+      sttEngine: sttEngine ?? MockSttEngine(),
       audioRecorder: MockAudioRecorder(),
+      onTranscriptGenerated: historyController?.addTranscript,
     );
     final microphoneController = MicrophoneSettingsController(
-      discovery: FakeMicrophoneDiscovery([
-        const MicrophoneDevice(name: 'Microphone (Brio 100)'),
-        const MicrophoneDevice(name: 'Headset (Tribit XSound Go)'),
-      ]),
+      discovery: microphoneDiscovery ?? FakeMicrophoneDiscovery(const []),
     );
 
-    await tester.pumpWidget(
+    await pumpWidget(
       MaterialApp(
         home: HomeScreen(
           controller: dictationController,
+          historyController: historyController ?? DictationHistoryController(),
           microphoneController: microphoneController,
+          speechSettingsController: SpeechSettingsController(),
         ),
       ),
     );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Refresh microphones'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Microphone selection'), findsOneWidget);
-    expect(find.text('Microphone (Brio 100)'), findsWidgets);
-    expect(find.text('Headset (Tribit XSound Go)'), findsOneWidget);
-    expect(find.text('2 microphones found.'), findsOneWidget);
-  });
+    await pump(const Duration(milliseconds: 250));
+    await pump(const Duration(milliseconds: 250));
+  }
 }
 
 class FakeMicrophoneDiscovery implements MicrophoneDiscovery {

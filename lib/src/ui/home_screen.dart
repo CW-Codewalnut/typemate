@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../audio/ffmpeg_microphone_discovery.dart';
 import '../core/dictation_controller.dart';
+import '../core/dictation_history_controller.dart';
 import '../core/hold_shortcut_controller.dart';
 import '../core/microphone_settings_controller.dart';
-import '../audio/ffmpeg_microphone_discovery.dart';
+import '../core/speech_settings_controller.dart';
 import '../models/dictation_state.dart';
 import 'listening_overlay_preview.dart';
 
@@ -11,12 +13,16 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
     required this.controller,
+    required this.historyController,
     required this.microphoneController,
+    required this.speechSettingsController,
     this.shortcutController,
   });
 
   final DictationController controller;
+  final DictationHistoryController historyController;
   final MicrophoneSettingsController microphoneController;
+  final SpeechSettingsController speechSettingsController;
   final HoldShortcutController? shortcutController;
 
   @override
@@ -24,11 +30,15 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  int _selectedIndex = 0;
+
   @override
   void initState() {
     super.initState();
     widget.controller.prepare();
     widget.microphoneController.loadMicrophones();
+    widget.historyController.load();
+    widget.speechSettingsController.load();
   }
 
   @override
@@ -36,18 +46,53 @@ class _HomeScreenState extends State<HomeScreen> {
     return AnimatedBuilder(
       animation: Listenable.merge([
         widget.controller,
+        widget.historyController,
         widget.microphoneController,
+        widget.speechSettingsController,
         if (widget.shortcutController != null) widget.shortcutController!,
       ]),
       builder: (context, _) {
+        final page = _selectedIndex == 0
+            ? _HistoryPage(
+                controller: widget.controller,
+                historyController: widget.historyController,
+                microphoneController: widget.microphoneController,
+                shortcutController: widget.shortcutController,
+              )
+            : _SettingsPage(
+                microphoneController: widget.microphoneController,
+                speechSettingsController: widget.speechSettingsController,
+                shortcutController: widget.shortcutController,
+              );
+
         return Scaffold(
           body: SafeArea(
             child: Stack(
               children: [
-                _HomeContent(
-                  controller: widget.controller,
-                  microphoneController: widget.microphoneController,
-                  shortcutController: widget.shortcutController,
+                Row(
+                  children: [
+                    NavigationRail(
+                      selectedIndex: _selectedIndex,
+                      onDestinationSelected: (index) {
+                        setState(() => _selectedIndex = index);
+                      },
+                      labelType: NavigationRailLabelType.all,
+                      destinations: const [
+                        NavigationRailDestination(
+                          icon: Icon(Icons.history),
+                          selectedIcon: Icon(Icons.history_toggle_off),
+                          label: Text('History'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.settings_outlined),
+                          selectedIcon: Icon(Icons.settings),
+                          label: Text('Settings'),
+                        ),
+                      ],
+                    ),
+                    const VerticalDivider(width: 1),
+                    Expanded(child: page),
+                  ],
                 ),
                 if (widget.controller.phase == DictationPhase.listening)
                   const Align(
@@ -66,14 +111,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _HomeContent extends StatelessWidget {
-  const _HomeContent({
+class _HistoryPage extends StatelessWidget {
+  const _HistoryPage({
     required this.controller,
+    required this.historyController,
     required this.microphoneController,
     this.shortcutController,
   });
 
   final DictationController controller;
+  final DictationHistoryController historyController;
   final MicrophoneSettingsController microphoneController;
   final HoldShortcutController? shortcutController;
 
@@ -86,137 +133,232 @@ class _HomeContent extends StatelessWidget {
 
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 960),
-        child: SingleChildScrollView(
+        constraints: const BoxConstraints(maxWidth: 920),
+        child: ListView(
           padding: const EdgeInsets.all(32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'TypeMate',
-                style: theme.textTheme.displaySmall?.copyWith(
-                  fontWeight: FontWeight.w800,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Speech history',
+                        style: theme.textTheme.displaySmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        controller.statusMessage,
+                        style: theme.textTheme.titleMedium,
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 16),
+                _StatusDot(phase: controller.phase),
+                const SizedBox(width: 10),
+                Text(controller.phase.label),
+              ],
+            ),
+            if (shortcutController != null) ...[
+              const SizedBox(height: 16),
+              Text(shortcutController!.statusMessage),
+            ],
+            const SizedBox(height: 24),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                OutlinedButton.icon(
+                  onPressed:
+                      !canToggleListening ||
+                          controller.phase == DictationPhase.transcribing ||
+                          controller.phase == DictationPhase.inserting
+                      ? null
+                      : controller.toggleListening,
+                  icon: Icon(
+                    controller.phase == DictationPhase.listening
+                        ? Icons.stop_circle_outlined
+                        : Icons.mic_none,
+                  ),
+                  label: Text(
+                    controller.phase == DictationPhase.listening
+                        ? 'Release shortcut preview'
+                        : 'Hold shortcut preview',
+                  ),
+                ),
+                if (historyController.entries.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: historyController.clear,
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Clear history'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 28),
+            if (historyController.isLoading)
+              const Center(child: CircularProgressIndicator())
+            else if (historyController.entries.isEmpty)
+              const _EmptyHistoryCard()
+            else
+              for (final entry in historyController.entries)
+                _HistoryEntryCard(entry: entry),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsPage extends StatelessWidget {
+  const _SettingsPage({
+    required this.microphoneController,
+    required this.speechSettingsController,
+    this.shortcutController,
+  });
+
+  final MicrophoneSettingsController microphoneController;
+  final SpeechSettingsController speechSettingsController;
+  final HoldShortcutController? shortcutController;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 920),
+        child: ListView(
+          padding: const EdgeInsets.all(32),
+          children: [
+            Text(
+              'Settings',
+              style: theme.textTheme.displaySmall?.copyWith(
+                fontWeight: FontWeight.w800,
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Local hold to dictate for developers and heavy typers.',
-                style: theme.textTheme.titleLarge,
-              ),
-              const SizedBox(height: 32),
+            ),
+            const SizedBox(height: 24),
+            _SpeechSettingsPanel(controller: speechSettingsController),
+            const SizedBox(height: 24),
+            _MicrophoneSelectionPanel(controller: microphoneController),
+            if (shortcutController != null) ...[
+              const SizedBox(height: 24),
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          _StatusDot(phase: controller.phase),
+                          Icon(
+                            shortcutController!.isRegistered
+                                ? Icons.keyboard_command_key
+                                : Icons.keyboard_command_key_outlined,
+                          ),
                           const SizedBox(width: 12),
-                          Text(
-                            controller.phase.label,
-                            style: theme.textTheme.titleLarge,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Shortcut',
+                                  style: theme.textTheme.titleMedium,
+                                ),
+                                Text(shortcutController!.statusMessage),
+                              ],
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      Text(controller.statusMessage),
-                      if (shortcutController != null) ...[
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Icon(
-                              shortcutController!.isRegistered
-                                  ? Icons.keyboard_command_key
-                                  : Icons.keyboard_command_key_outlined,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(shortcutController!.statusMessage),
-                            ),
-                          ],
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        initialValue: shortcutController!.shortcut.id,
+                        decoration: const InputDecoration(
+                          labelText: 'Hold-to-dictate shortcut',
                         ),
-                      ],
-                      const SizedBox(height: 24),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
-                          FilledButton.icon(
-                            onPressed:
-                                controller.phase == DictationPhase.preparing
-                                ? null
-                                : controller.prepare,
-                            icon: const Icon(Icons.download_done),
-                            label: const Text('Prepare local engine'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed:
-                                !canToggleListening ||
-                                    controller.phase ==
-                                        DictationPhase.transcribing ||
-                                    controller.phase == DictationPhase.inserting
-                                ? null
-                                : controller.toggleListening,
-                            icon: Icon(
-                              controller.phase == DictationPhase.listening
-                                  ? Icons.stop_circle_outlined
-                                  : Icons.mic_none,
+                        items: [
+                          for (final shortcut in holdShortcutOptions)
+                            DropdownMenuItem(
+                              value: shortcut.id,
+                              child: Text(shortcut.label),
                             ),
-                            label: Text(
-                              controller.phase == DictationPhase.listening
-                                  ? 'Release shortcut preview'
-                                  : 'Hold shortcut preview',
-                            ),
-                          ),
                         ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            shortcutController!.selectShortcut(value);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'The shortcut stays active globally while TypeMate is running in the background.',
                       ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
-              _MicrophoneSelectionPanel(controller: microphoneController),
-              const SizedBox(height: 24),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _InfoPanel(
-                      title: 'V1 desktop flow',
-                      items: const [
-                        'Focus any text field',
-                        'Hold a global shortcut',
-                        'Speak while the overlay is visible',
-                        'Release to transcribe locally',
-                        'Insert into the focused field',
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _InfoPanel(
-                      title: 'Settings planned',
-                      items: const [
-                        'Shortcut selection',
-                        'Default local model setup',
-                        'Start at login',
-                        'Privacy and local storage controls',
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              if (controller.latestTranscript.isNotEmpty) ...[
-                const SizedBox(height: 24),
-                Text('Latest transcript', style: theme.textTheme.titleMedium),
-                const SizedBox(height: 8),
-                SelectableText(controller.latestTranscript),
-              ],
             ],
-          ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SpeechSettingsPanel extends StatelessWidget {
+  const _SpeechSettingsPanel({required this.controller});
+
+  final SpeechSettingsController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Speech model', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: controller.languageCode,
+              decoration: const InputDecoration(labelText: 'Language'),
+              items: [
+                for (final language in speechLanguageOptions)
+                  DropdownMenuItem(
+                    value: language.code,
+                    child: Text(language.label),
+                  ),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  controller.selectLanguage(value);
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: controller.modelId,
+              decoration: const InputDecoration(labelText: 'Local model'),
+              items: [
+                for (final model in controller.availableModels)
+                  DropdownMenuItem(value: model.id, child: Text(model.label)),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  controller.selectModel(value);
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            Text(controller.selectedModel.description),
+          ],
         ),
       ),
     );
@@ -231,101 +373,121 @@ class _MicrophoneSelectionPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final selected = controller.selectedMicrophone;
 
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) {
-        final selected = controller.selectedMicrophone;
-
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Microphone selection',
-                        style: theme.textTheme.titleMedium,
-                      ),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: controller.isLoading
-                          ? null
-                          : controller.loadMicrophones,
-                      icon: const Icon(Icons.refresh),
-                      label: Text(
-                        controller.isLoading
-                            ? 'Scanning...'
-                            : 'Refresh microphones',
-                      ),
-                    ),
-                  ],
+                Expanded(
+                  child: Text('Microphone', style: theme.textTheme.titleMedium),
                 ),
-                const SizedBox(height: 12),
-                if (controller.hasError)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.warning_amber_rounded,
-                        color: theme.colorScheme.error,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          controller.statusMessage,
-                          style: TextStyle(color: theme.colorScheme.error),
-                        ),
-                      ),
-                    ],
-                  )
-                else
-                  Text(controller.statusMessage),
-                if (controller.microphones.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  DropdownButton<MicrophoneDevice>(
-                    value: selected,
-                    isExpanded: true,
-                    items: [
-                      for (final microphone in controller.microphones)
-                        DropdownMenuItem(
-                          value: microphone,
-                          child: Text(microphone.name),
-                        ),
-                    ],
-                    onChanged: (microphone) {
-                      if (microphone != null) {
-                        controller.selectMicrophone(microphone);
-                      }
-                    },
+                OutlinedButton.icon(
+                  onPressed: controller.isLoading
+                      ? null
+                      : controller.loadMicrophones,
+                  icon: const Icon(Icons.refresh),
+                  label: Text(
+                    controller.isLoading
+                        ? 'Scanning...'
+                        : 'Refresh microphones',
                   ),
-                  const SizedBox(height: 12),
-                  for (final microphone in controller.microphones)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          Icon(
-                            microphone == selected
-                                ? Icons.radio_button_checked
-                                : Icons.radio_button_unchecked,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(microphone.name)),
-                        ],
-                      ),
-                    ),
-                ],
+                ),
               ],
             ),
-          ),
-        );
-      },
+            const SizedBox(height: 12),
+            if (controller.hasError)
+              Text(
+                controller.statusMessage,
+                style: TextStyle(color: theme.colorScheme.error),
+              )
+            else
+              Text(controller.statusMessage),
+            if (controller.microphones.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              DropdownButtonFormField<MicrophoneDevice>(
+                initialValue: selected,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Input device'),
+                items: [
+                  for (final microphone in controller.microphones)
+                    DropdownMenuItem(
+                      value: microphone,
+                      child: Text(microphone.name),
+                    ),
+                ],
+                onChanged: (microphone) {
+                  if (microphone != null) {
+                    controller.selectMicrophone(microphone);
+                  }
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HistoryEntryCard extends StatelessWidget {
+  const _HistoryEntryCard({required this.entry});
+
+  final DictationHistoryEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _formatTimestamp(entry.createdAt),
+              style: theme.textTheme.labelMedium,
+            ),
+            const SizedBox(height: 8),
+            SelectableText(entry.text, style: theme.textTheme.bodyLarge),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatTimestamp(DateTime value) {
+    final local = value.toLocal();
+    String twoDigits(int number) => number.toString().padLeft(2, '0');
+    return '${local.year}-${twoDigits(local.month)}-${twoDigits(local.day)} ${twoDigits(local.hour)}:${twoDigits(local.minute)}';
+  }
+}
+
+class _EmptyHistoryCard extends StatelessWidget {
+  const _EmptyHistoryCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Card(
+      child: Padding(
+        padding: EdgeInsets.all(28),
+        child: Column(
+          children: [
+            Icon(Icons.mic_none, size: 40),
+            SizedBox(height: 12),
+            Text('No speech history yet.'),
+            SizedBox(height: 4),
+            Text(
+              'Hold the shortcut, speak, and your generated text will appear here.',
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -350,41 +512,6 @@ class _StatusDot extends StatelessWidget {
       width: 14,
       height: 14,
       decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-    );
-  }
-}
-
-class _InfoPanel extends StatelessWidget {
-  const _InfoPanel({required this.title, required this.items});
-
-  final String title;
-  final List<String> items;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 16),
-            for (final item in items)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.check_circle_outline, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(item)),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
     );
   }
 }
