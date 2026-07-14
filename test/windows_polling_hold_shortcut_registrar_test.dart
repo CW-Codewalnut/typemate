@@ -4,7 +4,7 @@ import 'package:typemate/src/platform/windows_polling_hold_shortcut_registrar.da
 
 void main() {
   test(
-    'starts listening on third Ctrl press and stops when Ctrl is released',
+    'starts listening when Win+Alt is held and stops when released',
     () async {
       final keysDown = <int>{};
       var pressCount = 0;
@@ -23,20 +23,7 @@ void main() {
         onReleased: () async => releaseCount += 1,
       );
 
-      keysDown.add(0x11);
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-      expect(pressCount, 0);
-      keysDown.clear();
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-
-      keysDown.add(0x11);
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-      expect(pressCount, 0);
-      keysDown.clear();
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-
-      keysDown.add(0x11);
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+      keysDown.addAll([0x5B, 0x12]);
       await Future<void>.delayed(const Duration(milliseconds: 10));
       expect(pressCount, 1);
       expect(releaseCount, 0);
@@ -51,7 +38,7 @@ void main() {
     },
   );
 
-  test('does not start listening after only two Ctrl taps', () async {
+  test('does not start listening when only Win is held', () async {
     final keysDown = <int>{};
     var pressCount = 0;
     final defaultShortcut = holdShortcutOptionById(defaultHoldShortcutId);
@@ -68,11 +55,7 @@ void main() {
       onReleased: () async {},
     );
 
-    keysDown.add(0x11);
-    await Future<void>.delayed(const Duration(milliseconds: 10));
-    keysDown.clear();
-    await Future<void>.delayed(const Duration(milliseconds: 10));
-    keysDown.add(0x11);
+    keysDown.add(0x5B);
     await Future<void>.delayed(const Duration(milliseconds: 10));
 
     await registrar.unregisterHoldShortcut();

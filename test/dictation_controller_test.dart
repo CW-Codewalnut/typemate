@@ -76,6 +76,7 @@ void main() {
 
       expect(controller.phase, DictationPhase.idle);
       expect(platformBridge.overlayVisible, isFalse);
+      expect(platformBridge.transcribingOverlayCount, 1);
       expect(audioRecorder.stopped, isTrue);
       expect(sttEngine.lastRecording?.path, 'voice.wav');
       expect(controller.latestTranscript, 'Run the tests and fix the failure.');
@@ -380,6 +381,11 @@ class ThrowingInsertPlatformBridge implements PlatformBridge {
 
   @override
   Future<void> showListeningOverlay() async {
+    overlayVisible = true;
+  }
+
+  @override
+  Future<void> showTranscribingOverlay() async {
     overlayVisible = true;
   }
 

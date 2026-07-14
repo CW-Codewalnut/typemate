@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../audio/ffmpeg_microphone_discovery.dart';
 import '../core/dictation_controller.dart';
@@ -54,9 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context, _) {
         final page = _selectedIndex == 0
             ? _HistoryPage(
-                controller: widget.controller,
                 historyController: widget.historyController,
-                microphoneController: widget.microphoneController,
                 shortcutController: widget.shortcutController,
               )
             : _SettingsPage(
@@ -94,12 +93,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     Expanded(child: page),
                   ],
                 ),
-                if (widget.controller.phase == DictationPhase.listening)
-                  const Align(
+                if (widget.controller.phase == DictationPhase.listening ||
+                    widget.controller.phase == DictationPhase.transcribing)
+                  Align(
                     alignment: Alignment.topCenter,
                     child: Padding(
-                      padding: EdgeInsets.only(top: 18),
-                      child: ListeningOverlayPreview(),
+                      padding: const EdgeInsets.only(top: 18),
+                      child: ListeningOverlayPreview(
+                        label:
+                            widget.controller.phase ==
+                                DictationPhase.transcribing
+                            ? 'Transcribing'
+                            : 'Listening',
+                        icon:
+                            widget.controller.phase ==
+                                DictationPhase.transcribing
+                            ? Icons.auto_awesome
+                            : Icons.mic,
+                      ),
                     ),
                   ),
               ],
@@ -113,24 +124,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class _HistoryPage extends StatelessWidget {
   const _HistoryPage({
-    required this.controller,
     required this.historyController,
-    required this.microphoneController,
     this.shortcutController,
   });
 
-  final DictationController controller;
   final DictationHistoryController historyController;
-  final MicrophoneSettingsController microphoneController;
   final HoldShortcutController? shortcutController;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final canToggleListening =
-        microphoneController.selectedMicrophone != null ||
-        controller.phase == DictationPhase.listening;
-
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 920),
@@ -138,66 +141,35 @@ class _HistoryPage extends StatelessWidget {
           padding: const EdgeInsets.all(32),
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Speech history',
-                        style: theme.textTheme.displaySmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        controller.statusMessage,
-                        style: theme.textTheme.titleMedium,
-                      ),
-                    ],
+                  child: Text(
+                    'Speech history',
+                    style: theme.textTheme.displaySmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 16),
-                _StatusDot(phase: controller.phase),
-                const SizedBox(width: 10),
-                Text(controller.phase.label),
+                const SizedBox(width: 24),
+                Flexible(
+                  child: _ShortcutInstructionCard(
+                    instruction: _shortcutInstruction(shortcutController),
+                  ),
+                ),
               ],
             ),
-            if (shortcutController != null) ...[
-              const SizedBox(height: 16),
-              Text(shortcutController!.statusMessage),
+            if (historyController.entries.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: historyController.clear,
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Clear history'),
+                ),
+              ),
             ],
-            const SizedBox(height: 24),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                OutlinedButton.icon(
-                  onPressed:
-                      !canToggleListening ||
-                          controller.phase == DictationPhase.transcribing ||
-                          controller.phase == DictationPhase.inserting
-                      ? null
-                      : controller.toggleListening,
-                  icon: Icon(
-                    controller.phase == DictationPhase.listening
-                        ? Icons.stop_circle_outlined
-                        : Icons.mic_none,
-                  ),
-                  label: Text(
-                    controller.phase == DictationPhase.listening
-                        ? 'Release shortcut preview'
-                        : 'Hold shortcut preview',
-                  ),
-                ),
-                if (historyController.entries.isNotEmpty)
-                  TextButton.icon(
-                    onPressed: historyController.clear,
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('Clear history'),
-                  ),
-              ],
-            ),
             const SizedBox(height: 28),
             if (historyController.isLoading)
               const Center(child: CircularProgressIndicator())
@@ -211,6 +183,49 @@ class _HistoryPage extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ShortcutInstructionCard extends StatelessWidget {
+  const _ShortcutInstructionCard({required this.instruction});
+
+  final String instruction;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.keyboard_voice, color: theme.colorScheme.primary),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                instruction,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _shortcutInstruction(HoldShortcutController? shortcutController) {
+  final shortcut = shortcutController?.shortcut;
+  if (shortcut == null) {
+    return 'Press and hold your shortcut and start speaking.';
+  }
+  return 'Press and hold ${shortcut.label} and start speaking.';
 }
 
 class _SettingsPage extends StatelessWidget {
@@ -246,67 +261,224 @@ class _SettingsPage extends StatelessWidget {
             _MicrophoneSelectionPanel(controller: microphoneController),
             if (shortcutController != null) ...[
               const SizedBox(height: 24),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            shortcutController!.isRegistered
-                                ? Icons.keyboard_command_key
-                                : Icons.keyboard_command_key_outlined,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Shortcut',
-                                  style: theme.textTheme.titleMedium,
-                                ),
-                                Text(shortcutController!.statusMessage),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        initialValue: shortcutController!.shortcut.id,
-                        decoration: const InputDecoration(
-                          labelText: 'Hold-to-dictate shortcut',
-                        ),
-                        items: [
-                          for (final shortcut in holdShortcutOptions)
-                            DropdownMenuItem(
-                              value: shortcut.id,
-                              child: Text(shortcut.label),
-                            ),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            shortcutController!.selectShortcut(value);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'The shortcut stays active globally while TypeMate is running in the background.',
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              _ShortcutSettingsPanel(controller: shortcutController!),
             ],
           ],
         ),
       ),
     );
   }
+}
+
+class _ShortcutSettingsPanel extends StatefulWidget {
+  const _ShortcutSettingsPanel({required this.controller});
+
+  final HoldShortcutController controller;
+
+  @override
+  State<_ShortcutSettingsPanel> createState() => _ShortcutSettingsPanelState();
+}
+
+class _ShortcutSettingsPanelState extends State<_ShortcutSettingsPanel> {
+  final FocusNode _recordFocusNode = FocusNode(debugLabel: 'shortcut-recorder');
+  final Set<int> _recordedVirtualKeyCodes = {};
+  bool _isRecording = false;
+  String _recordingLabel = 'Click record, then press your shortcut.';
+
+  @override
+  void dispose() {
+    _recordFocusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final controller = widget.controller;
+
+    return KeyboardListener(
+      focusNode: _recordFocusNode,
+      onKeyEvent: _handleKeyEvent,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    controller.isRegistered
+                        ? Icons.keyboard_command_key
+                        : Icons.keyboard_command_key_outlined,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Shortcut', style: theme.textTheme.titleMedium),
+                        Text(controller.statusMessage),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text('Current shortcut', style: theme.textTheme.labelLarge),
+              const SizedBox(height: 6),
+              InputDecorator(
+                decoration: const InputDecoration(border: OutlineInputBorder()),
+                child: Text(controller.shortcut.label),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  FilledButton.icon(
+                    onPressed: _isRecording ? _stopRecording : _startRecording,
+                    icon: Icon(
+                      _isRecording
+                          ? Icons.stop_circle_outlined
+                          : Icons.keyboard,
+                    ),
+                    label: Text(
+                      _isRecording ? 'Stop recording' : 'Record shortcut',
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: controller.resetShortcutToDefault,
+                    icon: const Icon(Icons.restart_alt),
+                    label: const Text('Reset to default'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _isRecording
+                    ? _recordingLabel
+                    : 'Press up to 3 keys. TypeMate saves automatically at 3 keys, or click Stop recording to save fewer keys.',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _startRecording() {
+    setState(() {
+      _recordedVirtualKeyCodes.clear();
+      _isRecording = true;
+      _recordingLabel = 'Waiting for shortcut keys...';
+    });
+    _recordFocusNode.requestFocus();
+  }
+
+  void _stopRecording() {
+    if (_recordedVirtualKeyCodes.isEmpty) {
+      setState(() {
+        _isRecording = false;
+        _recordingLabel = 'No shortcut recorded.';
+      });
+      return;
+    }
+
+    _saveRecordedShortcut();
+  }
+
+  void _handleKeyEvent(KeyEvent event) {
+    if (!_isRecording || event is! KeyDownEvent) {
+      return;
+    }
+
+    final pressedKeyCodes = HardwareKeyboard.instance.logicalKeysPressed
+        .map(_virtualKeyCodeForLogicalKey)
+        .whereType<int>();
+    final eventKeyCode = _virtualKeyCodeForLogicalKey(event.logicalKey);
+    setState(() {
+      _recordedVirtualKeyCodes.addAll(pressedKeyCodes);
+      if (eventKeyCode != null) {
+        _recordedVirtualKeyCodes.add(eventKeyCode);
+      }
+      _recordingLabel = _recordedVirtualKeyCodes.isEmpty
+          ? 'Waiting for shortcut keys...'
+          : 'Recording ${labelForVirtualKeyCodes(_recordedVirtualKeyCodes.toList())}. Press more keys, or click Stop recording.';
+    });
+
+    if (_recordedVirtualKeyCodes.length >= 3) {
+      _saveRecordedShortcut();
+    }
+  }
+
+  void _saveRecordedShortcut() {
+    final shortcut = customHoldShortcutOption(
+      _recordedVirtualKeyCodes.toList(),
+    );
+    widget.controller.selectShortcutOption(shortcut);
+    setState(() {
+      _isRecording = false;
+      _recordingLabel = 'Recorded ${shortcut.label}.';
+      _recordedVirtualKeyCodes.clear();
+    });
+  }
+}
+
+int? _virtualKeyCodeForLogicalKey(LogicalKeyboardKey key) {
+  if (key == LogicalKeyboardKey.control ||
+      key == LogicalKeyboardKey.controlLeft ||
+      key == LogicalKeyboardKey.controlRight) {
+    return 0x11;
+  }
+  if (key == LogicalKeyboardKey.shift ||
+      key == LogicalKeyboardKey.shiftLeft ||
+      key == LogicalKeyboardKey.shiftRight) {
+    return 0x10;
+  }
+  if (key == LogicalKeyboardKey.alt ||
+      key == LogicalKeyboardKey.altLeft ||
+      key == LogicalKeyboardKey.altRight) {
+    return 0x12;
+  }
+  if (key == LogicalKeyboardKey.meta ||
+      key == LogicalKeyboardKey.metaLeft ||
+      key == LogicalKeyboardKey.metaRight) {
+    return 0x5B;
+  }
+  if (key == LogicalKeyboardKey.space) return 0x20;
+  if (key == LogicalKeyboardKey.enter) return 0x0D;
+  if (key == LogicalKeyboardKey.tab) return 0x09;
+  if (key == LogicalKeyboardKey.escape) return 0x1B;
+  if (key == LogicalKeyboardKey.backspace) return 0x08;
+  if (key == LogicalKeyboardKey.delete) return 0x2E;
+  if (key == LogicalKeyboardKey.arrowLeft) return 0x25;
+  if (key == LogicalKeyboardKey.arrowUp) return 0x26;
+  if (key == LogicalKeyboardKey.arrowRight) return 0x27;
+  if (key == LogicalKeyboardKey.arrowDown) return 0x28;
+
+  final keyLabel = key.keyLabel.toUpperCase();
+  if (keyLabel.length == 1) {
+    final codeUnit = keyLabel.codeUnitAt(0);
+    if ((codeUnit >= 0x30 && codeUnit <= 0x39) ||
+        (codeUnit >= 0x41 && codeUnit <= 0x5A)) {
+      return codeUnit;
+    }
+  }
+
+  if (key == LogicalKeyboardKey.f1) return 0x70;
+  if (key == LogicalKeyboardKey.f2) return 0x71;
+  if (key == LogicalKeyboardKey.f3) return 0x72;
+  if (key == LogicalKeyboardKey.f4) return 0x73;
+  if (key == LogicalKeyboardKey.f5) return 0x74;
+  if (key == LogicalKeyboardKey.f6) return 0x75;
+  if (key == LogicalKeyboardKey.f7) return 0x76;
+  if (key == LogicalKeyboardKey.f8) return 0x77;
+  if (key == LogicalKeyboardKey.f9) return 0x78;
+  if (key == LogicalKeyboardKey.f10) return 0x79;
+  if (key == LogicalKeyboardKey.f11) return 0x7A;
+  if (key == LogicalKeyboardKey.f12) return 0x7B;
+  return null;
 }
 
 class _SpeechSettingsPanel extends StatelessWidget {
@@ -324,7 +496,7 @@ class _SpeechSettingsPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Speech model', style: theme.textTheme.titleMedium),
+            Text('Speech recognition', style: theme.textTheme.titleMedium),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               initialValue: controller.languageCode,
@@ -342,22 +514,11 @@ class _SpeechSettingsPanel extends StatelessWidget {
                 }
               },
             ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              initialValue: controller.modelId,
-              decoration: const InputDecoration(labelText: 'Local model'),
-              items: [
-                for (final model in controller.availableModels)
-                  DropdownMenuItem(value: model.id, child: Text(model.label)),
-              ],
-              onChanged: (value) {
-                if (value != null) {
-                  controller.selectModel(value);
-                }
-              },
-            ),
             const SizedBox(height: 12),
-            Text(controller.selectedModel.description),
+            Text(
+              'Model: Whisper.cpp multilingual local transcription. Language is passed directly to whisper.cpp.',
+              style: theme.textTheme.bodyMedium,
+            ),
           ],
         ),
       ),
@@ -446,19 +607,42 @@ class _HistoryEntryCard extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
-        child: Column(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              _formatTimestamp(entry.createdAt),
-              style: theme.textTheme.labelMedium,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _formatTimestamp(entry.createdAt),
+                    style: theme.textTheme.labelMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  SelectableText(entry.text, style: theme.textTheme.bodyLarge),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            SelectableText(entry.text, style: theme.textTheme.bodyLarge),
+            const SizedBox(width: 12),
+            IconButton.filledTonal(
+              tooltip: 'Copy transcription',
+              onPressed: () => _copyToClipboard(context),
+              icon: const Icon(Icons.copy),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _copyToClipboard(BuildContext context) async {
+    await Clipboard.setData(ClipboardData(text: entry.text));
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Transcription copied')));
   }
 
   String _formatTimestamp(DateTime value) {
@@ -488,30 +672,6 @@ class _EmptyHistoryCard extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _StatusDot extends StatelessWidget {
-  const _StatusDot({required this.phase});
-
-  final DictationPhase phase;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (phase) {
-      DictationPhase.idle => Colors.green,
-      DictationPhase.preparing => Colors.blue,
-      DictationPhase.listening => Colors.red,
-      DictationPhase.transcribing => Colors.orange,
-      DictationPhase.inserting => Colors.purple,
-      DictationPhase.error => Colors.redAccent,
-    };
-
-    return Container(
-      width: 14,
-      height: 14,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }
 }

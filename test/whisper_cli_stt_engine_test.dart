@@ -11,7 +11,7 @@ void main() {
       );
       final engine = WhisperCliSttEngine(
         executable: 'whisper-cli',
-        modelPath: 'models/ggml-tiny.en.bin',
+        modelPath: 'models/ggml-base.bin',
         processRunner: runner,
       );
 
@@ -25,7 +25,7 @@ void main() {
     final runner = ThrowingSttProcessRunner();
     final engine = WhisperCliSttEngine(
       executable: 'missing-whisper-cli',
-      modelPath: 'models/ggml-tiny.en.bin',
+      modelPath: 'models/ggml-base.bin',
       processRunner: runner,
     );
 
@@ -40,7 +40,7 @@ void main() {
       );
       final engine = WhisperCliSttEngine(
         executable: 'whisper-cli',
-        modelPath: 'models/ggml-tiny.en.bin',
+        modelPath: 'models/ggml-base.bin',
         processRunner: runner,
       );
 
@@ -66,7 +66,7 @@ void main() {
     );
     final engine = WhisperCliSttEngine(
       executable: 'whisper-cli',
-      modelPath: 'models/ggml-tiny.en.bin',
+      modelPath: 'models/ggml-base.bin',
       processRunner: runner,
     );
 
@@ -81,11 +81,31 @@ void main() {
     expect(runner.executable, 'whisper-cli');
     expect(runner.arguments, [
       '-m',
-      'models/ggml-tiny.en.bin',
+      'models/ggml-base.bin',
       '-f',
       'build/recordings/sample.wav',
       '--no-timestamps',
+      '-l',
+      'auto',
     ]);
+  });
+
+  test('transcribe passes the selected language to whisper CLI', () async {
+    final runner = FakeSttProcessRunner(
+      result: const SttProcessResult(exitCode: 0, output: 'नमस्ते।\n'),
+    );
+    final engine = WhisperCliSttEngine(
+      executable: 'whisper-cli',
+      modelPath: 'models/ggml-base.bin',
+      languageCodeProvider: () => 'hi',
+      processRunner: runner,
+    );
+
+    await engine.transcribe(
+      const AudioRecording(path: 'hindi.wav', duration: Duration(seconds: 1)),
+    );
+
+    expect(runner.arguments, containsAllInOrder(['-l', 'hi']));
   });
 
   test('transcribe ignores stderr diagnostics on success', () async {
@@ -99,7 +119,7 @@ void main() {
     );
     final engine = WhisperCliSttEngine(
       executable: 'whisper-cli',
-      modelPath: 'models/ggml-tiny.en.bin',
+      modelPath: 'models/ggml-base.bin',
       processRunner: runner,
     );
 
@@ -117,7 +137,7 @@ void main() {
     );
     final engine = WhisperCliSttEngine(
       executable: 'whisper-cli',
-      modelPath: 'models/ggml-tiny.en.bin',
+      modelPath: 'models/ggml-base.bin',
       processRunner: runner,
     );
 

@@ -18,7 +18,8 @@ void main() {
         whisper.executable,
         'R:/Tools/whisper.cpp/v1.9.1-x64/Release/whisper-cli.exe',
       );
-      expect(whisper.modelPath, 'R:/Models/whisper/ggml-tiny.en.bin');
+      expect(whisper.modelPath, 'R:/Models/whisper/ggml-base.bin');
+      expect(whisper.languageCodeProvider(), 'auto');
     },
   );
 
@@ -49,14 +50,14 @@ void main() {
     final engine = createDefaultSttEngine(
       environment: const {
         'TYPEMATE_WHISPER_CLI': 'R:/Tools/whisper/whisper-cli.exe',
-        'TYPEMATE_WHISPER_MODEL': 'R:/Models/ggml-tiny.en.bin',
+        'TYPEMATE_WHISPER_MODEL': 'R:/Models/ggml-base.bin',
       },
     );
 
     expect(engine, isA<WhisperCliSttEngine>());
     final whisper = engine as WhisperCliSttEngine;
     expect(whisper.executable, 'R:/Tools/whisper/whisper-cli.exe');
-    expect(whisper.modelPath, 'R:/Models/ggml-tiny.en.bin');
+    expect(whisper.modelPath, 'R:/Models/ggml-base.bin');
   });
 
   test('trims whisper environment values before creating the runtime', () {

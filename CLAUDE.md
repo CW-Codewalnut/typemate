@@ -44,7 +44,7 @@ Rules:
 - If either env var is missing, the app intentionally falls back to `MockSttEngine` preview mode.
 - Current verified Windows paths are:
   - `R:/Tools/whisper.cpp/v1.9.1-x64/Release/whisper-cli.exe`
-  - `R:/Models/whisper/ggml-tiny.en.bin`
+  - `R:/Models/whisper/ggml-base.bin`
 - Use `tool/benchmark_whisper_cli.dart` to prove real transcription with a WAV sample.
 - Keep stderr diagnostics out of successful transcripts; whisper.cpp writes model/timing logs to stderr.
 

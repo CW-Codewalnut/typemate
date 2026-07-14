@@ -76,10 +76,14 @@ void main() {
     expect(started, hasLength(1));
     expect(started.single.executable, 'powershell.exe');
     expect(started.single.arguments, contains('-File'));
-    final scriptPath = started.single.arguments.last;
+    expect(started.single.arguments.last, 'listening');
+    final scriptPath =
+        started.single.arguments[started.single.arguments.length - 2];
     expect(scriptPath, endsWith('typemate-listening-overlay.ps1'));
     final script = File(scriptPath).readAsStringSync();
     expect(script, contains('TypeMate is listening'));
+    expect(script, contains('Transcribing locally'));
+    expect(script, contains(r"param([string]$State"));
     expect(script, contains('Application]::Run'));
     expect(script, contains('System.Windows.Forms.Timer'));
     expect(script, contains(r'$script:barCount = 13'));
@@ -87,6 +91,27 @@ void main() {
     expect(script, contains('SetWindowPos'));
     expect(overlayProcess.killCount, 1);
   });
+  test('shows transcribing overlay as a native overlay state', () async {
+    final started = <({String executable, List<String> arguments})>[];
+    final listeningProcess = FakeOverlayProcess();
+    final transcribingProcess = FakeOverlayProcess();
+    final bridge = WindowsClipboardPastePlatformBridge(
+      overlayProcessStarter: (executable, arguments) async {
+        started.add((executable: executable, arguments: arguments));
+        return started.length == 1 ? listeningProcess : transcribingProcess;
+      },
+    );
+
+    await bridge.showListeningOverlay();
+    await bridge.showTranscribingOverlay();
+
+    expect(started, hasLength(2));
+    expect(started.first.arguments.last, 'listening');
+    expect(started.last.arguments.last, 'transcribing');
+    expect(listeningProcess.killCount, 1);
+    expect(transcribingProcess.killCount, 0);
+  });
+
   test(
     'registers TypeMate in the Run key and Startup folder shortcut',
     () async {

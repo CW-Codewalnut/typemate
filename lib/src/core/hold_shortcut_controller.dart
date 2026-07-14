@@ -13,20 +13,22 @@ class HoldShortcutOption {
     required this.id,
     required this.label,
     required this.virtualKeyCodes,
+    this.isDefaultGesture = false,
   });
 
   final String id;
   final String label;
   final List<int> virtualKeyCodes;
+  final bool isDefaultGesture;
 }
 
-const defaultHoldShortcutId = 'ctrl-double-tap-hold';
+const defaultHoldShortcutId = 'win-alt';
 
 const holdShortcutOptions = [
   HoldShortcutOption(
     id: defaultHoldShortcutId,
-    label: 'Double-tap Ctrl, then hold',
-    virtualKeyCodes: [0x11],
+    label: 'Win+Alt',
+    virtualKeyCodes: [0x5B, 0x12],
   ),
   HoldShortcutOption(
     id: 'ctrl-shift-f9',
@@ -41,19 +43,95 @@ const holdShortcutOptions = [
 ];
 
 const legacyShortcutIds = {
+  'ctrl-double-tap-hold',
+  'ctrl-shift',
+  'ctrl',
   'ctrl-alt-space',
   'ctrl-shift-space',
   'alt-shift-space',
   'alt-shift-f9',
 };
 
+const customShortcutIdPrefix = 'custom:';
+
 HoldShortcutOption holdShortcutOptionById(String id) {
+  if (id.startsWith(customShortcutIdPrefix)) {
+    return _customShortcutFromId(id);
+  }
+
   return holdShortcutOptions.firstWhere(
     (shortcut) => shortcut.id == id,
     orElse: () => holdShortcutOptions.firstWhere(
       (shortcut) => shortcut.id == defaultHoldShortcutId,
     ),
   );
+}
+
+HoldShortcutOption customHoldShortcutOption(List<int> virtualKeyCodes) {
+  final normalized = _normalizedVirtualKeyCodes(virtualKeyCodes);
+  return HoldShortcutOption(
+    id: '$customShortcutIdPrefix${normalized.join('-')}',
+    label: labelForVirtualKeyCodes(normalized),
+    virtualKeyCodes: normalized,
+  );
+}
+
+String labelForVirtualKeyCodes(List<int> virtualKeyCodes) {
+  return _normalizedVirtualKeyCodes(
+    virtualKeyCodes,
+  ).map(_labelForVirtualKeyCode).join('+');
+}
+
+HoldShortcutOption _customShortcutFromId(String id) {
+  final keyCodes = id
+      .substring(customShortcutIdPrefix.length)
+      .split('-')
+      .map(int.tryParse)
+      .whereType<int>()
+      .toList();
+  if (keyCodes.isEmpty) {
+    return holdShortcutOptionById(defaultHoldShortcutId);
+  }
+  return customHoldShortcutOption(keyCodes);
+}
+
+List<int> _normalizedVirtualKeyCodes(List<int> virtualKeyCodes) {
+  final deduped = virtualKeyCodes.toSet().toList();
+  const modifierOrder = [0x11, 0x10, 0x12, 0x5B, 0x5C];
+  deduped.sort((left, right) {
+    final leftModifierIndex = modifierOrder.indexOf(left);
+    final rightModifierIndex = modifierOrder.indexOf(right);
+    if (leftModifierIndex != -1 || rightModifierIndex != -1) {
+      return (leftModifierIndex == -1 ? 999 : leftModifierIndex).compareTo(
+        rightModifierIndex == -1 ? 999 : rightModifierIndex,
+      );
+    }
+    return left.compareTo(right);
+  });
+  return deduped;
+}
+
+String _labelForVirtualKeyCode(int virtualKeyCode) {
+  return switch (virtualKeyCode) {
+    0x08 => 'Backspace',
+    0x09 => 'Tab',
+    0x0D => 'Enter',
+    0x10 => 'Shift',
+    0x11 => 'Ctrl',
+    0x12 => 'Alt',
+    0x1B => 'Esc',
+    0x20 => 'Space',
+    0x25 => 'Left',
+    0x26 => 'Up',
+    0x27 => 'Right',
+    0x28 => 'Down',
+    0x2E => 'Delete',
+    0x5B || 0x5C => 'Win',
+    >= 0x30 && <= 0x39 => String.fromCharCode(virtualKeyCode),
+    >= 0x41 && <= 0x5A => String.fromCharCode(virtualKeyCode),
+    >= 0x70 && <= 0x87 => 'F${virtualKeyCode - 0x6F}',
+    _ => 'Key $virtualKeyCode',
+  };
 }
 
 abstract interface class HoldShortcutSettingsStore {
@@ -168,13 +246,16 @@ class HoldShortcutController extends ChangeNotifier {
     } catch (_) {
       _isRegistered = false;
       _statusMessage =
-          'Unable to register global shortcut. Use the preview button for now.';
+          'Unable to register global shortcut. Check shortcut settings and try again.';
     }
     notifyListeners();
   }
 
   Future<void> selectShortcut(String shortcutId) async {
-    final selected = holdShortcutOptionById(shortcutId);
+    await selectShortcutOption(holdShortcutOptionById(shortcutId));
+  }
+
+  Future<void> selectShortcutOption(HoldShortcutOption selected) async {
     if (selected.id == _shortcut.id) {
       return;
     }
@@ -193,6 +274,10 @@ class HoldShortcutController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> resetShortcutToDefault() async {
+    await selectShortcut(defaultHoldShortcutId);
+  }
+
   Future<void> unregister() async {
     await registrar.unregisterHoldShortcut();
     _isRegistered = false;
@@ -208,9 +293,6 @@ class HoldShortcutController extends ChangeNotifier {
   }
 
   String _readyMessageFor(HoldShortcutOption shortcut) {
-    if (shortcut.id == defaultHoldShortcutId) {
-      return 'Global shortcut ready: double-tap Ctrl, then hold Ctrl to dictate.';
-    }
     return 'Global shortcut ready: hold ${shortcut.label}.';
   }
 

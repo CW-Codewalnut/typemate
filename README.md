@@ -33,7 +33,7 @@ TypeMate uses `MockSttEngine` unless both runtime environment variables are set:
 
 ```bash
 export TYPEMATE_WHISPER_CLI="R:/Tools/whisper.cpp/v1.9.1-x64/Release/whisper-cli.exe"
-export TYPEMATE_WHISPER_MODEL="R:/Models/whisper/ggml-tiny.en.bin"
+export TYPEMATE_WHISPER_MODEL="R:/Models/whisper/ggml-base.bin"
 ```
 
 With those set, the app constructs `WhisperCliSttEngine` and uses the configured local model. No model picker is exposed in the UI.

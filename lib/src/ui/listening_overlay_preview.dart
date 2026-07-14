@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
 
 class ListeningOverlayPreview extends StatefulWidget {
-  const ListeningOverlayPreview({super.key});
+  const ListeningOverlayPreview({
+    super.key,
+    required this.label,
+    required this.icon,
+  });
+
+  final String label;
+  final IconData icon;
 
   @override
   State<ListeningOverlayPreview> createState() =>
@@ -50,12 +57,12 @@ class _ListeningOverlayPreviewState extends State<ListeningOverlayPreview>
             children: [
               FadeTransition(
                 opacity: Tween<double>(begin: 0.35, end: 1).animate(controller),
-                child: const Icon(Icons.mic, color: Colors.white),
+                child: Icon(widget.icon, color: Colors.white),
               ),
               const SizedBox(width: 10),
-              const Text(
-                'Listening',
-                style: TextStyle(
+              Text(
+                widget.label,
+                style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
                 ),

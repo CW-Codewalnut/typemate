@@ -6,29 +6,23 @@ import 'package:typemate/src/platform/mock_platform_bridge.dart';
 import 'package:typemate/src/stt/stt_engine.dart';
 
 void main() {
-  test(
-    'registers double-tap Ctrl then hold as the safe default shortcut',
-    () async {
-      final registrar = FakeHoldShortcutRegistrar();
-      final controller = HoldShortcutController(
-        dictationController: createDictationController(),
-        registrar: registrar,
-      );
+  test('registers Win+Alt hold as the safe default shortcut', () async {
+    final registrar = FakeHoldShortcutRegistrar();
+    final controller = HoldShortcutController(
+      dictationController: createDictationController(),
+      registrar: registrar,
+    );
 
-      await controller.register();
+    await controller.register();
 
-      expect(registrar.isRegistered, isTrue);
-      expect(controller.isRegistered, isTrue);
-      expect(
-        controller.statusMessage,
-        'Global shortcut ready: double-tap Ctrl, then hold Ctrl to dictate.',
-      );
-      expect(registrar.shortcut?.id, defaultHoldShortcutId);
-      expect(registrar.shortcut?.virtualKeyCodes, [0x11]);
-    },
-  );
+    expect(registrar.isRegistered, isTrue);
+    expect(controller.isRegistered, isTrue);
+    expect(controller.statusMessage, 'Global shortcut ready: hold Win+Alt.');
+    expect(registrar.shortcut?.id, defaultHoldShortcutId);
+    expect(registrar.shortcut?.virtualKeyCodes, [0x5B, 0x12]);
+  });
 
-  test('migrates old shortcuts to double-tap Ctrl then hold', () async {
+  test('migrates old shortcuts to Win+Alt hold', () async {
     for (final legacyShortcutId in legacyShortcutIds) {
       final registrar = FakeHoldShortcutRegistrar();
       final store = MemoryHoldShortcutSettingsStore(legacyShortcutId);
@@ -67,6 +61,48 @@ void main() {
       controller.statusMessage,
       'Global shortcut ready: hold Ctrl+Shift+F9.',
     );
+  });
+
+  test('recorded custom shortcut re-registers with the pressed keys', () async {
+    final registrar = FakeHoldShortcutRegistrar();
+    final store = MemoryHoldShortcutSettingsStore();
+    final controller = HoldShortcutController(
+      dictationController: createDictationController(),
+      registrar: registrar,
+      store: store,
+    );
+
+    await controller.register();
+    await controller.selectShortcutOption(
+      customHoldShortcutOption([0x10, 0x11, 0x41]),
+    );
+
+    expect(controller.shortcut.id, 'custom:17-16-65');
+    expect(controller.shortcut.label, 'Ctrl+Shift+A');
+    expect(registrar.registerCount, 2);
+    expect(registrar.shortcut?.virtualKeyCodes, [0x11, 0x10, 0x41]);
+    expect(store.savedShortcutId, 'custom:17-16-65');
+    expect(
+      controller.statusMessage,
+      'Global shortcut ready: hold Ctrl+Shift+A.',
+    );
+  });
+
+  test('reset shortcut restores the default Win+Alt hold shortcut', () async {
+    final registrar = FakeHoldShortcutRegistrar();
+    final store = MemoryHoldShortcutSettingsStore('custom:17-16-65');
+    final controller = HoldShortcutController(
+      dictationController: createDictationController(),
+      registrar: registrar,
+      store: store,
+    );
+
+    await controller.register();
+    await controller.resetShortcutToDefault();
+
+    expect(controller.shortcut.id, defaultHoldShortcutId);
+    expect(registrar.shortcut?.id, defaultHoldShortcutId);
+    expect(store.savedShortcutId, defaultHoldShortcutId);
   });
 
   test('press starts listening and release inserts transcript', () async {

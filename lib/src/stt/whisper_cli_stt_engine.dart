@@ -19,16 +19,21 @@ abstract interface class SttProcessRunner {
   Future<SttProcessResult> run(String executable, List<String> arguments);
 }
 
+typedef SttLanguageCodeProvider = String Function();
+
 class WhisperCliSttEngine implements SttEngine {
   WhisperCliSttEngine({
     required this.executable,
     required this.modelPath,
     SttProcessRunner? processRunner,
-  }) : processRunner = processRunner ?? const DartSttProcessRunner();
+    SttLanguageCodeProvider? languageCodeProvider,
+  }) : processRunner = processRunner ?? const DartSttProcessRunner(),
+       languageCodeProvider = languageCodeProvider ?? (() => 'auto');
 
   final String executable;
   final String modelPath;
   final SttProcessRunner processRunner;
+  final SttLanguageCodeProvider languageCodeProvider;
 
   @override
   Future<bool> isReady() async {
@@ -57,6 +62,8 @@ class WhisperCliSttEngine implements SttEngine {
       '-f',
       recording.path,
       '--no-timestamps',
+      '-l',
+      _normalizedLanguageCode(),
     ]);
 
     if (result.exitCode != 0) {
@@ -66,6 +73,11 @@ class WhisperCliSttEngine implements SttEngine {
     }
 
     return _parseTranscript(result.output);
+  }
+
+  String _normalizedLanguageCode() {
+    final code = languageCodeProvider().trim().toLowerCase();
+    return code.isEmpty ? 'auto' : code;
   }
 
   String _parseTranscript(String output) {

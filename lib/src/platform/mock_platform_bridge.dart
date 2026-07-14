@@ -3,6 +3,8 @@ import 'platform_bridge.dart';
 class MockPlatformBridge implements PlatformBridge {
   String lastInsertedText = '';
   bool overlayVisible = false;
+  String overlayMessage = '';
+  int transcribingOverlayCount = 0;
   bool launchAtStartupEnsured = false;
 
   @override
@@ -11,11 +13,20 @@ class MockPlatformBridge implements PlatformBridge {
   @override
   Future<void> showListeningOverlay() async {
     overlayVisible = true;
+    overlayMessage = 'TypeMate is listening...';
+  }
+
+  @override
+  Future<void> showTranscribingOverlay() async {
+    overlayVisible = true;
+    overlayMessage = 'Transcribing locally...';
+    transcribingOverlayCount += 1;
   }
 
   @override
   Future<void> hideListeningOverlay() async {
     overlayVisible = false;
+    overlayMessage = '';
   }
 
   @override

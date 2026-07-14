@@ -3,6 +3,8 @@ abstract interface class PlatformBridge {
 
   Future<void> showListeningOverlay();
 
+  Future<void> showTranscribingOverlay();
+
   Future<void> hideListeningOverlay();
 
   Future<void> insertTextIntoFocusedField(String text);

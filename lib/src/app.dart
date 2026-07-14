@@ -62,7 +62,9 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
     platformBridge = createDefaultPlatformBridge();
     controller = DictationController(
       platformBridge: platformBridge,
-      sttEngine: createDefaultSttEngine(),
+      sttEngine: createDefaultSttEngine(
+        languageCodeProvider: () => speechSettingsController.languageCode,
+      ),
       onTranscriptGenerated: historyController.addTranscript,
       audioRecorderProvider: () {
         final selectedMicrophone = microphoneController.selectedMicrophone;
@@ -184,18 +186,23 @@ typedef PathExists = bool Function(String path);
 
 const verifiedWhisperCliPath =
     'R:/Tools/whisper.cpp/v1.9.1-x64/Release/whisper-cli.exe';
-const verifiedWhisperModelPath = 'R:/Models/whisper/ggml-tiny.en.bin';
+const verifiedWhisperModelPath = 'R:/Models/whisper/ggml-base.bin';
 
 SttEngine createDefaultSttEngine({
   Map<String, String>? environment,
   PathExists? pathExists,
+  SttLanguageCodeProvider? languageCodeProvider,
 }) {
   final values = environment ?? Platform.environment;
   final executable = values['TYPEMATE_WHISPER_CLI']?.trim() ?? '';
   final modelPath = values['TYPEMATE_WHISPER_MODEL']?.trim() ?? '';
 
   if (executable.isNotEmpty && modelPath.isNotEmpty) {
-    return WhisperCliSttEngine(executable: executable, modelPath: modelPath);
+    return WhisperCliSttEngine(
+      executable: executable,
+      modelPath: modelPath,
+      languageCodeProvider: languageCodeProvider,
+    );
   }
 
   final exists = pathExists ?? (path) => File(path).existsSync();
@@ -206,6 +213,7 @@ SttEngine createDefaultSttEngine({
     return WhisperCliSttEngine(
       executable: verifiedWhisperCliPath,
       modelPath: verifiedWhisperModelPath,
+      languageCodeProvider: languageCodeProvider,
     );
   }
 

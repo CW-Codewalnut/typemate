@@ -74,14 +74,30 @@ class WindowsClipboardPastePlatformBridge implements PlatformBridge {
   final OverlayProcessStarter overlayProcessStarter;
 
   OverlayProcess? _overlayProcess;
+  String? _overlayState;
 
   @override
   Future<bool> isGlobalShortcutAvailable() async => true;
 
   @override
   Future<void> showListeningOverlay() async {
-    if (_overlayProcess != null) {
+    await _showOverlay('listening');
+  }
+
+  @override
+  Future<void> showTranscribingOverlay() async {
+    await _showOverlay('transcribing');
+  }
+
+  Future<void> _showOverlay(String state) async {
+    if (_overlayProcess != null && _overlayState == state) {
       return;
+    }
+
+    if (_overlayProcess != null) {
+      _overlayProcess?.kill();
+      _overlayProcess = null;
+      _overlayState = null;
     }
 
     final overlayScriptFile = File(
@@ -97,13 +113,16 @@ class WindowsClipboardPastePlatformBridge implements PlatformBridge {
       'Bypass',
       '-File',
       overlayScriptFile.path,
+      state,
     ]);
+    _overlayState = state;
   }
 
   @override
   Future<void> hideListeningOverlay() async {
     _overlayProcess?.kill();
     _overlayProcess = null;
+    _overlayState = null;
   }
 
   @override
@@ -169,6 +188,7 @@ Add-Type -AssemblyName System.Windows.Forms
 }
 
 const _overlayScript = r'''
+param([string]$State = 'listening')
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type @"
@@ -213,7 +233,11 @@ $container.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windo
 $container.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 100))) | Out-Null
 
 $label = New-Object System.Windows.Forms.Label
-$label.Text = 'TypeMate is listening...'
+if ($State -eq 'transcribing') {
+  $label.Text = 'Transcribing locally...'
+} else {
+  $label.Text = 'TypeMate is listening...'
+}
 $label.ForeColor = [System.Drawing.Color]::White
 $label.Font = New-Object System.Drawing.Font('Segoe UI', 14, [System.Drawing.FontStyle]::Bold)
 $label.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter

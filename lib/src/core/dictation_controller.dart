@@ -116,13 +116,14 @@ class DictationController extends ChangeNotifier {
     }
     _activeRecorder = null;
 
-    await _platformBridge.hideListeningOverlay();
+    await _platformBridge.showTranscribingOverlay();
     _setPhase(DictationPhase.transcribing, 'Transcribing locally...');
 
     final String transcript;
     try {
       transcript = await _sttEngine.transcribe(recording);
     } catch (_) {
+      await _platformBridge.hideListeningOverlay();
       _setPhase(
         DictationPhase.idle,
         'Unable to transcribe locally. Check the speech runtime and model file, then try again.',
@@ -132,6 +133,7 @@ class DictationController extends ChangeNotifier {
     final usableTranscript = transcript.trim();
     if (usableTranscript.isEmpty) {
       _latestTranscript = '';
+      await _platformBridge.hideListeningOverlay();
       _setPhase(
         DictationPhase.idle,
         'No speech was detected. Ready for the next dictation.',
@@ -145,6 +147,7 @@ class DictationController extends ChangeNotifier {
     try {
       await _platformBridge.insertTextIntoFocusedField(usableTranscript);
     } catch (_) {
+      await _platformBridge.hideListeningOverlay();
       _setPhase(
         DictationPhase.idle,
         'Unable to insert text into the focused field. Copy the latest transcript manually and try again.',
@@ -152,6 +155,7 @@ class DictationController extends ChangeNotifier {
       return;
     }
 
+    await _platformBridge.hideListeningOverlay();
     _setPhase(
       DictationPhase.idle,
       'Inserted transcript. Ready for the next dictation.',
