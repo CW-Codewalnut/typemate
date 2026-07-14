@@ -131,6 +131,20 @@ void main() {
     expect(find.byKey(const Key('history-scrollbar-hidden')), findsOneWidget);
   });
 
+  testWidgets('history page keeps content anchored near the top', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpHome();
+    await tester.pump();
+
+    final titleTop = tester.getTopLeft(find.text('Speech history')).dy;
+
+    expect(titleTop, lessThan(80));
+  });
+
   testWidgets('history page shows report metrics on the right side', (
     tester,
   ) async {
@@ -147,20 +161,26 @@ void main() {
     );
     await tester.pump();
 
+    expect(find.byKey(const Key('history-main-column')), findsOneWidget);
+    expect(find.byKey(const Key('history-stats-rail')), findsOneWidget);
     expect(find.byKey(const Key('history-report-card')), findsOneWidget);
+    expect(find.byKey(const Key('history-section-today')), findsOneWidget);
     expect(find.text('6'), findsNWidgets(2));
     expect(find.text('total words'), findsOneWidget);
     expect(find.text('wpm'), findsOneWidget);
+    expect(find.text('Welcome back, Ranjan'), findsNothing);
+    expect(find.text('Make Flow sound like you'), findsNothing);
     expect(find.text('Voice Profile Unlocked!'), findsNothing);
     expect(find.text('Create report'), findsNothing);
   });
 
-  testWidgets('top animation appears while listening and transcribing', (
+  testWidgets('shortcut dictation does not render a duplicate in-app overlay', (
     tester,
   ) async {
     final sttEngine = HoldingSttEngine();
+    final platformBridge = MockPlatformBridge();
     final dictationController = DictationController(
-      platformBridge: MockPlatformBridge(),
+      platformBridge: platformBridge,
       sttEngine: sttEngine,
       audioRecorder: ImmediateAudioRecorder(),
     );
@@ -186,17 +206,17 @@ void main() {
 
     await dictationController.startListening();
     await tester.pump();
-    expect(find.text('Listening'), findsOneWidget);
+    expect(platformBridge.overlayVisible, isTrue);
+    expect(find.text('Listening'), findsNothing);
 
     final stopFuture = dictationController.stopListening();
     await tester.pump();
-    expect(find.text('Transcribing'), findsOneWidget);
+    expect(find.text('Transcribing'), findsNothing);
 
     sttEngine.complete('Finished transcript.');
     await stopFuture;
     await tester.pump(const Duration(milliseconds: 50));
-    expect(find.text('Listening'), findsNothing);
-    expect(find.text('Transcribing'), findsNothing);
+    expect(platformBridge.overlayVisible, isFalse);
   });
 
   testWidgets(

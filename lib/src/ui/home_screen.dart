@@ -7,8 +7,6 @@ import '../core/dictation_history_controller.dart';
 import '../core/hold_shortcut_controller.dart';
 import '../core/microphone_settings_controller.dart';
 import '../core/speech_settings_controller.dart';
-import '../models/dictation_state.dart';
-import 'listening_overlay_preview.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -66,53 +64,29 @@ class _HomeScreenState extends State<HomeScreen> {
 
         return Scaffold(
           body: SafeArea(
-            child: Stack(
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    NavigationRail(
-                      selectedIndex: _selectedIndex,
-                      onDestinationSelected: (index) {
-                        setState(() => _selectedIndex = index);
-                      },
-                      labelType: NavigationRailLabelType.all,
-                      destinations: const [
-                        NavigationRailDestination(
-                          icon: Icon(Icons.history),
-                          selectedIcon: Icon(Icons.history_toggle_off),
-                          label: Text('History'),
-                        ),
-                        NavigationRailDestination(
-                          icon: Icon(Icons.settings_outlined),
-                          selectedIcon: Icon(Icons.settings),
-                          label: Text('Settings'),
-                        ),
-                      ],
+                NavigationRail(
+                  selectedIndex: _selectedIndex,
+                  onDestinationSelected: (index) {
+                    setState(() => _selectedIndex = index);
+                  },
+                  labelType: NavigationRailLabelType.all,
+                  destinations: const [
+                    NavigationRailDestination(
+                      icon: Icon(Icons.history),
+                      selectedIcon: Icon(Icons.history_toggle_off),
+                      label: Text('History'),
                     ),
-                    const VerticalDivider(width: 1),
-                    Expanded(child: page),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.settings_outlined),
+                      selectedIcon: Icon(Icons.settings),
+                      label: Text('Settings'),
+                    ),
                   ],
                 ),
-                if (widget.controller.phase == DictationPhase.listening ||
-                    widget.controller.phase == DictationPhase.transcribing)
-                  Align(
-                    alignment: Alignment.topCenter,
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 18),
-                      child: ListeningOverlayPreview(
-                        label:
-                            widget.controller.phase ==
-                                DictationPhase.transcribing
-                            ? 'Transcribing'
-                            : 'Listening',
-                        icon:
-                            widget.controller.phase ==
-                                DictationPhase.transcribing
-                            ? Icons.auto_awesome
-                            : Icons.mic,
-                      ),
-                    ),
-                  ),
+                const VerticalDivider(width: 1),
+                Expanded(child: page),
               ],
             ),
           ),
@@ -134,7 +108,8 @@ class _HistoryPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
+    return Align(
+      alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1180),
         child: ScrollConfiguration(
@@ -145,38 +120,44 @@ class _HistoryPage extends StatelessWidget {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final historyContent = Column(
+                  key: const Key('history-main-column'),
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Speech history',
-                            style: theme.textTheme.displaySmall?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 24),
-                        Flexible(
-                          child: _ShortcutInstructionCard(
-                            instruction: _shortcutInstruction(
-                              shortcutController,
-                            ),
-                          ),
-                        ),
-                      ],
+                    Text(
+                      'Speech history',
+                      style: theme.textTheme.displaySmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _ShortcutInstructionCard(
+                      instruction: _shortcutInstruction(shortcutController),
                     ),
                     if (historyController.entries.isNotEmpty) ...[
-                      const SizedBox(height: 24),
-                      TextButton.icon(
-                        onPressed: historyController.clear,
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('Clear history'),
+                      const SizedBox(height: 34),
+                      Row(
+                        children: [
+                          Text(
+                            'TODAY',
+                            key: const Key('history-section-today'),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const Spacer(),
+                          TextButton.icon(
+                            onPressed: historyController.clear,
+                            icon: const Icon(Icons.delete_outline),
+                            label: const Text('Clear history'),
+                          ),
+                        ],
                       ),
+                      const SizedBox(height: 6),
                     ],
-                    const SizedBox(height: 28),
+                    if (historyController.entries.isEmpty)
+                      const SizedBox(height: 28),
                     if (historyController.isLoading)
                       const Center(child: CircularProgressIndicator())
                     else if (historyController.entries.isEmpty)
@@ -187,9 +168,13 @@ class _HistoryPage extends StatelessWidget {
                   ],
                 );
 
-                final reportCard = _HistoryReportCard(
-                  totalWords: historyController.totalWords,
-                  wordsPerMinute: historyController.averageWordsPerMinute,
+                final reportCard = SizedBox(
+                  key: const Key('history-stats-rail'),
+                  width: 300,
+                  child: _HistoryReportCard(
+                    totalWords: historyController.totalWords,
+                    wordsPerMinute: historyController.averageWordsPerMinute,
+                  ),
                 );
 
                 if (constraints.maxWidth < 780) {
@@ -208,7 +193,7 @@ class _HistoryPage extends StatelessWidget {
                   children: [
                     Expanded(child: historyContent),
                     const SizedBox(width: 28),
-                    SizedBox(width: 300, child: reportCard),
+                    reportCard,
                   ],
                 );
               },
@@ -714,27 +699,36 @@ class _HistoryEntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Card(
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.symmetric(vertical: 18),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            SizedBox(
+              width: 82,
+              child: Text(
+                _formatTime(entry.createdAt),
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 22),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _formatTimestamp(entry.createdAt),
-                    style: theme.textTheme.labelMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  SelectableText(entry.text, style: theme.textTheme.bodyLarge),
-                ],
+              child: SelectableText(
+                entry.text,
+                style: theme.textTheme.bodyLarge,
               ),
             ),
             const SizedBox(width: 12),
-            IconButton.filledTonal(
+            IconButton(
               tooltip: 'Copy transcription',
               onPressed: () => _copyToClipboard(context),
               icon: const Icon(Icons.copy),
@@ -755,10 +749,10 @@ class _HistoryEntryCard extends StatelessWidget {
     ).showSnackBar(const SnackBar(content: Text('Transcription copied')));
   }
 
-  String _formatTimestamp(DateTime value) {
+  String _formatTime(DateTime value) {
     final local = value.toLocal();
     String twoDigits(int number) => number.toString().padLeft(2, '0');
-    return '${local.year}-${twoDigits(local.month)}-${twoDigits(local.day)} ${twoDigits(local.hour)}:${twoDigits(local.minute)}';
+    return '${twoDigits(local.hour)}:${twoDigits(local.minute)}';
   }
 }
 

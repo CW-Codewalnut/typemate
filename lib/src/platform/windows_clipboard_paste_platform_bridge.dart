@@ -238,8 +238,8 @@ $form.StartPosition = 'Manual'
 $form.TopMost = $true
 $form.ShowInTaskbar = $false
 $form.BackColor = [System.Drawing.Color]::FromArgb(31, 34, 48)
-$form.Width = 420
-$form.Height = 104
+$form.Width = 320
+$form.Height = 78
 $form.Opacity = 0.96
 
 $screen = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
@@ -250,9 +250,9 @@ $container = New-Object System.Windows.Forms.TableLayoutPanel
 $container.Dock = 'Fill'
 $container.ColumnCount = 1
 $container.RowCount = 2
-$container.Padding = New-Object System.Windows.Forms.Padding(20, 12, 20, 12)
+$container.Padding = New-Object System.Windows.Forms.Padding(18, 10, 18, 10)
 $container.BackColor = $form.BackColor
-$container.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 36))) | Out-Null
+$container.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 28))) | Out-Null
 $container.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 100))) | Out-Null
 
 $label = New-Object System.Windows.Forms.Label
@@ -262,10 +262,24 @@ if ($State -eq 'transcribing') {
   $label.Text = 'TypeMate is listening...'
 }
 $label.ForeColor = [System.Drawing.Color]::White
-$label.Font = New-Object System.Drawing.Font('Segoe UI', 14, [System.Drawing.FontStyle]::Bold)
+$label.Font = New-Object System.Drawing.Font('Segoe UI', 11, [System.Drawing.FontStyle]::Bold)
 $label.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
 $label.Dock = 'Fill'
 $container.Controls.Add($label, 0, 0)
+
+function Set-RoundedControlRegion($Control, [int]$Radius) {
+  if ($Control.Width -le 0 -or $Control.Height -le 0) { return }
+  $diameter = $Radius * 2
+  $rect = New-Object System.Drawing.Rectangle(0, 0, $Control.Width, $Control.Height)
+  $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+  $path.AddArc($rect.Left, $rect.Top, $diameter, $diameter, 180, 90)
+  $path.AddArc($rect.Right - $diameter, $rect.Top, $diameter, $diameter, 270, 90)
+  $path.AddArc($rect.Right - $diameter, $rect.Bottom - $diameter, $diameter, $diameter, 0, 90)
+  $path.AddArc($rect.Left, $rect.Bottom - $diameter, $diameter, $diameter, 90, 90)
+  $path.CloseFigure()
+  $Control.Region = New-Object System.Drawing.Region($path)
+}
+Set-RoundedControlRegion $form 18
 
 $wavePanel = New-Object System.Windows.Forms.Panel
 $wavePanel.Dock = 'Fill'
@@ -274,13 +288,13 @@ $container.Controls.Add($wavePanel, 0, 1)
 $form.Controls.Add($container)
 
 $script:bars = @()
-$script:barCount = 13
-$script:barWidth = 10
-$script:gap = 10
-$script:maxHeight = 34
-$script:minHeight = 8
+$script:barCount = 9
+$script:barWidth = 6
+$script:gap = 7
+$script:maxHeight = 22
+$script:minHeight = 6
 $totalWidth = ($script:barCount * $script:barWidth) + (($script:barCount - 1) * $script:gap)
-$startX = [int](($form.Width - $totalWidth) / 2) - 20
+$startX = [int](($form.Width - $totalWidth) / 2) - 18
 for ($i = 0; $i -lt $script:barCount; $i++) {
   $bar = New-Object System.Windows.Forms.Panel
   $bar.Width = $script:barWidth
@@ -288,6 +302,7 @@ for ($i = 0; $i -lt $script:barCount; $i++) {
   $bar.Left = $startX + ($i * ($script:barWidth + $script:gap))
   $bar.Top = [int](($script:maxHeight - $bar.Height) / 2)
   $bar.BackColor = [System.Drawing.Color]::FromArgb(122, 139, 255)
+  Set-RoundedControlRegion $bar 3
   $wavePanel.Controls.Add($bar)
   $script:bars += $bar
 }
@@ -302,6 +317,7 @@ $timer.Add_Tick({
     $height = [int]($script:minHeight + (([Math]::Sin($phase) + 1) / 2) * ($script:maxHeight - $script:minHeight))
     $script:bars[$i].Height = $height
     $script:bars[$i].Top = [int](($script:maxHeight - $height) / 2)
+    Set-RoundedControlRegion $script:bars[$i] 3
   }
 })
 $form.Add_Shown({

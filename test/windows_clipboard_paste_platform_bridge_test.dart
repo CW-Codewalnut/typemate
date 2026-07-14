@@ -112,7 +112,11 @@ void main() {
       expect(script, contains(r"param([string]$State"));
       expect(script, contains('Application]::Run'));
       expect(script, contains('System.Windows.Forms.Timer'));
-      expect(script, contains(r'$script:barCount = 13'));
+      expect(script, contains(r'$script:barCount = 9'));
+      expect(script, contains(r'$script:barWidth = 6'));
+      expect(script, contains(r'$script:maxHeight = 22'));
+      expect(script, contains('System.Drawing.Drawing2D.GraphicsPath'));
+      expect(script, contains('Set-RoundedControlRegion'));
       expect(script, contains('[Math]::Sin'));
       expect(script, contains('SetWindowPos'));
       expect(overlayProcess.killCount, 1);

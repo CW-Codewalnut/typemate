@@ -38,6 +38,15 @@ focus text field -> hold shortcut -> record -> transcribe locally -> insert text
    - Register a native hold shortcut.
    - Keep a preview button for development and tests.
 
+## Backlog
+
+- **Custom dictionary / vocabulary boosting**
+  - Let users add custom words such as names, company terms, product names, acronyms, and technical vocabulary.
+  - Store the dictionary locally.
+  - Use the saved words as STT context/hotwords if the local runtime supports it.
+  - Add a post-transcription correction pass for likely misheard custom words.
+  - Consider future auto-suggestions from repeated user corrections.
+
 ## Quality gates
 
 Before handoff:
