@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 
-import '../audio/audio_recorder.dart';
+import 'audio/audio_recorder.dart';
 import '../models/dictation_state.dart';
-import '../platform/platform_bridge.dart';
-import '../stt/stt_engine.dart';
+import 'platform/platform_bridge.dart';
+import 'stt/stt_engine.dart';
 
 typedef AudioRecorderProvider = AudioRecorder? Function();
 typedef TranscriptGeneratedCallback =

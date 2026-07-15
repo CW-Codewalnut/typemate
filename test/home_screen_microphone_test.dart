@@ -3,18 +3,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:typemate/src/audio/audio_recorder.dart';
-import 'package:typemate/src/audio/ffmpeg_microphone_discovery.dart';
-import 'package:typemate/src/audio/mock_audio_recorder.dart';
+import 'package:typemate/src/core/audio/audio_recorder.dart';
+import 'package:typemate/src/core/audio/ffmpeg_microphone_discovery.dart';
+import 'package:typemate/src/core/audio/mock_audio_recorder.dart';
 import 'package:typemate/src/core/dictation_controller.dart';
 import 'package:typemate/src/core/dictation_history_controller.dart';
 import 'package:typemate/src/core/hold_shortcut_controller.dart';
 import 'package:typemate/src/core/microphone_settings_controller.dart';
 import 'package:typemate/src/core/speech_settings_controller.dart';
-import 'package:typemate/src/platform/mock_platform_bridge.dart';
-import 'package:typemate/src/stt/mock_stt_engine.dart';
-import 'package:typemate/src/stt/stt_engine.dart';
-import 'package:typemate/src/ui/home_screen.dart';
+import 'package:typemate/src/core/platform/mock_platform_bridge.dart';
+import 'package:typemate/src/core/stt/mock_stt_engine.dart';
+import 'package:typemate/src/core/stt/stt_engine.dart';
+import 'package:typemate/src/features/home/home_screen.dart';
 
 void main() {
   testWidgets(

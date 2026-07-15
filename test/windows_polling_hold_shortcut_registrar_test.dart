@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:typemate/src/core/hold_shortcut_controller.dart';
-import 'package:typemate/src/platform/windows_polling_hold_shortcut_registrar.dart';
+import 'package:typemate/src/core/platform/windows_polling_hold_shortcut_registrar.dart';
 
 void main() {
   test(

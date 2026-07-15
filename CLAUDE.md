@@ -8,27 +8,57 @@ TypeMate is a local, desktop-first Flutter dictation app for developers, AI agen
 
 - Flutter and Dart
 - Desktop targets: Windows, macOS, Linux
-- Current Windows audio experiments use FFmpeg DirectShow through adapter contracts
+- Windows audio uses FFmpeg DirectShow behind adapter contracts
+- Local transcription uses whisper.cpp CLI when configured
 - Tests use `flutter_test` and `integration_test`
+- GitNexus is installed as a repo dev tool for code graph/indexing. It is not JavaScript/TypeScript-only; keep it available through `npm run gitnexus:analyze` and `npm run gitnexus:status`.
 
 ## Folder strategy
 
-Use a clean, layered layout with feature-oriented subfolders where the code naturally grows. Keep boundaries clear:
+Keep `lib/src/` as the implementation root. In Dart packages, `lib/src` is the normal convention for private package internals; only intentionally public APIs should live directly under `lib/`.
+
+Use feature folders for product areas and keep feature-only UI inside that feature:
 
 ```text
-lib/src/audio/       audio recording, microphone discovery, process runners
-lib/src/core/        orchestration and state machines
-lib/src/models/      simple shared models and enums
-lib/src/platform/    global shortcut, overlay, active field, text insertion contracts
-lib/src/stt/         local transcription engine contracts and adapters
-lib/src/ui/          Flutter screens, widgets, presentation-only state
+lib/
+  main.dart
+  src/
+    app.dart
+    features/
+      home/
+        home_screen.dart
+      history/
+        history_page.dart
+        components/
+      insights/
+        insights_page.dart
+        components/
+      settings/
+        settings_page.dart
+        components/
+        utils/
+    components/        shared UI components used by multiple features
+    utils/             shared non-UI helpers
+    core/
+      audio/           audio recording, microphone discovery, recorder factories
+      platform/        global shortcut, overlay, active field, text insertion contracts/adapters
+      stt/             local transcription engine contracts/adapters
+      *_controller.dart
+      *_store.dart
+      insights_stats.dart
+    models/            simple shared models and enums
 ```
 
 Rules:
 
-- UI imports controllers and simple models, not process runners directly.
-- `core` coordinates flows, but does not know FFmpeg command details.
-- `audio`, `platform`, and `stt` hide native/process details behind interfaces.
+- Feature pages own page composition.
+- Feature-only widgets live in that feature's `components/` folder.
+- Feature-only helpers live in that feature's `utils/` folder.
+- Shared widgets go in `lib/src/components/` only when used by multiple features.
+- Shared pure helpers go in `lib/src/utils/`.
+- Core services/adapters that back the product flow live under `lib/src/core/`.
+- UI imports controllers, simple models, and service contracts. It should not know low-level process command details.
+- `core/audio`, `core/stt`, and `core/platform` hide native/process details behind interfaces.
 - Prefer constructor injection so tests can use fake adapters.
 
 ## Product constraints
@@ -37,11 +67,13 @@ Rules:
 - V1 uses one default local model selected by the app. Do not add a user-visible model picker.
 - Direct insertion into the focused field is the product path. Clipboard can be an internal fallback, not the primary UX.
 - Desktop first. Mobile/tablet ideas belong in docs until the desktop loop works.
+- Do not show placeholder tabs, buttons, metrics, or destinations. If it is visible, it must work.
 
 ## Local STT runtime
 
 - App runtime selection uses `TYPEMATE_WHISPER_CLI` and `TYPEMATE_WHISPER_MODEL`.
 - If either env var is missing, the app intentionally falls back to `MockSttEngine` preview mode.
+- `MockSttEngine` exists for tests and local preview when the real whisper.cpp runtime is not configured. Do not use it as proof that real dictation works.
 - Current verified Windows paths are:
   - `R:/Tools/whisper.cpp/v1.9.1-x64/Release/whisper-cli.exe`
   - `R:/Models/whisper/ggml-base.bin`
@@ -60,32 +92,45 @@ Rules:
 
 Every behavior change needs tests first unless it is pure documentation or generated boilerplate.
 
-Use:
+Use the repo FVM Flutter/Dart binaries on this machine:
 
 ```bash
-R:/Tools/flutter/bin/flutter test test/<targeted_test>.dart --reporter expanded
-R:/Tools/flutter/bin/flutter analyze
-R:/Tools/flutter/bin/flutter test --reporter expanded
+/c/Users/ranja/fvm/versions/3.44.6/bin/dart.bat format lib test tool integration_test
+/c/Users/ranja/fvm/versions/3.44.6/bin/flutter.bat analyze
+/c/Users/ranja/fvm/versions/3.44.6/bin/flutter.bat test
+/c/Users/ranja/fvm/versions/3.44.6/bin/flutter.bat build windows --release
 ```
 
 Expected coverage:
 
-- Unit tests for parsers, state machines, and adapters.
+- Unit tests for parsers, state machines, stats, and adapters.
 - Widget tests for screens and UI states.
 - Integration/e2e tests for the app shell and eventually full dictation loop.
+
+## GitNexus
+
+GitNexus is installed as a dev dependency and should be kept unless Ranjan explicitly asks to remove repo indexing tools.
+
+```bash
+npm run gitnexus:analyze
+npm run gitnexus:status
+```
+
+The analyzer may warn that LadybugDB FTS/BM25 search is unavailable. That warning does not mean indexing failed; basic graph indexing still works.
 
 ## Git workflow
 
 - Conventional commits only:
   - `feat: ...`
   - `fix: ...`
+  - `refactor: ...`
   - `test: ...`
   - `docs: ...`
   - `chore: ...`
   - `ci: ...`
 - Do not push until Ranjan validates proof and approves.
 - Before commit or push, verify active account, remote, and local identity.
-- Keep commits focused. Do not mix product code, formatting churn, and unrelated docs unless the change is intentionally repo setup.
+- Keep commits focused. Do not mix unrelated product code, formatting churn, and docs.
 
 ## CI and hooks
 

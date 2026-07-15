@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../utils/text_metrics.dart';
+
 class DictationHistoryEntry {
   const DictationHistoryEntry({
     required this.text,
@@ -105,25 +107,14 @@ class DictationHistoryController extends ChangeNotifier {
 
   List<DictationHistoryEntry> get entries => _entries;
   bool get isLoading => _isLoading;
-  int get totalWords => _entries.fold(0, (total, entry) {
-    final words = entry.text
-        .split(RegExp(r'\s+'))
-        .where((word) => word.trim().isNotEmpty)
-        .length;
-    return total + words;
-  });
+  int get totalWords =>
+      _entries.fold(0, (total, entry) => total + wordCount(entry.text));
 
   Duration get totalDuration =>
       _entries.fold(Duration.zero, (total, entry) => total + entry.duration);
 
-  int get averageWordsPerMinute {
-    final minutes =
-        totalDuration.inMilliseconds / Duration.millisecondsPerMinute;
-    if (minutes <= 0) {
-      return 0;
-    }
-    return (totalWords / minutes).round();
-  }
+  int get averageWordsPerMinute =>
+      calculateAverageWordsPerMinute(totalWords, totalDuration);
 
   Future<void> load() async {
     _isLoading = true;

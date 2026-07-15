@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:typemate/src/audio/ffmpeg_audio_recorder.dart';
+import 'package:typemate/src/core/audio/ffmpeg_audio_recorder.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

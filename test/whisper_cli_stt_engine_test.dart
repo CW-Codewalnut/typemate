@@ -1,5 +1,5 @@
-import 'package:typemate/src/audio/audio_recorder.dart';
-import 'package:typemate/src/stt/whisper_cli_stt_engine.dart';
+import 'package:typemate/src/core/audio/audio_recorder.dart';
+import 'package:typemate/src/core/stt/whisper_cli_stt_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -1,6 +1,6 @@
 import 'package:typemate/src/app.dart';
-import 'package:typemate/src/stt/mock_stt_engine.dart';
-import 'package:typemate/src/stt/whisper_cli_stt_engine.dart';
+import 'package:typemate/src/core/stt/mock_stt_engine.dart';
+import 'package:typemate/src/core/stt/whisper_cli_stt_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

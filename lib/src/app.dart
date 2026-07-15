@@ -3,22 +3,22 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import 'audio/ffmpeg_microphone_discovery.dart';
-import 'audio/microphone_audio_recorder_factory.dart';
+import 'core/audio/ffmpeg_microphone_discovery.dart';
+import 'core/audio/microphone_audio_recorder_factory.dart';
 import 'core/dictation_controller.dart';
 import 'core/dictation_history_controller.dart';
 import 'core/hold_shortcut_controller.dart';
 import 'core/microphone_settings_controller.dart';
 import 'core/microphone_settings_store.dart';
 import 'core/speech_settings_controller.dart';
-import 'platform/mock_platform_bridge.dart';
-import 'platform/platform_bridge.dart';
-import 'platform/windows_clipboard_paste_platform_bridge.dart';
-import 'platform/windows_polling_hold_shortcut_registrar.dart';
-import 'stt/mock_stt_engine.dart';
-import 'stt/stt_engine.dart';
-import 'stt/whisper_cli_stt_engine.dart';
-import 'ui/home_screen.dart';
+import 'core/platform/mock_platform_bridge.dart';
+import 'core/platform/platform_bridge.dart';
+import 'core/platform/windows_clipboard_paste_platform_bridge.dart';
+import 'core/platform/windows_polling_hold_shortcut_registrar.dart';
+import 'core/stt/mock_stt_engine.dart';
+import 'core/stt/stt_engine.dart';
+import 'core/stt/whisper_cli_stt_engine.dart';
+import 'features/home/home_screen.dart';
 
 class DictationFlowApp extends StatefulWidget {
   const DictationFlowApp({

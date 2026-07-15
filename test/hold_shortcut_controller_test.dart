@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:typemate/src/audio/audio_recorder.dart';
+import 'package:typemate/src/core/audio/audio_recorder.dart';
 import 'package:typemate/src/core/dictation_controller.dart';
 import 'package:typemate/src/core/hold_shortcut_controller.dart';
-import 'package:typemate/src/platform/mock_platform_bridge.dart';
-import 'package:typemate/src/stt/stt_engine.dart';
+import 'package:typemate/src/core/platform/mock_platform_bridge.dart';
+import 'package:typemate/src/core/stt/stt_engine.dart';
 
 void main() {
   test('registers Win+Alt hold as the safe default shortcut', () async {

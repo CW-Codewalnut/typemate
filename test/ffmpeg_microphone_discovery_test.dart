@@ -1,4 +1,4 @@
-import 'package:typemate/src/audio/ffmpeg_microphone_discovery.dart';
+import 'package:typemate/src/core/audio/ffmpeg_microphone_discovery.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

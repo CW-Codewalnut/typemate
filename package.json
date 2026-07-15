@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "scripts": {
+    "gitnexus:analyze": "gitnexus analyze --index-only --branch tip",
+    "gitnexus:status": "gitnexus status"
+  },
+  "devDependencies": {
+    "gitnexus": "^1.6.9"
+  }
+}
