@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../components/content_page_shell.dart';
 import '../../core/hold_shortcut_controller.dart';
 import '../../core/microphone_settings_controller.dart';
 import '../../core/speech_settings_controller.dart';
@@ -23,28 +24,26 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 920),
-        child: ListView(
-          padding: const EdgeInsets.all(32),
-          children: [
-            Text(
-              'Settings',
-              style: theme.textTheme.displaySmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+    return ContentPageShell(
+      scrollKey: const Key('settings-page'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Settings',
+            style: theme.textTheme.displaySmall?.copyWith(
+              fontWeight: FontWeight.w800,
             ),
+          ),
+          const SizedBox(height: 24),
+          SpeechSettingsPanel(controller: speechSettingsController),
+          const SizedBox(height: 24),
+          MicrophoneSelectionPanel(controller: microphoneController),
+          if (shortcutController != null) ...[
             const SizedBox(height: 24),
-            SpeechSettingsPanel(controller: speechSettingsController),
-            const SizedBox(height: 24),
-            MicrophoneSelectionPanel(controller: microphoneController),
-            if (shortcutController != null) ...[
-              const SizedBox(height: 24),
-              ShortcutSettingsPanel(controller: shortcutController!),
-            ],
+            ShortcutSettingsPanel(controller: shortcutController!),
           ],
-        ),
+        ],
       ),
     );
   }

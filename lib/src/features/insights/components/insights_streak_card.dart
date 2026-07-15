@@ -86,7 +86,22 @@ class StreakGrid extends StatelessWidget {
         final usableWidth = constraints.maxWidth.isFinite
             ? constraints.maxWidth
             : 320.0;
-        final labelWidth = usableWidth < 340 ? 24.0 : 28.0;
+        // Size the label column to the widest rendered label so day names
+        // never wrap onto a second line, whatever the font or text scale.
+        final labelStyle = theme.textTheme.labelSmall;
+        final textScaler = MediaQuery.textScalerOf(context);
+        var widestLabel = 0.0;
+        for (final label in labels) {
+          final painter = TextPainter(
+            text: TextSpan(text: label, style: labelStyle),
+            textDirection: TextDirection.ltr,
+            textScaler: textScaler,
+          )..layout();
+          if (painter.width > widestLabel) {
+            widestLabel = painter.width;
+          }
+        }
+        final labelWidth = widestLabel + 8;
         final gap = usableWidth < 340 ? 3.0 : 6.0;
         final cellSize =
             ((usableWidth - labelWidth - (activityGridColumns * gap)) /
@@ -105,7 +120,9 @@ class StreakGrid extends StatelessWidget {
                       width: labelWidth,
                       child: Text(
                         labels[row],
-                        style: theme.textTheme.labelSmall,
+                        style: labelStyle,
+                        maxLines: 1,
+                        softWrap: false,
                       ),
                     ),
                     for (
