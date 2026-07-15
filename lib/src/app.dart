@@ -244,6 +244,9 @@ const bundledWhisperModelRelativePath = 'models/ggml-tiny.en.bin';
 const bundledHindiWhisperModelRelativePath = 'models/ggml-tiny-vaani-hindi.bin';
 const bundledHinglishWhisperModelRelativePath =
     'models/ggml-hindi2hinglish-apex-q5_1.bin';
+// Silero VAD trims hold-to-talk silence before decoding; without it whisper
+// loops and repeats sentences while decoding the silent tail.
+const bundledVadModelRelativePath = 'models/ggml-silero-v5.1.2.bin';
 
 /// Creates the production STT engine backed by the whisper runtime that
 /// ships with the app. The runtime is required: a missing CLI or model is an
@@ -298,6 +301,12 @@ SttEngine createDefaultSttEngine({
     executable: executable,
     modelPath: modelPath,
     modelPathOverridesByLanguage: modelPathOverridesByLanguage,
+    vadModelPath: _resolveRuntimeFile(
+      environmentValue: null,
+      relativePath: bundledVadModelRelativePath,
+      searchDirectories: searchDirectories,
+      exists: exists,
+    ),
     languageCodeProvider: languageCodeProvider,
   );
 }

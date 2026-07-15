@@ -10,6 +10,9 @@ laptop, ~13s clip):
 - `ggml-hindi2hinglish-apex-q5_1.bin` (~595 MB) — Hinglish (Oriserve Apex
   fine-tune) writes Hindi speech as romanized Hinglish; turbo-sized, so
   noticeably slower (~7s per clip).
+- `ggml-silero-v5.1.2.bin` (~1 MB) — Silero VAD, always on; trims
+  hold-to-talk silence so whisper does not loop and repeat sentences while
+  decoding it.
 
 The app resolves them first relative to the working directory and then
 relative to the executable directory. Windows release builds copy this

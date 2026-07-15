@@ -265,6 +265,51 @@ void main() {
     expect(runner.arguments, isNot(contains('--prompt')));
   });
 
+  test('transcribe trims silence with VAD when a model is provided', () async {
+    final runner = FakeSttProcessRunner(
+      result: const SttProcessResult(exitCode: 0, output: 'Hello.\n'),
+    );
+    final engine = WhisperCliSttEngine(
+      executable: 'whisper-cli',
+      modelPath: 'models/ggml-tiny.en.bin',
+      vadModelPath: 'models/ggml-silero-v5.1.2.bin',
+      languageCodeProvider: () => 'en',
+      processRunner: runner,
+    );
+
+    await engine.transcribe(
+      const AudioRecording(path: 'clip.wav', duration: Duration(seconds: 2)),
+    );
+
+    expect(runner.arguments, contains('--vad'));
+    expect(
+      runner.arguments,
+      containsAllInOrder(['--vad-model', 'models/ggml-silero-v5.1.2.bin']),
+    );
+    expect(
+      runner.arguments,
+      containsAllInOrder(['--vad-speech-pad-ms', '100']),
+    );
+  });
+
+  test('transcribe skips VAD when no VAD model is provided', () async {
+    final runner = FakeSttProcessRunner(
+      result: const SttProcessResult(exitCode: 0, output: 'Hello.\n'),
+    );
+    final engine = WhisperCliSttEngine(
+      executable: 'whisper-cli',
+      modelPath: 'models/ggml-tiny.en.bin',
+      languageCodeProvider: () => 'en',
+      processRunner: runner,
+    );
+
+    await engine.transcribe(
+      const AudioRecording(path: 'clip.wav', duration: Duration(seconds: 2)),
+    );
+
+    expect(runner.arguments, isNot(contains('--vad')));
+  });
+
   test('transcribe keeps English output in the selected language', () async {
     final runner = FakeSttProcessRunner(
       result: const SttProcessResult(exitCode: 0, output: 'Transcript.\n'),

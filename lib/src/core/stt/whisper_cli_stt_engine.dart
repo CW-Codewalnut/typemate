@@ -28,6 +28,7 @@ class WhisperCliSttEngine implements SttEngine {
     required this.executable,
     required this.modelPath,
     this.modelPathOverridesByLanguage = const {},
+    this.vadModelPath,
     SttProcessRunner? processRunner,
     SttLanguageCodeProvider? languageCodeProvider,
   }) : processRunner = processRunner ?? const DartSttProcessRunner(),
@@ -35,6 +36,11 @@ class WhisperCliSttEngine implements SttEngine {
 
   final String executable;
   final String modelPath;
+
+  /// Silero VAD model used to trim silence before decoding. Whisper loops
+  /// and repeats sentences when it decodes hold-to-talk silence around the
+  /// speech, so trimming it fixes repetition and speeds decoding up.
+  final String? vadModelPath;
 
   /// Smaller specialized models per language code. English can afford a much
   /// faster model than the multilingual default without losing accuracy.
@@ -79,6 +85,7 @@ class WhisperCliSttEngine implements SttEngine {
       '--best-of',
       '1',
       ..._audioContextArguments(recording.duration, languageCode),
+      ..._vadArguments(),
       '-otxt',
       '-of',
       outputFilePrefix,
@@ -145,6 +152,22 @@ class WhisperCliSttEngine implements SttEngine {
   // TypeMate-internal codes that whisper-cli does not know: Hinglish is
   // Hindi speech decoded by a fine-tune that writes romanized output.
   static const _cliLanguageByCode = {'hinglish': 'hi'};
+
+  List<String> _vadArguments() {
+    final vadModel = vadModelPath;
+    if (vadModel == null) {
+      return const [];
+    }
+    return [
+      '--vad',
+      '--vad-model',
+      vadModel,
+      // 100ms keeps the first word intact without re-admitting enough
+      // silence to garble segment boundaries (validated against samples).
+      '--vad-speech-pad-ms',
+      '100',
+    ];
+  }
 
   String _normalizedLanguageCode() {
     final code = languageCodeProvider().trim().toLowerCase();

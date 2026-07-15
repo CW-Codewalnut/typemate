@@ -80,6 +80,7 @@ Rules:
 - There is no mock fallback in production. If the CLI or model cannot be found, `createDefaultSttEngine` throws `SttRuntimeException` — a missing runtime is an installation defect, not a mode.
 - `MockSttEngine` exists for tests only, injected explicitly (e.g. `DictationFlowApp(sttEngine: MockSttEngine())`). Do not use it as proof that real dictation works.
 - The engine uses greedy decoding and, when an explicit language is selected, right-sizes `--audio-ctx` to the clip length; both are required for acceptable push-to-talk latency on laptop CPUs. Do not pass a reduced `--audio-ctx` with `auto` language — detection misfires and produces garbage transcripts.
+- The engine always runs Silero VAD (`models/ggml-silero-v5.1.2.bin`, `--vad-speech-pad-ms 100`) to trim hold-to-talk silence. Without it whisper loops and repeats sentences while decoding the silent lead/tail; 100ms padding keeps the first word intact (larger padding garbles segment boundaries).
 - Optional high-quality override: `R:/Models/whisper/ggml-large-v3.bin` via `TYPEMATE_WHISPER_MODEL` on high-memory machines.
 - The language picker is curated (`lib/src/models/speech_language_options.dart`): English, Hindi, and Hinglish only. Do not add a language without a validated dedicated model (quality and latency) first.
 - Use `tool/benchmark_whisper_cli.dart` to prove real transcription with a WAV sample.

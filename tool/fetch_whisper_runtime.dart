@@ -34,6 +34,11 @@ const _models = [
     'https://huggingface.co/voquill/whisper-hindi2hinglish-apex-ggml/resolve/main/ggml-hindi2hinglish-apex-q5_1.bin',
     624065675,
   ),
+  _ModelSpec(
+    'ggml-silero-v5.1.2.bin',
+    'https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin',
+    885098,
+  ),
 ];
 
 const whisperZipUrl =
