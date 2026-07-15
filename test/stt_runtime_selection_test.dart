@@ -23,6 +23,9 @@ void main() {
         whisper.modelPath,
         'C:/apps/typemate/models/ggml-large-v3-turbo-q5_0.bin',
       );
+      expect(whisper.modelPathOverridesByLanguage, {
+        'en': 'C:/apps/typemate/models/ggml-small.bin',
+      });
       expect(whisper.languageCodeProvider(), 'auto');
     },
   );
@@ -34,10 +37,14 @@ void main() {
           'C:/apps/typemate/build/runner/bin/whisper/whisper-cli.exe';
       const executableModelPath =
           'C:/apps/typemate/build/runner/models/ggml-large-v3-turbo-q5_0.bin';
+      const executableEnglishModelPath =
+          'C:/apps/typemate/build/runner/models/ggml-small.bin';
       final engine = createDefaultSttEngine(
         environment: const {},
         pathExists: (path) =>
-            path == executableCliPath || path == executableModelPath,
+            path == executableCliPath ||
+            path == executableModelPath ||
+            path == executableEnglishModelPath,
         currentDirectoryPath: 'C:/somewhere/else',
         executableDirectoryPath: 'C:/apps/typemate/build/runner',
       );
@@ -45,6 +52,9 @@ void main() {
       final whisper = engine as WhisperCliSttEngine;
       expect(whisper.executable, executableCliPath);
       expect(whisper.modelPath, executableModelPath);
+      expect(whisper.modelPathOverridesByLanguage, {
+        'en': executableEnglishModelPath,
+      });
     },
   );
 
@@ -98,6 +108,11 @@ void main() {
     final whisper = engine as WhisperCliSttEngine;
     expect(whisper.executable, 'R:/Tools/whisper/whisper-cli.exe');
     expect(whisper.modelPath, 'R:/Models/whisper/ggml-large-v3.bin');
+    expect(
+      whisper.modelPathOverridesByLanguage,
+      isEmpty,
+      reason: 'an explicit model override applies to every language',
+    );
   });
 
   test('mixes an environment CLI override with the bundled model', () {

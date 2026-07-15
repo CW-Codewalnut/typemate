@@ -238,6 +238,10 @@ typedef PathExists = bool Function(String path);
 
 const bundledWhisperCliRelativePath = 'bin/whisper/whisper-cli.exe';
 const bundledWhisperModelRelativePath = 'models/ggml-large-v3-turbo-q5_0.bin';
+// English routes to a much faster model: on laptop CPUs `small` transcribes
+// English as accurately as turbo at roughly a third of the latency, while
+// Hindi and the other languages need turbo's accuracy.
+const bundledEnglishWhisperModelRelativePath = 'models/ggml-small.bin';
 
 /// Creates the production STT engine backed by the whisper runtime that
 /// ships with the app. The runtime is required: a missing CLI or model is an
@@ -262,16 +266,30 @@ SttEngine createDefaultSttEngine({
     searchDirectories: searchDirectories,
     exists: exists,
   );
+  final envModelPath = values['TYPEMATE_WHISPER_MODEL']?.trim() ?? '';
   final modelPath = _resolveRuntimeFile(
-    environmentValue: values['TYPEMATE_WHISPER_MODEL'],
+    environmentValue: envModelPath,
     relativePath: bundledWhisperModelRelativePath,
     searchDirectories: searchDirectories,
     exists: exists,
   );
+  // An explicit model override applies to every language; otherwise English
+  // routes to the bundled fast model.
+  final englishModelPath = envModelPath.isNotEmpty
+      ? null
+      : _resolveRuntimeFile(
+          environmentValue: null,
+          relativePath: bundledEnglishWhisperModelRelativePath,
+          searchDirectories: searchDirectories,
+          exists: exists,
+        );
 
   return WhisperCliSttEngine(
     executable: executable,
     modelPath: modelPath,
+    modelPathOverridesByLanguage: englishModelPath == null
+        ? const {}
+        : {'en': englishModelPath},
     languageCodeProvider: languageCodeProvider,
   );
 }
