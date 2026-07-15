@@ -76,7 +76,8 @@ Rules:
 - `MockSttEngine` exists for tests and local preview when the real whisper.cpp runtime is not configured. Do not use it as proof that real dictation works.
 - Current verified Windows paths are:
   - `R:/Tools/whisper.cpp/v1.9.1-x64/Release/whisper-cli.exe`
-  - `R:/Models/whisper/ggml-base.bin`
+  - portable default: `R:/Models/whisper/ggml-base.bin`
+  - optional high-quality override: `R:/Models/whisper/ggml-large-v3.bin` via `TYPEMATE_WHISPER_MODEL` on high-memory machines
 - Use `tool/benchmark_whisper_cli.dart` to prove real transcription with a WAV sample.
 - Keep stderr diagnostics out of successful transcripts; whisper.cpp writes model/timing logs to stderr.
 

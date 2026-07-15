@@ -24,8 +24,6 @@ class InsightsPage extends StatelessWidget {
         children: [
           InsightsHeader(dictationCount: stats.dictationCount),
           const SizedBox(height: 30),
-          const InsightsTabs(),
-          const Divider(height: 30),
           InsightsMetricsRow(stats: stats),
           const SizedBox(height: 20),
           _InsightsBottomStack(stats: stats),

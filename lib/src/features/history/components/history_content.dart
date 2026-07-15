@@ -59,7 +59,10 @@ class _TodayHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Row(
+    return Wrap(
+      spacing: 12,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         Text(
           'TODAY',
@@ -70,7 +73,6 @@ class _TodayHeader extends StatelessWidget {
             letterSpacing: 1.2,
           ),
         ),
-        const Spacer(),
         TextButton.icon(
           onPressed: onClearHistory,
           icon: const Icon(Icons.delete_outline),

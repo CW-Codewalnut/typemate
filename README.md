@@ -37,6 +37,7 @@ export TYPEMATE_WHISPER_MODEL="R:/Models/whisper/ggml-base.bin"
 ```
 
 With those set, the app constructs `WhisperCliSttEngine` and uses the configured local model. No model picker is exposed in the UI.
+You can point `TYPEMATE_WHISPER_MODEL` at `ggml-large-v3.bin` for better multilingual quality on high-memory machines, but it is not the portable default because it is roughly 3GB and slower on lower-end devices.
 
 To benchmark/prove the real local STT path with a WAV sample:
 

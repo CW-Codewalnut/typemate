@@ -3,6 +3,10 @@ final RegExp _whitespacePattern = RegExp(r'\s+');
 int wordCount(String text) =>
     text.trim().isEmpty ? 0 : text.trim().split(_whitespacePattern).length;
 
+bool isSilentAudioTranscript(String text) {
+  return _silentAudioMarkers.contains(text.trim().toUpperCase());
+}
+
 int calculateAverageWordsPerMinute(int totalWords, Duration duration) {
   final minutes = duration.inMilliseconds / Duration.millisecondsPerMinute;
   if (minutes <= 0) {
@@ -44,3 +48,9 @@ String formatTimeOfDay(DateTime value) {
   String twoDigits(int number) => number.toString().padLeft(2, '0');
   return '${twoDigits(local.hour)}:${twoDigits(local.minute)}';
 }
+
+const Set<String> _silentAudioMarkers = {
+  '[BLANK_AUDIO]',
+  '[SILENCE]',
+  '[SILENT_AUDIO]',
+};

@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
-    'uses verified local Whisper paths when environment is not configured',
+    'uses verified local base Whisper model when environment is not configured',
     () {
       final engine = createDefaultSttEngine(
         environment: const {},

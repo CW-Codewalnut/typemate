@@ -51,7 +51,7 @@ void main() {
     expect(controller.hasError, isTrue);
     expect(
       controller.statusMessage,
-      'Unable to scan microphones. Check FFmpeg and microphone permissions, then refresh.',
+      'Unable to scan microphones. Check FFmpeg and microphone permissions, then reopen Settings.',
     );
   });
 }

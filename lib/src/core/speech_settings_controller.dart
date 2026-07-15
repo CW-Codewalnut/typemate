@@ -114,6 +114,19 @@ const speechLanguageOptions = [
   SpeechLanguageOption(code: 'zh', label: 'Chinese'),
 ];
 
+SpeechLanguageOption? speechLanguageOptionForCode(String code) {
+  final normalizedCode = code.trim().toLowerCase();
+  for (final option in speechLanguageOptions) {
+    if (option.code == normalizedCode) {
+      return option;
+    }
+  }
+  return null;
+}
+
+String? speechLanguageLabelForCode(String code) =>
+    speechLanguageOptionForCode(code)?.label;
+
 abstract interface class SpeechSettingsStore {
   Future<SpeechSettingsSnapshot> load();
   Future<void> save(SpeechSettingsSnapshot snapshot);
@@ -167,9 +180,7 @@ class FileSpeechSettingsStore implements SpeechSettingsStore {
   }
 
   static String _knownLanguageCode(String code) =>
-      speechLanguageOptions.any((option) => option.code == code)
-      ? code
-      : 'auto';
+      speechLanguageOptionForCode(code) != null ? code : 'auto';
 }
 
 class SpeechSettingsController extends ChangeNotifier {

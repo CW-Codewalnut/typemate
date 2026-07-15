@@ -9,6 +9,8 @@ import '../history/history_page.dart';
 import '../insights/insights_page.dart';
 import '../settings/settings_page.dart';
 
+const double mobileNavigationBreakpoint = 700;
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
@@ -65,41 +67,78 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         };
 
-        return Scaffold(
-          body: SafeArea(
-            child: Row(
-              children: [
-                NavigationRail(
-                  selectedIndex: _selectedIndex,
-                  onDestinationSelected: (index) {
-                    setState(() => _selectedIndex = index);
-                  },
-                  labelType: NavigationRailLabelType.all,
-                  destinations: const [
-                    NavigationRailDestination(
-                      icon: Icon(Icons.history),
-                      selectedIcon: Icon(Icons.history_toggle_off),
-                      label: Text('History'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.insights_outlined),
-                      selectedIcon: Icon(Icons.insights),
-                      label: Text('Insights'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.settings_outlined),
-                      selectedIcon: Icon(Icons.settings),
-                      label: Text('Settings'),
-                    ),
-                  ],
-                ),
-                const VerticalDivider(width: 1),
-                Expanded(child: page),
-              ],
-            ),
-          ),
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final useBottomNavigation =
+                constraints.maxWidth < mobileNavigationBreakpoint;
+            return Scaffold(
+              body: SafeArea(
+                child: useBottomNavigation
+                    ? page
+                    : Row(
+                        children: [
+                          NavigationRail(
+                            selectedIndex: _selectedIndex,
+                            onDestinationSelected: _selectDestination,
+                            labelType: NavigationRailLabelType.all,
+                            destinations: _railDestinations,
+                          ),
+                          const VerticalDivider(width: 1),
+                          Expanded(child: page),
+                        ],
+                      ),
+              ),
+              bottomNavigationBar: useBottomNavigation
+                  ? NavigationBar(
+                      selectedIndex: _selectedIndex,
+                      onDestinationSelected: _selectDestination,
+                      destinations: _barDestinations,
+                    )
+                  : null,
+            );
+          },
         );
       },
     );
   }
+
+  void _selectDestination(int index) {
+    setState(() => _selectedIndex = index);
+  }
 }
+
+const _railDestinations = [
+  NavigationRailDestination(
+    icon: Icon(Icons.history),
+    selectedIcon: Icon(Icons.history_toggle_off),
+    label: Text('History'),
+  ),
+  NavigationRailDestination(
+    icon: Icon(Icons.insights_outlined),
+    selectedIcon: Icon(Icons.insights),
+    label: Text('Insights'),
+  ),
+  NavigationRailDestination(
+    icon: Icon(Icons.settings_outlined),
+    selectedIcon: Icon(Icons.settings),
+    label: Text('Settings'),
+  ),
+];
+
+const _barDestinations = [
+  NavigationDestination(
+    icon: Icon(Icons.history),
+    selectedIcon: Icon(Icons.history_toggle_off),
+    label: 'History',
+  ),
+  NavigationDestination(
+    icon: Icon(Icons.insights_outlined),
+    selectedIcon: Icon(Icons.insights),
+    label: 'Insights',
+  ),
+  NavigationDestination(
+    icon: Icon(Icons.settings_outlined),
+    selectedIcon: Icon(Icons.settings),
+    label: 'Settings',
+  ),
+];

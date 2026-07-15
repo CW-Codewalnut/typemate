@@ -1,6 +1,7 @@
 import 'package:typemate/src/app.dart';
 import 'package:typemate/src/core/audio/ffmpeg_microphone_discovery.dart';
 import 'package:typemate/src/core/hold_shortcut_controller.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -16,6 +17,12 @@ void main() {
     expect(find.text('Speech history'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Prepare local engine'), findsNothing);
+
+    final context = tester.element(find.text('Speech history'));
+    expect(
+      Theme.of(context).textTheme.bodyMedium?.fontFamilyFallback,
+      contains('Nirmala UI'),
+    );
   });
 }
 

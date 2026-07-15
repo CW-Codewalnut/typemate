@@ -56,7 +56,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('insights-page')), findsOneWidget);
-    expect(find.text('Your Usage'), findsOneWidget);
+    expect(find.text('Your Usage'), findsNothing);
     expect(find.text('Your Voice'), findsNothing);
     expect(find.text('Leaderboard'), findsNothing);
     expect(find.text('Words per minute'), findsOneWidget);
@@ -98,7 +98,7 @@ void main() {
 
     expect(find.text('Microphone'), findsOneWidget);
     expect(find.text('Microphone (Brio 100)'), findsOneWidget);
-    expect(find.text('2 microphones found.'), findsOneWidget);
+    expect(find.text('2 microphones found.'), findsNothing);
   });
 
   testWidgets('history page does not show a shortcut preview button', (
@@ -127,11 +127,11 @@ void main() {
 
     expect(
       find.text(
-        'Unable to scan microphones. Check FFmpeg and microphone permissions, then refresh.',
+        'Unable to scan microphones. Check FFmpeg and microphone permissions, then reopen Settings.',
       ),
       findsOneWidget,
     );
-    expect(find.text('Refresh microphones'), findsOneWidget);
+    expect(find.text('Refresh microphones'), findsNothing);
   });
 
   testWidgets('settings page wires language selection to Whisper.cpp', (
@@ -164,6 +164,19 @@ void main() {
     expect(speechSettingsController.languageCode, 'hi');
   });
 
+  testWidgets('empty history state is centered without a card', (tester) async {
+    await tester.pumpHome();
+    await tester.pump();
+
+    final emptyState = find.byKey(const Key('empty-history-state'));
+    expect(emptyState, findsOneWidget);
+    expect(
+      find.descendant(of: emptyState, matching: find.byType(Card)),
+      findsNothing,
+    );
+    expect(find.text('No speech history yet.'), findsOneWidget);
+  });
+
   testWidgets('history page shows generated speech text', (tester) async {
     final historyController = DictationHistoryController();
 
@@ -194,33 +207,51 @@ void main() {
     expect(titleTop, lessThan(80));
   });
 
-  testWidgets('history page shows report metrics on the right side', (
-    tester,
-  ) async {
+  testWidgets('history page does not show stats report cards', (tester) async {
     final historyController = DictationHistoryController();
 
     await tester.pumpHome(historyController: historyController);
     await historyController.addTranscript(
-      'Ship local dictation quickly',
+      'Keep history focused on transcripts only',
       duration: const Duration(seconds: 30),
     );
-    await historyController.addTranscript(
-      'Create reports',
-      duration: const Duration(seconds: 30),
-    );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('history-main-column')), findsOneWidget);
-    expect(find.byKey(const Key('history-stats-rail')), findsOneWidget);
-    expect(find.byKey(const Key('history-report-card')), findsOneWidget);
-    expect(find.byKey(const Key('history-section-today')), findsOneWidget);
-    expect(find.text('6'), findsNWidgets(2));
-    expect(find.text('total words'), findsOneWidget);
-    expect(find.text('wpm'), findsOneWidget);
-    expect(find.text('Welcome back, Ranjan'), findsNothing);
-    expect(find.text('Make Flow sound like you'), findsNothing);
-    expect(find.text('Voice Profile Unlocked!'), findsNothing);
-    expect(find.text('Create report'), findsNothing);
+    expect(find.byKey(const Key('history-stats-rail')), findsNothing);
+    expect(find.byKey(const Key('history-mobile-stats-card')), findsNothing);
+    expect(find.byKey(const Key('history-report-card')), findsNothing);
+    expect(find.text('total words'), findsNothing);
+    expect(find.text('wpm'), findsNothing);
+  });
+
+  testWidgets('insights mobile layout does not overflow', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final historyController = DictationHistoryController();
+
+    await tester.pumpHome(historyController: historyController);
+    await historyController.addTranscript(
+      'Mobile insights should fit without clipping',
+      duration: const Duration(seconds: 30),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Insights'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('insights-page')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('uses bottom navigation on mobile width', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpHome();
+
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byType(NavigationRail), findsNothing);
   });
 
   testWidgets('shortcut dictation does not render a duplicate in-app overlay', (

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../speech_settings_controller.dart';
 import '../audio/audio_recorder.dart';
 import 'stt_engine.dart';
 
@@ -57,14 +58,20 @@ class WhisperCliSttEngine implements SttEngine {
 
   @override
   Future<String> transcribe(AudioRecording recording) async {
+    final languageCode = _normalizedLanguageCode();
+    final outputFilePrefix = _transcriptOutputFilePrefix();
     final result = await processRunner.run(executable, [
       '-m',
       modelPath,
       '-f',
       recording.path,
       '--no-timestamps',
+      '-otxt',
+      '-of',
+      outputFilePrefix,
       '-l',
-      _normalizedLanguageCode(),
+      languageCode,
+      ..._promptArgumentsForLanguage(languageCode),
     ]);
 
     if (result.exitCode != 0) {
@@ -73,12 +80,49 @@ class WhisperCliSttEngine implements SttEngine {
       );
     }
 
-    return _parseTranscript(result.output);
+    return _parseTranscript(await _transcriptOutput(outputFilePrefix, result));
+  }
+
+  String _transcriptOutputFilePrefix() {
+    final now = DateTime.now().microsecondsSinceEpoch;
+    return '${Directory.systemTemp.path}/typemate-whisper-$now';
+  }
+
+  Future<String> _transcriptOutput(
+    String outputFilePrefix,
+    SttProcessResult result,
+  ) async {
+    final outputFile = File('$outputFilePrefix.txt');
+    if (!await outputFile.exists()) {
+      return result.output;
+    }
+
+    try {
+      return await outputFile.readAsString(encoding: utf8);
+    } finally {
+      await outputFile.delete().catchError((_) => outputFile);
+    }
   }
 
   String _normalizedLanguageCode() {
     final code = languageCodeProvider().trim().toLowerCase();
     return code.isEmpty ? 'auto' : code;
+  }
+
+  List<String> _promptArgumentsForLanguage(String languageCode) {
+    if (languageCode == 'auto') {
+      return const [];
+    }
+    final languageLabel = speechLanguageLabelForCode(languageCode);
+    if (languageLabel == null) {
+      return const [];
+    }
+    final prompt =
+        _transcriptionPromptByLanguage[languageCode] ??
+        'Transcribe the spoken $languageLabel audio in $languageLabel. '
+            'Use the normal writing system for $languageLabel. '
+            'Do not translate into English or any other language.';
+    return ['--prompt', prompt];
   }
 
   String _parseTranscript(String output) {
@@ -96,6 +140,11 @@ class WhisperCliSttEngine implements SttEngine {
     return line.replaceFirst(RegExp(r'^\[[0-9:.]+\s+-->\s+[0-9:.]+\]\s*'), '');
   }
 }
+
+const Map<String, String> _transcriptionPromptByLanguage = {
+  'hi':
+      'हिंदी भाषण को देवनागरी लिपि में ठीक-ठीक लिखें। अंग्रेज़ी में अनुवाद न करें।',
+};
 
 class SttRuntimeException implements Exception {
   const SttRuntimeException(this.message);

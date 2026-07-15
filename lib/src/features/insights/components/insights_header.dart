@@ -8,7 +8,11 @@ class InsightsHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Row(
+    return Wrap(
+      spacing: 12,
+      runSpacing: 10,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      alignment: WrapAlignment.spaceBetween,
       children: [
         Text(
           'Insights',
@@ -16,19 +20,9 @@ class InsightsHeader extends StatelessWidget {
             fontWeight: FontWeight.w800,
           ),
         ),
-        const Spacer(),
         _LocalHistoryBadge(entryCount: dictationCount),
       ],
     );
-  }
-}
-
-class InsightsTabs extends StatelessWidget {
-  const InsightsTabs({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Row(children: [_InsightTab(label: 'Your Usage')]);
   }
 }
 
@@ -55,34 +49,6 @@ class _LocalHistoryBadge extends StatelessWidget {
             fontWeight: FontWeight.w800,
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _InsightTab extends StatelessWidget {
-  const _InsightTab({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(right: 28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: theme.colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(height: 2, width: 74, color: theme.colorScheme.onSurface),
-        ],
       ),
     );
   }

@@ -29,7 +29,9 @@ class DictationHistoryEntry {
     }) {
       final trimmedText = text.trim();
       final createdAt = DateTime.tryParse(rawDate);
-      if (trimmedText.isEmpty || createdAt == null) {
+      if (trimmedText.isEmpty ||
+          isSilentAudioTranscript(trimmedText) ||
+          createdAt == null) {
         return null;
       }
 
@@ -129,7 +131,7 @@ class DictationHistoryController extends ChangeNotifier {
     Duration duration = Duration.zero,
   }) async {
     final trimmedText = text.trim();
-    if (trimmedText.isEmpty) {
+    if (trimmedText.isEmpty || isSilentAudioTranscript(trimmedText)) {
       return;
     }
 

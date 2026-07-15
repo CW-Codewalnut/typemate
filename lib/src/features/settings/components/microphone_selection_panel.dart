@@ -19,34 +19,16 @@ class MicrophoneSelectionPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text('Microphone', style: theme.textTheme.titleMedium),
-                ),
-                OutlinedButton.icon(
-                  onPressed: controller.isLoading
-                      ? null
-                      : controller.loadMicrophones,
-                  icon: const Icon(Icons.refresh),
-                  label: Text(
-                    controller.isLoading
-                        ? 'Scanning...'
-                        : 'Refresh microphones',
-                  ),
-                ),
-              ],
-            ),
+            Text('Microphone', style: theme.textTheme.titleMedium),
             const SizedBox(height: 12),
             if (controller.hasError)
               Text(
                 controller.statusMessage,
                 style: TextStyle(color: theme.colorScheme.error),
               )
-            else
+            else if (controller.microphones.isEmpty || controller.isLoading)
               Text(controller.statusMessage),
             if (controller.microphones.isNotEmpty) ...[
-              const SizedBox(height: 16),
               DropdownButtonFormField<MicrophoneDevice>(
                 initialValue: selected,
                 isExpanded: true,

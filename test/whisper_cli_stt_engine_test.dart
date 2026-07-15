@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:typemate/src/core/audio/audio_recorder.dart';
 import 'package:typemate/src/core/stt/whisper_cli_stt_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -79,15 +82,18 @@ void main() {
 
     expect(transcript, 'Hello TypeMate.');
     expect(runner.executable, 'whisper-cli');
-    expect(runner.arguments, [
-      '-m',
-      'models/ggml-base.bin',
-      '-f',
-      'build/recordings/sample.wav',
-      '--no-timestamps',
-      '-l',
-      'auto',
-    ]);
+    expect(
+      runner.arguments,
+      containsAllInOrder(['-m', 'models/ggml-base.bin']),
+    );
+    expect(
+      runner.arguments,
+      containsAllInOrder(['-f', 'build/recordings/sample.wav']),
+    );
+    expect(runner.arguments, contains('--no-timestamps'));
+    expect(runner.arguments, contains('-otxt'));
+    expect(runner.arguments, contains('-of'));
+    expect(runner.arguments, containsAllInOrder(['-l', 'auto']));
   });
 
   test('transcribe passes the selected language to whisper CLI', () async {
@@ -106,7 +112,63 @@ void main() {
     );
 
     expect(runner.arguments, containsAllInOrder(['-l', 'hi']));
+    expect(runner.arguments, contains('--prompt'));
+    expect(runner.arguments.join(' '), contains('देवनागरी'));
   });
+
+  test('transcribe does not add a script prompt for auto language', () async {
+    final runner = FakeSttProcessRunner(
+      result: const SttProcessResult(exitCode: 0, output: 'Hello.\n'),
+    );
+    final engine = WhisperCliSttEngine(
+      executable: 'whisper-cli',
+      modelPath: 'models/ggml-base.bin',
+      languageCodeProvider: () => 'auto',
+      processRunner: runner,
+    );
+
+    await engine.transcribe(
+      const AudioRecording(path: 'english.wav', duration: Duration(seconds: 1)),
+    );
+
+    expect(runner.arguments, containsAllInOrder(['-l', 'auto']));
+    expect(runner.arguments, isNot(contains('--prompt')));
+  });
+
+  for (final language in const {
+    'bn': 'Bengali',
+    'pa': 'Punjabi',
+    'it': 'Italian',
+    'la': 'Latin',
+  }.entries) {
+    test(
+      'transcribe keeps ${language.value} output in the selected language',
+      () async {
+        final runner = FakeSttProcessRunner(
+          result: const SttProcessResult(exitCode: 0, output: 'Transcript.\n'),
+        );
+        final engine = WhisperCliSttEngine(
+          executable: 'whisper-cli',
+          modelPath: 'models/ggml-base.bin',
+          languageCodeProvider: () => language.key,
+          processRunner: runner,
+        );
+
+        await engine.transcribe(
+          AudioRecording(
+            path: '${language.key}.wav',
+            duration: const Duration(seconds: 1),
+          ),
+        );
+
+        final arguments = runner.arguments.join(' ');
+        expect(runner.arguments, containsAllInOrder(['-l', language.key]));
+        expect(runner.arguments, contains('--prompt'));
+        expect(arguments, contains('spoken ${language.value} audio'));
+        expect(arguments, contains('Do not translate into English'));
+      },
+    );
+  }
 
   test('transcribe preserves Hindi UTF-8 transcript text', () async {
     final runner = FakeSttProcessRunner(
@@ -124,6 +186,27 @@ void main() {
 
     expect(transcript, 'आज लिए');
     expect(transcript, isNot(contains('à¤')));
+  });
+
+  test('transcribe prefers UTF-8 text output file over stdout', () async {
+    final runner = WritingTranscriptFileRunner(
+      result: const SttProcessResult(exitCode: 0, output: '?????\n'),
+      transcriptText: 'नमस्ते दुनिया\n',
+    );
+    final engine = WhisperCliSttEngine(
+      executable: 'whisper-cli',
+      modelPath: 'models/ggml-base.bin',
+      languageCodeProvider: () => 'hi',
+      processRunner: runner,
+    );
+
+    final transcript = await engine.transcribe(
+      const AudioRecording(path: 'hindi.wav', duration: Duration(seconds: 1)),
+    );
+
+    expect(transcript, 'नमस्ते दुनिया');
+    expect(transcript, isNot(contains('?')));
+    expect(runner.arguments, contains('-otxt'));
   });
 
   test('transcribe ignores stderr diagnostics on success', () async {
@@ -199,5 +282,32 @@ class ThrowingSttProcessRunner implements SttProcessRunner {
     List<String> arguments,
   ) async {
     throw StateError('missing executable');
+  }
+}
+
+class WritingTranscriptFileRunner implements SttProcessRunner {
+  WritingTranscriptFileRunner({
+    required this.result,
+    required this.transcriptText,
+  });
+
+  final SttProcessResult result;
+  final String transcriptText;
+  late List<String> arguments;
+
+  @override
+  Future<SttProcessResult> run(
+    String executable,
+    List<String> arguments,
+  ) async {
+    this.arguments = arguments;
+    final outputFileIndex = arguments.indexOf('-of');
+    if (outputFileIndex >= 0 && outputFileIndex + 1 < arguments.length) {
+      final outputPrefix = arguments[outputFileIndex + 1];
+      final outputFile = File('$outputPrefix.txt');
+      await outputFile.parent.create(recursive: true);
+      await outputFile.writeAsString(transcriptText, encoding: utf8);
+    }
+    return result;
   }
 }

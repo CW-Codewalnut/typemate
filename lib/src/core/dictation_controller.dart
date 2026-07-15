@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'audio/audio_recorder.dart';
 import '../models/dictation_state.dart';
+import '../utils/text_metrics.dart';
 import 'platform/platform_bridge.dart';
 import 'stt/stt_engine.dart';
 
@@ -131,13 +132,13 @@ class DictationController extends ChangeNotifier {
       );
       return;
     }
-    final usableTranscript = transcript.trim();
+    final usableTranscript = _normalizeTranscript(transcript);
     if (usableTranscript.isEmpty) {
       _latestTranscript = '';
       await _platformBridge.hideListeningOverlay();
       _setPhase(
         DictationPhase.idle,
-        'No speech was detected. Ready for the next dictation.',
+        'Silent audio. Ready for the next dictation.',
       );
       return;
     }
@@ -178,5 +179,13 @@ class DictationController extends ChangeNotifier {
     _phase = phase;
     _statusMessage = message;
     notifyListeners();
+  }
+
+  String _normalizeTranscript(String transcript) {
+    final normalized = transcript.trim();
+    if (normalized.isEmpty || isSilentAudioTranscript(normalized)) {
+      return '';
+    }
+    return normalized;
   }
 }

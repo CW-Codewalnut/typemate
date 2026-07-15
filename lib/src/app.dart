@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'components/app_scroll_behavior.dart';
 import 'core/audio/ffmpeg_microphone_discovery.dart';
 import 'core/audio/microphone_audio_recorder_factory.dart';
 import 'core/dictation_controller.dart';
@@ -102,8 +103,39 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
     return MaterialApp(
       title: 'TypeMate',
       debugShowCheckedModeBanner: false,
+      scrollBehavior: const AppScrollBehavior(),
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5B6CFF)),
+        fontFamilyFallback: const [
+          'Nirmala UI',
+          'Nirmala Text',
+          'Segoe UI',
+          'Segoe UI Historic',
+          'Segoe UI Symbol',
+          'Arial Unicode MS',
+          'Mangal',
+          'Utsaah',
+          'Aparajita',
+          'Kokila',
+          'Nirmala UI Semilight',
+          'Vrinda',
+          'Raavi',
+          'Ebrima',
+          'Gadugi',
+          'Leelawadee UI',
+          'Javanese Text',
+          'Myanmar Text',
+          'Mongolian Baiti',
+          'Microsoft Himalaya',
+          'Microsoft Yi Baiti',
+          'Sylfaen',
+          'Microsoft YaHei',
+          'Microsoft JhengHei',
+          'SimSun',
+          'NSimSun',
+          'Meiryo',
+          'Malgun Gothic',
+        ],
         useMaterial3: true,
       ),
       home: HomeScreen(
@@ -208,8 +240,10 @@ SttEngine createDefaultSttEngine({
   final exists = pathExists ?? (path) => File(path).existsSync();
   if (executable.isEmpty &&
       modelPath.isEmpty &&
-      exists(verifiedWhisperCliPath) &&
-      exists(verifiedWhisperModelPath)) {
+      exists(verifiedWhisperCliPath)) {
+    if (!exists(verifiedWhisperModelPath)) {
+      return MockSttEngine();
+    }
     return WhisperCliSttEngine(
       executable: verifiedWhisperCliPath,
       modelPath: verifiedWhisperModelPath,

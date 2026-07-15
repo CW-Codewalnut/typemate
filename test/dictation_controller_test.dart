@@ -243,10 +243,74 @@ void main() {
       expect(platformBridge.lastInsertedText, isEmpty);
       expect(
         controller.statusMessage,
-        'No speech was detected. Ready for the next dictation.',
+        'Silent audio. Ready for the next dictation.',
       );
     },
   );
+
+  test('treats whisper blank-audio markers as silent audio', () async {
+    final platformBridge = MockPlatformBridge();
+    final audioRecorder = FakeAudioRecorder(
+      recording: const AudioRecording(
+        path: 'silence.wav',
+        duration: Duration(seconds: 2),
+      ),
+    );
+    final sttEngine = FakeSttEngine(transcript: '[BLANK_AUDIO]');
+    var storedTranscript = '';
+    final controller = DictationController(
+      platformBridge: platformBridge,
+      sttEngine: sttEngine,
+      audioRecorder: audioRecorder,
+      onTranscriptGenerated: (transcript, {duration = Duration.zero}) async {
+        storedTranscript = transcript;
+      },
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(controller.phase, DictationPhase.idle);
+    expect(controller.latestTranscript, isEmpty);
+    expect(platformBridge.lastInsertedText, isEmpty);
+    expect(storedTranscript, isEmpty);
+    expect(
+      controller.statusMessage,
+      'Silent audio. Ready for the next dictation.',
+    );
+  });
+
+  test('keeps question-mark transcripts visible for debugging', () async {
+    final platformBridge = MockPlatformBridge();
+    final audioRecorder = FakeAudioRecorder(
+      recording: const AudioRecording(
+        path: 'hindi.wav',
+        duration: Duration(seconds: 2),
+      ),
+    );
+    final sttEngine = FakeSttEngine(transcript: '?????');
+    var storedTranscript = '';
+    final controller = DictationController(
+      platformBridge: platformBridge,
+      sttEngine: sttEngine,
+      audioRecorder: audioRecorder,
+      onTranscriptGenerated: (transcript, {duration = Duration.zero}) async {
+        storedTranscript = transcript;
+      },
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(controller.phase, DictationPhase.idle);
+    expect(controller.latestTranscript, '?????');
+    expect(platformBridge.lastInsertedText, '?????');
+    expect(storedTranscript, '?????');
+    expect(
+      controller.statusMessage,
+      'Inserted transcript. Ready for the next dictation.',
+    );
+  });
 
   test('recovers when focused-field insertion fails', () async {
     final platformBridge = ThrowingInsertPlatformBridge();

@@ -108,36 +108,78 @@ class _UsageBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          Icon(row.icon, size: 19),
-          const SizedBox(width: 12),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: row.percent / 100,
-                minHeight: 28,
-                backgroundColor: theme.colorScheme.surface,
-              ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 420) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(row.icon, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${formatCompactNumber(row.words)} ${row.label}'
+                            .toUpperCase(),
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: row.percent / 100,
+                    minHeight: 22,
+                    backgroundColor: theme.colorScheme.surface,
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 170,
-            child: Text(
-              '${formatCompactNumber(row.words)} ${row.label}'.toUpperCase(),
-              style: theme.textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.5,
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            children: [
+              Icon(row.icon, size: 19),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: row.percent / 100,
+                    minHeight: 28,
+                    backgroundColor: theme.colorScheme.surface,
+                  ),
+                ),
               ),
-              overflow: TextOverflow.ellipsis,
-            ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 170,
+                child: Text(
+                  '${formatCompactNumber(row.words)} ${row.label}'
+                      .toUpperCase(),
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

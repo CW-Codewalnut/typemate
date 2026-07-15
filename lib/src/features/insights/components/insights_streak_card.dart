@@ -77,42 +77,63 @@ class StreakGrid extends StatelessWidget {
   final List<ActivityCellData> cells;
 
   @override
+  @override
   Widget build(BuildContext context) {
-    assert(cells.length == DateTime.daysPerWeek * activityGridColumns);
-    final theme = Theme.of(context);
-    const labels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    return Column(
-      key: const Key('insights-streak-grid'),
-      children: [
-        for (var row = 0; row < labels.length; row++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 28,
-                  child: Text(labels[row], style: theme.textTheme.labelSmall),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final theme = Theme.of(context);
+        const labels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        final usableWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : 320.0;
+        final labelWidth = usableWidth < 340 ? 24.0 : 28.0;
+        final gap = usableWidth < 340 ? 3.0 : 6.0;
+        final cellSize =
+            ((usableWidth - labelWidth - (activityGridColumns * gap)) /
+                    activityGridColumns)
+                .clamp(8.0, 15.0);
+
+        return Column(
+          key: const Key('insights-streak-grid'),
+          children: [
+            for (var row = 0; row < labels.length; row++)
+              Padding(
+                padding: EdgeInsets.only(bottom: gap),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: labelWidth,
+                      child: Text(
+                        labels[row],
+                        style: theme.textTheme.labelSmall,
+                      ),
+                    ),
+                    for (
+                      var column = 0;
+                      column < activityGridColumns;
+                      column++
+                    ) ...[
+                      _StreakCell(
+                        cell: cells[row * activityGridColumns + column],
+                        size: cellSize,
+                      ),
+                      SizedBox(width: gap),
+                    ],
+                  ],
                 ),
-                for (
-                  var column = 0;
-                  column < activityGridColumns;
-                  column++
-                ) ...[
-                  _StreakCell(cell: cells[row * activityGridColumns + column]),
-                  const SizedBox(width: 6),
-                ],
-              ],
-            ),
-          ),
-      ],
+              ),
+          ],
+        );
+      },
     );
   }
 }
 
 class _StreakCell extends StatelessWidget {
-  const _StreakCell({required this.cell});
+  const _StreakCell({required this.cell, required this.size});
 
   final ActivityCellData cell;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
@@ -127,8 +148,8 @@ class _StreakCell extends StatelessWidget {
       message:
           '${formatShortDate(cell.date)}: ${formatCompactNumber(cell.words)} words',
       child: Container(
-        width: 15,
-        height: 15,
+        width: size,
+        height: size,
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(3),
@@ -144,15 +165,17 @@ class _StreakLegend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Row(
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         Text('More', style: theme.textTheme.labelMedium),
-        const SizedBox(width: 8),
         for (final color in [
           theme.colorScheme.primary,
           theme.colorScheme.primary.withValues(alpha: 0.65),
           theme.colorScheme.primary.withValues(alpha: 0.35),
-        ]) ...[
+        ])
           Container(
             width: 16,
             height: 16,
@@ -161,10 +184,7 @@ class _StreakLegend extends StatelessWidget {
               borderRadius: BorderRadius.circular(3),
             ),
           ),
-          const SizedBox(width: 6),
-        ],
         Text('Less', style: theme.textTheme.labelMedium),
-        const Spacer(),
         Text('Last 12 weeks', style: theme.textTheme.labelMedium),
       ],
     );

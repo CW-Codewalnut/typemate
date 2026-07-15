@@ -73,7 +73,6 @@ class _DictationSessionSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      mainAxisAlignment: MainAxisAlignment.end,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Divider(),
@@ -101,7 +100,6 @@ class _DeviceWordsSummary extends StatelessWidget {
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.end,
       children: [
         const Divider(),
         Row(
@@ -114,7 +112,7 @@ class _DeviceWordsSummary extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const Spacer(),
+            const SizedBox(width: 12),
             Text(
               '${formatCompactNumber(stats.todayWords)} today',
               style: theme.textTheme.labelLarge?.copyWith(

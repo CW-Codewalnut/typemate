@@ -30,6 +30,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   if (!window.Create(L"TypeMate", origin, size)) {
     return EXIT_FAILURE;
   }
+  // Keep the window usable without blocking the app's mobile/narrow layouts.
+  // Flutter handles the layout switch; the native minimum only prevents a
+  // completely unusable sliver-sized window.
+  window.SetMinimumSize(Win32Window::Size(360, 640));
   // Keep TypeMate's background shortcut service alive when the window is closed.
   window.SetQuitOnClose(false);
 
