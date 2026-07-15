@@ -4,9 +4,11 @@ TypeMate bundles one validated model per supported language and routes by
 the language selected in Settings (benchmarks from the target i5-11300H
 laptop, ~13s clip):
 
-- `ggml-tiny.en.bin` (~74 MB) — English, ~0.5s per clip.
-- `ggml-tiny-vaani-hindi.bin` (~74 MB) — Hindi (Vaani fine-tune), ~0.9s
-  per clip with near-turbo Hindi accuracy.
+- `ggml-distil-small.en.bin` (~321 MB) — English (distil-whisper), ~1.5s
+  per clip; robust to Indian-English where tiny.en looped and misheard.
+- `ggml-small-vaani-hindi-q6.bin` (~197 MB) — Hindi (Vaani small
+  fine-tune, q6), ~2.8s per clip; more noise-robust than the tiny
+  variant with near-turbo Hindi accuracy.
 - `ggml-hindi2hinglish-apex-q5_1.bin` (~595 MB) — Hinglish (Oriserve Apex
   fine-tune) writes Hindi speech as romanized Hinglish; turbo-sized, so
   noticeably slower (~7s per clip).

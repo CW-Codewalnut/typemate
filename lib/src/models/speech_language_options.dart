@@ -1,4 +1,4 @@
-class SpeechLanguageOption {
+﻿class SpeechLanguageOption {
   const SpeechLanguageOption({required this.code, required this.label});
 
   final String code;
@@ -6,9 +6,10 @@ class SpeechLanguageOption {
 }
 
 /// Languages offered in the picker. TypeMate ships one validated model per
-/// language: English (tiny.en, ~0.5s per clip), Hindi (Vaani fine-tune,
-/// ~0.9s), and Hinglish (Oriserve Apex fine-tune that writes Hindi speech
-/// in romanized Hinglish; turbo-sized, so noticeably slower at ~7s).
+/// language: English (distil-small.en, ~1.5s per clip), Hindi (Vaani small
+/// fine-tune, ~2.8s), and Hinglish (Oriserve Apex fine-tune that writes
+/// Hindi speech in romanized Hinglish; turbo-sized, so noticeably slower
+/// at ~7s).
 /// There is intentionally no Auto option — language auto-detection needs
 /// the full encoder window, which is several times slower on laptop CPUs,
 /// and it misfires often enough to produce garbage transcripts.
