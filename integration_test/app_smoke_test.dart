@@ -10,12 +10,13 @@ void main() {
     await tester.pumpWidget(
       DictationFlowApp(
         sttEngine: MockSttEngine(),
+        // The splash is time-based and integration tests run on a real
+        // clock, so it is covered by widget tests instead.
         splashDuration: Duration.zero,
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('TypeMate'), findsOneWidget);
     expect(find.text('Speech history'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Prepare local engine'), findsNothing);

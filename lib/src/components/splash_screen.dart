@@ -19,7 +19,7 @@ class SplashScreen extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             Text(
-              'TypeMate',
+              'Type Mate',
               style: theme.textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
