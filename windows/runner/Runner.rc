@@ -1,4 +1,4 @@
-// Microsoft Visual C++ generated resource script.
+﻿// Microsoft Visual C++ generated resource script.
 //
 #pragma code_page(65001)
 #include "resource.h"
@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.codewalnut" "\0"
-            VALUE "FileDescription", "TypeMate" "\0"
+            VALUE "FileDescription", "Type Mate" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "typemate" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.codewalnut. All rights reserved." "\0"
             VALUE "OriginalFilename", "typemate.exe" "\0"
-            VALUE "ProductName", "TypeMate" "\0"
+            VALUE "ProductName", "Type Mate" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -116,7 +116,7 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'TypeMate',
+      title: 'Type Mate',
       debugShowCheckedModeBanner: false,
       scrollBehavior: const AppScrollBehavior(),
       theme: ThemeData(
