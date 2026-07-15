@@ -78,6 +78,7 @@ Rules:
 - `MockSttEngine` exists for tests only, injected explicitly (e.g. `DictationFlowApp(sttEngine: MockSttEngine())`). Do not use it as proof that real dictation works.
 - The engine uses greedy decoding and, when an explicit language is selected, right-sizes `--audio-ctx` to the clip length; both are required for acceptable push-to-talk latency on laptop CPUs. Do not pass a reduced `--audio-ctx` with `auto` language — detection misfires and produces garbage transcripts.
 - Optional high-quality override: `R:/Models/whisper/ggml-large-v3.bin` via `TYPEMATE_WHISPER_MODEL` on high-memory machines.
+- The language picker is curated (`lib/src/models/speech_language_options.dart`): only languages the bundled model transcribes well are visible. Do not re-add a language without validating real dictation quality first.
 - Use `tool/benchmark_whisper_cli.dart` to prove real transcription with a WAV sample.
 - Keep stderr diagnostics out of successful transcripts; whisper.cpp writes model/timing logs to stderr.
 

@@ -234,10 +234,10 @@ void main() {
   });
 
   for (final language in const {
-    'bn': 'Bengali',
-    'pa': 'Punjabi',
     'it': 'Italian',
-    'la': 'Latin',
+    'pt': 'Portuguese',
+    'tr': 'Turkish',
+    'id': 'Indonesian',
   }.entries) {
     test(
       'transcribe keeps ${language.value} output in the selected language',
