@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:flutter/services.dart';
 
@@ -69,8 +69,8 @@ Future<OverlayProcess> startOverlayProcess(
 typedef NativeMethodInvoker =
     Future<T?> Function<T>(String method, [Object? arguments]);
 
-class WindowsClipboardPastePlatformBridge implements PlatformBridge {
-  WindowsClipboardPastePlatformBridge({
+class WindowsPlatformBridge implements PlatformBridge {
+  WindowsPlatformBridge({
     this.processRunner = runPlatformProcess,
     this.overlayProcessStarter = startOverlayProcess,
     NativeMethodInvoker? nativeMethodInvoker,
@@ -190,6 +190,16 @@ New-ItemProperty -Path \$approvedStartupPath -Name 'TypeMate.lnk' -PropertyType 
 
   @override
   Future<void> insertTextIntoFocusedField(String text) async {
+    try {
+      // Primary path: the native runner types the text into the focused
+      // field with SendInput unicode events. The clipboard stays untouched.
+      await nativeMethodInvoker<void>('insertText', {'text': text});
+      return;
+    } on MissingPluginException {
+      // Development fallback for older Windows runners before the native
+      // method channel is available: clipboard + Ctrl+V.
+    }
+
     await Clipboard.setData(ClipboardData(text: text));
 
     const script = r'''

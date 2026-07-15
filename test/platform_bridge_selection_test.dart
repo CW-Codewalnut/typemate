@@ -1,15 +1,15 @@
-import 'package:flutter_test/flutter_test.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
 import 'package:typemate/src/app.dart';
 import 'package:typemate/src/core/hold_shortcut_controller.dart';
 import 'package:typemate/src/core/platform/mock_platform_bridge.dart';
-import 'package:typemate/src/core/platform/windows_clipboard_paste_platform_bridge.dart';
+import 'package:typemate/src/core/platform/windows_platform_bridge.dart';
 import 'package:typemate/src/core/platform/windows_polling_hold_shortcut_registrar.dart';
 
 void main() {
   test('uses Windows clipboard paste bridge on Windows', () {
     expect(
       createDefaultPlatformBridge(isWindows: true),
-      isA<WindowsClipboardPastePlatformBridge>(),
+      isA<WindowsPlatformBridge>(),
     );
   });
 

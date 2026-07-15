@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -14,7 +14,7 @@ import 'core/microphone_settings_store.dart';
 import 'core/speech_settings_controller.dart';
 import 'core/platform/mock_platform_bridge.dart';
 import 'core/platform/platform_bridge.dart';
-import 'core/platform/windows_clipboard_paste_platform_bridge.dart';
+import 'core/platform/windows_platform_bridge.dart';
 import 'core/platform/windows_polling_hold_shortcut_registrar.dart';
 import 'core/stt/stt_engine.dart';
 import 'core/stt/whisper_cli_stt_engine.dart';
@@ -154,7 +154,7 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
 
 PlatformBridge createDefaultPlatformBridge({bool? isWindows}) {
   if (isWindows ?? Platform.isWindows) {
-    return WindowsClipboardPastePlatformBridge();
+    return WindowsPlatformBridge();
   }
 
   return MockPlatformBridge();
