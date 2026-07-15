@@ -19,12 +19,10 @@ void main() {
         whisper.executable,
         'C:/apps/typemate/bin/whisper/whisper-cli.exe',
       );
-      expect(
-        whisper.modelPath,
-        'C:/apps/typemate/models/ggml-large-v3-turbo-q5_0.bin',
-      );
+      expect(whisper.modelPath, 'C:/apps/typemate/models/ggml-tiny.en.bin');
       expect(whisper.modelPathOverridesByLanguage, {
-        'en': 'C:/apps/typemate/models/ggml-small.bin',
+        'hi': 'C:/apps/typemate/models/ggml-tiny-vaani-hindi.bin',
+        'hinglish': 'C:/apps/typemate/models/ggml-hindi2hinglish-apex-q5_1.bin',
       });
       expect(whisper.languageCodeProvider(), 'auto');
     },
@@ -33,27 +31,28 @@ void main() {
   test(
     'falls back to executable directory when working directory has no runtime',
     () {
+      const executableDirectory = 'C:/apps/typemate/build/runner';
       const executableCliPath =
-          'C:/apps/typemate/build/runner/bin/whisper/whisper-cli.exe';
+          '$executableDirectory/bin/whisper/whisper-cli.exe';
       const executableModelPath =
-          'C:/apps/typemate/build/runner/models/ggml-large-v3-turbo-q5_0.bin';
-      const executableEnglishModelPath =
-          'C:/apps/typemate/build/runner/models/ggml-small.bin';
+          '$executableDirectory/models/ggml-tiny.en.bin';
+      const executableHindiModelPath =
+          '$executableDirectory/models/ggml-tiny-vaani-hindi.bin';
+      const executableHinglishModelPath =
+          '$executableDirectory/models/ggml-hindi2hinglish-apex-q5_1.bin';
       final engine = createDefaultSttEngine(
         environment: const {},
-        pathExists: (path) =>
-            path == executableCliPath ||
-            path == executableModelPath ||
-            path == executableEnglishModelPath,
+        pathExists: (path) => path.startsWith(executableDirectory),
         currentDirectoryPath: 'C:/somewhere/else',
-        executableDirectoryPath: 'C:/apps/typemate/build/runner',
+        executableDirectoryPath: executableDirectory,
       );
 
       final whisper = engine as WhisperCliSttEngine;
       expect(whisper.executable, executableCliPath);
       expect(whisper.modelPath, executableModelPath);
       expect(whisper.modelPathOverridesByLanguage, {
-        'en': executableEnglishModelPath,
+        'hi': executableHindiModelPath,
+        'hinglish': executableHinglishModelPath,
       });
     },
   );
@@ -88,7 +87,7 @@ void main() {
         isA<SttRuntimeException>().having(
           (error) => error.message,
           'message',
-          contains('models/ggml-large-v3-turbo-q5_0.bin'),
+          contains('models/ggml-tiny.en.bin'),
         ),
       ),
     );
@@ -127,10 +126,7 @@ void main() {
 
     final whisper = engine as WhisperCliSttEngine;
     expect(whisper.executable, 'R:/Tools/whisper/whisper-cli.exe');
-    expect(
-      whisper.modelPath,
-      'C:/apps/typemate/models/ggml-large-v3-turbo-q5_0.bin',
-    );
+    expect(whisper.modelPath, 'C:/apps/typemate/models/ggml-tiny.en.bin');
   });
 
   test('trims whisper environment values before creating the runtime', () {

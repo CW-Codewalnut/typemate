@@ -64,7 +64,7 @@ Rules:
 ## Product constraints
 
 - V1 is local-only. No cloud transcription.
-- V1 uses one default local model selected by the app. Do not add a user-visible model picker.
+- The app selects one model per supported language. Do not add a user-visible model picker.
 - Direct insertion into the focused field is the product path. Clipboard can be an internal fallback, not the primary UX.
 - Desktop first. Mobile/tablet ideas belong in docs until the desktop loop works.
 - Do not show placeholder tabs, buttons, metrics, or destinations. If it is visible, it must work.
@@ -72,14 +72,16 @@ Rules:
 ## Local STT runtime
 
 - The whisper runtime is fully bundled with the app: models under `models/` and the CLI (whisper.cpp v1.9.1 OpenBLAS build) at `bin/whisper/whisper-cli.exe`. No machine-specific paths.
-- Two bundled models, routed by selected language: English uses `models/ggml-small.bin` (~2s per clip on a laptop CPU, English accuracy on par with turbo), everything else including Hindi and Auto uses `models/ggml-large-v3-turbo-q5_0.bin` (accuracy first). `TYPEMATE_WHISPER_MODEL` overrides both and applies to every language.
-- Both are gitignored (the model exceeds GitHub's 100 MB file limit). The Windows CMake build fetches anything missing automatically via `tool/fetch_whisper_runtime.dart`, so `flutter build windows` and `flutter run -d windows` work on a fresh clone; the script can also be run manually. Release builds copy `models/` and `bin/` next to the executable.
+- Three bundled models, one per supported language (benchmarked on the target i5-11300H laptop): English uses `models/ggml-tiny.en.bin` (~0.5s per clip), Hindi uses `models/ggml-tiny-vaani-hindi.bin` (Vaani fine-tune, ~0.9s, near-turbo Hindi accuracy), Hinglish uses `models/ggml-hindi2hinglish-apex-q5_1.bin` (Oriserve Apex fine-tune; turbo-sized so ~7s, writes romanized Hinglish). `TYPEMATE_WHISPER_MODEL` overrides all and applies to every language.
+- `hinglish` is a TypeMate-internal language code: the engine maps it to whisper's `hi` flag and sends no script prompt (the fine-tune romanizes on its own).
+- There is no Auto language option: detection needs the full encoder window (several times slower) and misfires into garbage transcripts. Default language is English.
+- All models are gitignored (they exceed practical git limits). The Windows CMake build fetches anything missing automatically via `tool/fetch_whisper_runtime.dart`, so `flutter build windows` and `flutter run -d windows` work on a fresh clone; the script can also be run manually. Release builds copy `models/` and `bin/` next to the executable.
 - Resolution order for each piece: env override (`TYPEMATE_WHISPER_CLI` / `TYPEMATE_WHISPER_MODEL`), then the bundled path relative to the working directory, then relative to the executable directory.
 - There is no mock fallback in production. If the CLI or model cannot be found, `createDefaultSttEngine` throws `SttRuntimeException` — a missing runtime is an installation defect, not a mode.
 - `MockSttEngine` exists for tests only, injected explicitly (e.g. `DictationFlowApp(sttEngine: MockSttEngine())`). Do not use it as proof that real dictation works.
 - The engine uses greedy decoding and, when an explicit language is selected, right-sizes `--audio-ctx` to the clip length; both are required for acceptable push-to-talk latency on laptop CPUs. Do not pass a reduced `--audio-ctx` with `auto` language — detection misfires and produces garbage transcripts.
 - Optional high-quality override: `R:/Models/whisper/ggml-large-v3.bin` via `TYPEMATE_WHISPER_MODEL` on high-memory machines.
-- The language picker is curated (`lib/src/models/speech_language_options.dart`): only languages the bundled model transcribes well are visible. Do not re-add a language without validating real dictation quality first.
+- The language picker is curated (`lib/src/models/speech_language_options.dart`): English, Hindi, and Hinglish only. Do not add a language without a validated dedicated model (quality and latency) first.
 - Use `tool/benchmark_whisper_cli.dart` to prove real transcription with a WAV sample.
 - Keep stderr diagnostics out of successful transcripts; whisper.cpp writes model/timing logs to stderr.
 

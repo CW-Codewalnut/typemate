@@ -237,11 +237,13 @@ Directory _typeMateDataDirectory({Map<String, String>? environment}) {
 typedef PathExists = bool Function(String path);
 
 const bundledWhisperCliRelativePath = 'bin/whisper/whisper-cli.exe';
-const bundledWhisperModelRelativePath = 'models/ggml-large-v3-turbo-q5_0.bin';
-// English routes to a much faster model: on laptop CPUs `small` transcribes
-// English as accurately as turbo at roughly a third of the latency, while
-// Hindi and the other languages need turbo's accuracy.
-const bundledEnglishWhisperModelRelativePath = 'models/ggml-small.bin';
+// One validated model per supported language: tiny.en for English and the
+// Vaani Hindi fine-tune for Hindi, both sub-second on a laptop CPU, plus the
+// turbo-sized Oriserve Apex fine-tune for romanized Hinglish output.
+const bundledWhisperModelRelativePath = 'models/ggml-tiny.en.bin';
+const bundledHindiWhisperModelRelativePath = 'models/ggml-tiny-vaani-hindi.bin';
+const bundledHinglishWhisperModelRelativePath =
+    'models/ggml-hindi2hinglish-apex-q5_1.bin';
 
 /// Creates the production STT engine backed by the whisper runtime that
 /// ships with the app. The runtime is required: a missing CLI or model is an
@@ -273,23 +275,29 @@ SttEngine createDefaultSttEngine({
     searchDirectories: searchDirectories,
     exists: exists,
   );
-  // An explicit model override applies to every language; otherwise English
-  // routes to the bundled fast model.
-  final englishModelPath = envModelPath.isNotEmpty
-      ? null
-      : _resolveRuntimeFile(
-          environmentValue: null,
-          relativePath: bundledEnglishWhisperModelRelativePath,
-          searchDirectories: searchDirectories,
-          exists: exists,
-        );
+  // An explicit model override applies to every language; otherwise Hindi
+  // and Hinglish route to their dedicated fine-tuned models.
+  final modelPathOverridesByLanguage = envModelPath.isNotEmpty
+      ? const <String, String>{}
+      : {
+          'hi': _resolveRuntimeFile(
+            environmentValue: null,
+            relativePath: bundledHindiWhisperModelRelativePath,
+            searchDirectories: searchDirectories,
+            exists: exists,
+          ),
+          'hinglish': _resolveRuntimeFile(
+            environmentValue: null,
+            relativePath: bundledHinglishWhisperModelRelativePath,
+            searchDirectories: searchDirectories,
+            exists: exists,
+          ),
+        };
 
   return WhisperCliSttEngine(
     executable: executable,
     modelPath: modelPath,
-    modelPathOverridesByLanguage: englishModelPath == null
-        ? const {}
-        : {'en': englishModelPath},
+    modelPathOverridesByLanguage: modelPathOverridesByLanguage,
     languageCodeProvider: languageCodeProvider,
   );
 }

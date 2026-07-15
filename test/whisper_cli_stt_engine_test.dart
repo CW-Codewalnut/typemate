@@ -265,40 +265,66 @@ void main() {
     expect(runner.arguments, isNot(contains('--prompt')));
   });
 
-  for (final language in const {
-    'it': 'Italian',
-    'pt': 'Portuguese',
-    'tr': 'Turkish',
-    'id': 'Indonesian',
-  }.entries) {
-    test(
-      'transcribe keeps ${language.value} output in the selected language',
-      () async {
-        final runner = FakeSttProcessRunner(
-          result: const SttProcessResult(exitCode: 0, output: 'Transcript.\n'),
-        );
-        final engine = WhisperCliSttEngine(
-          executable: 'whisper-cli',
-          modelPath: 'models/ggml-base.bin',
-          languageCodeProvider: () => language.key,
-          processRunner: runner,
-        );
-
-        await engine.transcribe(
-          AudioRecording(
-            path: '${language.key}.wav',
-            duration: const Duration(seconds: 1),
-          ),
-        );
-
-        final arguments = runner.arguments.join(' ');
-        expect(runner.arguments, containsAllInOrder(['-l', language.key]));
-        expect(runner.arguments, contains('--prompt'));
-        expect(arguments, contains('spoken ${language.value} audio'));
-        expect(arguments, contains('Do not translate into English'));
-      },
+  test('transcribe keeps English output in the selected language', () async {
+    final runner = FakeSttProcessRunner(
+      result: const SttProcessResult(exitCode: 0, output: 'Transcript.\n'),
     );
-  }
+    final engine = WhisperCliSttEngine(
+      executable: 'whisper-cli',
+      modelPath: 'models/ggml-tiny.en.bin',
+      languageCodeProvider: () => 'en',
+      processRunner: runner,
+    );
+
+    await engine.transcribe(
+      const AudioRecording(path: 'en.wav', duration: Duration(seconds: 1)),
+    );
+
+    final arguments = runner.arguments.join(' ');
+    expect(runner.arguments, containsAllInOrder(['-l', 'en']));
+    expect(runner.arguments, contains('--prompt'));
+    expect(arguments, contains('spoken English audio'));
+  });
+
+  test(
+    'transcribe maps Hinglish to the hi language flag without a prompt',
+    () async {
+      final runner = FakeSttProcessRunner(
+        result: const SttProcessResult(
+          exitCode: 0,
+          output: 'Aaj mausam bahut achchha hai.\n',
+        ),
+      );
+      final engine = WhisperCliSttEngine(
+        executable: 'whisper-cli',
+        modelPath: 'models/ggml-tiny.en.bin',
+        modelPathOverridesByLanguage: const {
+          'hinglish': 'models/ggml-hindi2hinglish-apex-q5_1.bin',
+        },
+        languageCodeProvider: () => 'hinglish',
+        processRunner: runner,
+      );
+
+      final transcript = await engine.transcribe(
+        const AudioRecording(
+          path: 'hinglish.wav',
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      expect(transcript, 'Aaj mausam bahut achchha hai.');
+      expect(
+        runner.arguments,
+        containsAllInOrder(['-m', 'models/ggml-hindi2hinglish-apex-q5_1.bin']),
+      );
+      // whisper-cli does not know 'hinglish'; the model is task-trained to
+      // romanize, so it runs as Hindi with no script prompt.
+      expect(runner.arguments, containsAllInOrder(['-l', 'hi']));
+      expect(runner.arguments, isNot(contains('--prompt')));
+      // The clip-sized encoder window still applies.
+      expect(runner.arguments, contains('--audio-ctx'));
+    },
+  );
 
   test('transcribe preserves Hindi UTF-8 transcript text', () async {
     final runner = FakeSttProcessRunner(

@@ -1,8 +1,9 @@
 import 'dart:io';
 
 /// Provisions the whisper runtime that ships with TypeMate:
-/// - models/ggml-large-v3-turbo-q5_0.bin (default STT model, all languages)
-/// - models/ggml-small.bin (fast model that English routes to)
+/// - models/ggml-tiny.en.bin (English)
+/// - models/ggml-tiny-vaani-hindi.bin (Hindi, Vaani fine-tune)
+/// - models/ggml-hindi2hinglish-apex-q5_1.bin (Hinglish, Oriserve Apex)
 /// - bin/whisper/ (whisper-cli and its DLLs, OpenBLAS build)
 ///
 /// All are gitignored because they exceed practical git limits, so a fresh
@@ -10,18 +11,29 @@ import 'dart:io';
 /// executable.
 
 class _ModelSpec {
-  const _ModelSpec(this.fileName, this.expectedSizeBytes);
+  const _ModelSpec(this.fileName, this.url, this.expectedSizeBytes);
 
   final String fileName;
+  final String url;
   final int expectedSizeBytes;
-
-  String get url =>
-      'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$fileName';
 }
 
 const _models = [
-  _ModelSpec('ggml-large-v3-turbo-q5_0.bin', 574041195),
-  _ModelSpec('ggml-small.bin', 487601967),
+  _ModelSpec(
+    'ggml-tiny.en.bin',
+    'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin',
+    77704715,
+  ),
+  _ModelSpec(
+    'ggml-tiny-vaani-hindi.bin',
+    'https://huggingface.co/skaturanus/whisper-vaani-hindi-ggml/resolve/main/whisper-tiny-vaani-ggml.bin',
+    77691730,
+  ),
+  _ModelSpec(
+    'ggml-hindi2hinglish-apex-q5_1.bin',
+    'https://huggingface.co/voquill/whisper-hindi2hinglish-apex-ggml/resolve/main/ggml-hindi2hinglish-apex-q5_1.bin',
+    624065675,
+  ),
 ];
 
 const whisperZipUrl =

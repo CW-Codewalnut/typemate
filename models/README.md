@@ -1,19 +1,22 @@
 # Local whisper models
 
-TypeMate bundles two Whisper models and routes between them by the selected
-language:
+TypeMate bundles one validated model per supported language and routes by
+the language selected in Settings (benchmarks from the target i5-11300H
+laptop, ~13s clip):
 
-- `ggml-small.bin` (~466 MB) — used for English; about 3x faster than turbo
-  on laptop CPUs with equivalent English accuracy.
-- `ggml-large-v3-turbo-q5_0.bin` (~574 MB) — used for Hindi, Auto, and all
-  other languages, where accuracy needs the larger model.
+- `ggml-tiny.en.bin` (~74 MB) — English, ~0.5s per clip.
+- `ggml-tiny-vaani-hindi.bin` (~74 MB) — Hindi (Vaani fine-tune), ~0.9s
+  per clip with near-turbo Hindi accuracy.
+- `ggml-hindi2hinglish-apex-q5_1.bin` (~595 MB) — Hinglish (Oriserve Apex
+  fine-tune) writes Hindi speech as romanized Hinglish; turbo-sized, so
+  noticeably slower (~7s per clip).
 
 The app resolves them first relative to the working directory and then
 relative to the executable directory. Windows release builds copy this
 folder (and `bin/whisper/`) next to the executable.
 
-The binary is not committed to git (GitHub rejects files over 100 MB).
-The Windows CMake build fetches it automatically when missing, so
+The binaries are not committed to git (they exceed practical git limits).
+The Windows CMake build fetches anything missing automatically, so
 `flutter build windows` and `flutter run -d windows` work on a fresh
 clone. To provision manually:
 
@@ -21,8 +24,9 @@ clone. To provision manually:
 dart run tool/fetch_whisper_runtime.dart
 ```
 
-If the model is missing at runtime the app fails with a clear
+If a model is missing at runtime the app fails with a clear
 `SttRuntimeException` — there is no silent fallback.
 
-`TYPEMATE_WHISPER_MODEL` still overrides the bundled model, for example to
-point at `ggml-large-v3.bin` on high-memory machines.
+`TYPEMATE_WHISPER_MODEL` overrides the bundled models (it then applies to
+every language), for example to point at `ggml-large-v3.bin` on
+high-memory machines.

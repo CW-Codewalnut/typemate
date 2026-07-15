@@ -120,9 +120,13 @@ endif()
 
 # Bundle the whisper runtime (model + CLI) next to the executable so
 # dictation works without any user configuration. Provision the source
-# folders with tool/fetch_whisper_runtime.dart.
+# folders with tool/fetch_whisper_runtime.dart. Fully re-copy the models
+# directory on each build so retired models do not linger in the bundle.
 set(WHISPER_MODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../models")
 if(EXISTS "${WHISPER_MODEL_DIR}")
+  install(CODE "
+    file(REMOVE_RECURSE \"${CMAKE_INSTALL_PREFIX}/models\")
+    " COMPONENT Runtime)
   install(DIRECTORY "${WHISPER_MODEL_DIR}"
     DESTINATION "${CMAKE_INSTALL_PREFIX}"
     COMPONENT Runtime)

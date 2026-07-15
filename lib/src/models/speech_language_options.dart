@@ -5,49 +5,23 @@ class SpeechLanguageOption {
   final String label;
 }
 
-/// Languages offered in the picker. Whisper technically accepts ~99
-/// languages, but transcription quality varies enormously; this list is
-/// curated to languages the bundled large-v3-turbo model transcribes well
-/// (roughly <=15% word error rate on the FLEURS benchmark — at or better
-/// than Hindi, which is the accepted quality floor). Thai and Cantonese are
-/// excluded because the turbo variant degrades them hardest.
+/// Languages offered in the picker. TypeMate ships one validated model per
+/// language: English (tiny.en, ~0.5s per clip), Hindi (Vaani fine-tune,
+/// ~0.9s), and Hinglish (Oriserve Apex fine-tune that writes Hindi speech
+/// in romanized Hinglish; turbo-sized, so noticeably slower at ~7s).
+/// There is intentionally no Auto option — language auto-detection needs
+/// the full encoder window, which is several times slower on laptop CPUs,
+/// and it misfires often enough to produce garbage transcripts.
 ///
-/// Do not add languages back without validating real dictation quality;
-/// a visible option must work.
+/// 'hinglish' is a TypeMate-internal code; the engine maps it to whisper's
+/// 'hi' language flag and routes it to the Hinglish model.
+///
+/// Do not add a language back without validating real dictation quality
+/// and latency with a dedicated model; a visible option must work.
 const speechLanguageOptions = [
-  SpeechLanguageOption(code: 'auto', label: 'Auto'),
-  SpeechLanguageOption(code: 'ar', label: 'Arabic'),
-  SpeechLanguageOption(code: 'bg', label: 'Bulgarian'),
-  SpeechLanguageOption(code: 'ca', label: 'Catalan'),
-  SpeechLanguageOption(code: 'cs', label: 'Czech'),
-  SpeechLanguageOption(code: 'da', label: 'Danish'),
-  SpeechLanguageOption(code: 'de', label: 'German'),
-  SpeechLanguageOption(code: 'el', label: 'Greek'),
   SpeechLanguageOption(code: 'en', label: 'English'),
-  SpeechLanguageOption(code: 'es', label: 'Spanish'),
-  SpeechLanguageOption(code: 'fi', label: 'Finnish'),
-  SpeechLanguageOption(code: 'fr', label: 'French'),
   SpeechLanguageOption(code: 'hi', label: 'Hindi'),
-  SpeechLanguageOption(code: 'hr', label: 'Croatian'),
-  SpeechLanguageOption(code: 'hu', label: 'Hungarian'),
-  SpeechLanguageOption(code: 'id', label: 'Indonesian'),
-  SpeechLanguageOption(code: 'it', label: 'Italian'),
-  SpeechLanguageOption(code: 'ja', label: 'Japanese'),
-  SpeechLanguageOption(code: 'ko', label: 'Korean'),
-  SpeechLanguageOption(code: 'ms', label: 'Malay'),
-  SpeechLanguageOption(code: 'nl', label: 'Dutch'),
-  SpeechLanguageOption(code: 'no', label: 'Norwegian'),
-  SpeechLanguageOption(code: 'pl', label: 'Polish'),
-  SpeechLanguageOption(code: 'pt', label: 'Portuguese'),
-  SpeechLanguageOption(code: 'ro', label: 'Romanian'),
-  SpeechLanguageOption(code: 'ru', label: 'Russian'),
-  SpeechLanguageOption(code: 'sk', label: 'Slovak'),
-  SpeechLanguageOption(code: 'sv', label: 'Swedish'),
-  SpeechLanguageOption(code: 'tl', label: 'Tagalog'),
-  SpeechLanguageOption(code: 'tr', label: 'Turkish'),
-  SpeechLanguageOption(code: 'uk', label: 'Ukrainian'),
-  SpeechLanguageOption(code: 'vi', label: 'Vietnamese'),
-  SpeechLanguageOption(code: 'zh', label: 'Chinese'),
+  SpeechLanguageOption(code: 'hinglish', label: 'Hinglish'),
 ];
 
 SpeechLanguageOption? speechLanguageOptionForCode(String code) {
