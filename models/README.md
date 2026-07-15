@@ -7,7 +7,9 @@ directory and then relative to the executable directory. Windows release
 builds copy this folder (and `bin/whisper/`) next to the executable.
 
 The binary is not committed to git (GitHub rejects files over 100 MB).
-Provision it together with the whisper CLI:
+The Windows CMake build fetches it automatically when missing, so
+`flutter build windows` and `flutter run -d windows` work on a fresh
+clone. To provision manually:
 
 ```bash
 dart run tool/fetch_whisper_runtime.dart
