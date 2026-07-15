@@ -194,6 +194,38 @@ void main() {
     },
   );
 
+  test('transcribe picks the per-language model when one is mapped', () async {
+    final runner = FakeSttProcessRunner(
+      result: const SttProcessResult(exitCode: 0, output: 'Hello.\n'),
+    );
+    final languageCodes = ['en', 'hi'];
+    final engine = WhisperCliSttEngine(
+      executable: 'whisper-cli',
+      modelPath: 'models/ggml-large-v3-turbo-q5_0.bin',
+      modelPathOverridesByLanguage: const {'en': 'models/ggml-small.bin'},
+      languageCodeProvider: () => languageCodes.removeAt(0),
+      processRunner: runner,
+    );
+
+    // English routes to the fast model.
+    await engine.transcribe(
+      const AudioRecording(path: 'clip.wav', duration: Duration(seconds: 2)),
+    );
+    expect(
+      runner.arguments,
+      containsAllInOrder(['-m', 'models/ggml-small.bin']),
+    );
+
+    // Hindi keeps the accurate default model.
+    await engine.transcribe(
+      const AudioRecording(path: 'clip.wav', duration: Duration(seconds: 2)),
+    );
+    expect(
+      runner.arguments,
+      containsAllInOrder(['-m', 'models/ggml-large-v3-turbo-q5_0.bin']),
+    );
+  });
+
   test('transcribe passes the selected language to whisper CLI', () async {
     final runner = FakeSttProcessRunner(
       result: const SttProcessResult(exitCode: 0, output: 'नमस्ते।\n'),

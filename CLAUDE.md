@@ -71,7 +71,8 @@ Rules:
 
 ## Local STT runtime
 
-- The whisper runtime is fully bundled with the app: the model at `models/ggml-large-v3-turbo-q5_0.bin` and the CLI (whisper.cpp v1.9.1 OpenBLAS build) at `bin/whisper/whisper-cli.exe`. No machine-specific paths.
+- The whisper runtime is fully bundled with the app: models under `models/` and the CLI (whisper.cpp v1.9.1 OpenBLAS build) at `bin/whisper/whisper-cli.exe`. No machine-specific paths.
+- Two bundled models, routed by selected language: English uses `models/ggml-small.bin` (~2s per clip on a laptop CPU, English accuracy on par with turbo), everything else including Hindi and Auto uses `models/ggml-large-v3-turbo-q5_0.bin` (accuracy first). `TYPEMATE_WHISPER_MODEL` overrides both and applies to every language.
 - Both are gitignored (the model exceeds GitHub's 100 MB file limit). The Windows CMake build fetches anything missing automatically via `tool/fetch_whisper_runtime.dart`, so `flutter build windows` and `flutter run -d windows` work on a fresh clone; the script can also be run manually. Release builds copy `models/` and `bin/` next to the executable.
 - Resolution order for each piece: env override (`TYPEMATE_WHISPER_CLI` / `TYPEMATE_WHISPER_MODEL`), then the bundled path relative to the working directory, then relative to the executable directory.
 - There is no mock fallback in production. If the CLI or model cannot be found, `createDefaultSttEngine` throws `SttRuntimeException` — a missing runtime is an installation defect, not a mode.

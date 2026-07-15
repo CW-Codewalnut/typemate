@@ -1,17 +1,28 @@
 import 'dart:io';
 
 /// Provisions the whisper runtime that ships with TypeMate:
-/// - models/ggml-large-v3-turbo-q5_0.bin (the default STT model)
+/// - models/ggml-large-v3-turbo-q5_0.bin (default STT model, all languages)
+/// - models/ggml-small.bin (fast model that English routes to)
 /// - bin/whisper/ (whisper-cli and its DLLs, OpenBLAS build)
 ///
-/// Both are gitignored because they exceed practical git limits, so a fresh
+/// All are gitignored because they exceed practical git limits, so a fresh
 /// clone runs this once. Release bundles copy both folders next to the
 /// executable.
 
-const modelFileName = 'ggml-large-v3-turbo-q5_0.bin';
-const modelUrl =
-    'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$modelFileName';
-const expectedModelSizeBytes = 574041195;
+class _ModelSpec {
+  const _ModelSpec(this.fileName, this.expectedSizeBytes);
+
+  final String fileName;
+  final int expectedSizeBytes;
+
+  String get url =>
+      'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$fileName';
+}
+
+const _models = [
+  _ModelSpec('ggml-large-v3-turbo-q5_0.bin', 574041195),
+  _ModelSpec('ggml-small.bin', 487601967),
+];
 
 const whisperZipUrl =
     'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-blas-bin-x64.zip';
@@ -28,34 +39,40 @@ Future<void> main(List<String> arguments) async {
   final force = arguments.contains('--force');
   final client = HttpClient();
   try {
-    await _fetchModel(client, force: force);
+    for (final model in _models) {
+      await _fetchModel(client, model, force: force);
+    }
     await _fetchCli(client, force: force);
   } finally {
     client.close();
   }
 }
 
-Future<void> _fetchModel(HttpClient client, {required bool force}) async {
-  final targetFile = File('models/$modelFileName');
+Future<void> _fetchModel(
+  HttpClient client,
+  _ModelSpec model, {
+  required bool force,
+}) async {
+  final targetFile = File('models/${model.fileName}');
   if (!force &&
       targetFile.existsSync() &&
-      targetFile.lengthSync() == expectedModelSizeBytes) {
+      targetFile.lengthSync() == model.expectedSizeBytes) {
     stdout.writeln('model_ready=${targetFile.absolute.path}');
     return;
   }
 
-  stdout.writeln('downloading=$modelUrl');
+  stdout.writeln('downloading=${model.url}');
   await targetFile.parent.create(recursive: true);
   final partFile = File('${targetFile.path}.part');
-  if (!await _download(client, modelUrl, partFile)) {
+  if (!await _download(client, model.url, partFile)) {
     exitCode = 1;
     return;
   }
 
   final downloadedSize = partFile.lengthSync();
-  if (downloadedSize != expectedModelSizeBytes) {
+  if (downloadedSize != model.expectedSizeBytes) {
     stderr.writeln(
-      'model_download_incomplete expected=$expectedModelSizeBytes '
+      'model_download_incomplete expected=${model.expectedSizeBytes} '
       'actual=$downloadedSize',
     );
     await partFile.delete();

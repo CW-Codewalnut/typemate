@@ -1,10 +1,16 @@
 # Local whisper models
 
-TypeMate bundles Whisper `large-v3-turbo` (q5_0 quantized, ~574 MB) as its
-default speech-to-text model. The app looks for it at
-`models/ggml-large-v3-turbo-q5_0.bin`, first relative to the working
-directory and then relative to the executable directory. Windows release
-builds copy this folder (and `bin/whisper/`) next to the executable.
+TypeMate bundles two Whisper models and routes between them by the selected
+language:
+
+- `ggml-small.bin` (~466 MB) — used for English; about 3x faster than turbo
+  on laptop CPUs with equivalent English accuracy.
+- `ggml-large-v3-turbo-q5_0.bin` (~574 MB) — used for Hindi, Auto, and all
+  other languages, where accuracy needs the larger model.
+
+The app resolves them first relative to the working directory and then
+relative to the executable directory. Windows release builds copy this
+folder (and `bin/whisper/`) next to the executable.
 
 The binary is not committed to git (GitHub rejects files over 100 MB).
 The Windows CMake build fetches it automatically when missing, so

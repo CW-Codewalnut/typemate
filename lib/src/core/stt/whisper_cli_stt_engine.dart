@@ -27,6 +27,7 @@ class WhisperCliSttEngine implements SttEngine {
   WhisperCliSttEngine({
     required this.executable,
     required this.modelPath,
+    this.modelPathOverridesByLanguage = const {},
     SttProcessRunner? processRunner,
     SttLanguageCodeProvider? languageCodeProvider,
   }) : processRunner = processRunner ?? const DartSttProcessRunner(),
@@ -34,6 +35,11 @@ class WhisperCliSttEngine implements SttEngine {
 
   final String executable;
   final String modelPath;
+
+  /// Smaller specialized models per language code. English can afford a much
+  /// faster model than the multilingual default without losing accuracy.
+  final Map<String, String> modelPathOverridesByLanguage;
+
   final SttProcessRunner processRunner;
   final SttLanguageCodeProvider languageCodeProvider;
 
@@ -62,7 +68,7 @@ class WhisperCliSttEngine implements SttEngine {
     final outputFilePrefix = _transcriptOutputFilePrefix();
     final result = await processRunner.run(executable, [
       '-m',
-      modelPath,
+      modelPathOverridesByLanguage[languageCode] ?? modelPath,
       '-f',
       recording.path,
       '--no-timestamps',
