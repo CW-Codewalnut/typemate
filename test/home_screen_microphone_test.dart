@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:typemate/src/components/content_page_shell.dart';
 import 'package:typemate/src/core/audio/audio_recorder.dart';
 import 'package:typemate/src/core/audio/ffmpeg_microphone_discovery.dart';
 import 'package:typemate/src/core/audio/mock_audio_recorder.dart';
@@ -69,6 +70,51 @@ void main() {
     expect(find.text('1 day streak'), findsOneWidget);
     expect(find.text('LONGEST STREAK | 1 DAY'), findsOneWidget);
     expect(find.byKey(const Key('insights-streak-grid')), findsOneWidget);
+  });
+
+  testWidgets('streak grid weekday labels render on a single line', (
+    tester,
+  ) async {
+    final historyController = DictationHistoryController();
+    await tester.pumpHome(historyController: historyController);
+    await historyController.addTranscript(
+      'Ship local dictation quickly',
+      duration: const Duration(seconds: 30),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Insights'));
+    await tester.pumpAndSettle();
+
+    for (final label in const [
+      'Sun',
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
+      'Sat',
+    ]) {
+      final size = tester.getSize(find.text(label));
+      expect(
+        size.height,
+        lessThan(24),
+        reason: '$label should not wrap onto a second line',
+      );
+    }
+  });
+
+  testWidgets('settings page uses the shared content shell layout', (
+    tester,
+  ) async {
+    await tester.pumpHome(
+      microphoneDiscovery: FakeMicrophoneDiscovery(const []),
+    );
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ContentPageShell), findsOneWidget);
   });
 
   testWidgets('insights page lays out at desktop width without exceptions', (
