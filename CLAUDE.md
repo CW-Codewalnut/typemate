@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 ## TypeMate engineering guide
 
@@ -72,7 +72,7 @@ Rules:
 ## Local STT runtime
 
 - The whisper runtime is fully bundled with the app: models under `models/` and the CLI (whisper.cpp v1.9.1 OpenBLAS build) at `bin/whisper/whisper-cli.exe`. No machine-specific paths.
-- Three bundled models, one per supported language (benchmarked on the target i5-11300H laptop): English uses `models/ggml-tiny.en.bin` (~0.5s per clip), Hindi uses `models/ggml-tiny-vaani-hindi.bin` (Vaani fine-tune, ~0.9s, near-turbo Hindi accuracy), Hinglish uses `models/ggml-hindi2hinglish-apex-q5_1.bin` (Oriserve Apex fine-tune; turbo-sized so ~7s, writes romanized Hinglish). `TYPEMATE_WHISPER_MODEL` overrides all and applies to every language.
+- Three bundled models, one per supported language (benchmarked on the target i5-11300H laptop): English uses `models/ggml-distil-small.en.bin` (~1.5s per clip; tiny.en looped and misheard Indian-English content), Hindi uses `models/ggml-small-vaani-hindi-q6.bin` (Vaani small fine-tune, ~2.8s, more noise-robust than the tiny variant), Hinglish uses `models/ggml-hindi2hinglish-apex-q5_1.bin` (Oriserve Apex fine-tune; turbo-sized so ~7s, writes romanized Hinglish). `TYPEMATE_WHISPER_MODEL` overrides all and applies to every language.
 - `hinglish` is a TypeMate-internal language code: the engine maps it to whisper's `hi` flag and sends no script prompt (the fine-tune romanizes on its own).
 - There is no Auto language option: detection needs the full encoder window (several times slower) and misfires into garbage transcripts. Default language is English.
 - All models are gitignored (they exceed practical git limits). The Windows CMake build fetches anything missing automatically via `tool/fetch_whisper_runtime.dart`, so `flutter build windows` and `flutter run -d windows` work on a fresh clone; the script can also be run manually. Release builds copy `models/` and `bin/` next to the executable.

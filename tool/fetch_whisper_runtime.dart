@@ -1,8 +1,8 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 /// Provisions the whisper runtime that ships with TypeMate:
-/// - models/ggml-tiny.en.bin (English)
-/// - models/ggml-tiny-vaani-hindi.bin (Hindi, Vaani fine-tune)
+/// - models/ggml-distil-small.en.bin (English)
+/// - models/ggml-small-vaani-hindi-q6.bin (Hindi, Vaani fine-tune)
 /// - models/ggml-hindi2hinglish-apex-q5_1.bin (Hinglish, Oriserve Apex)
 /// - bin/whisper/ (whisper-cli and its DLLs, OpenBLAS build)
 ///
@@ -20,14 +20,14 @@ class _ModelSpec {
 
 const _models = [
   _ModelSpec(
-    'ggml-tiny.en.bin',
-    'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin',
-    77704715,
+    'ggml-distil-small.en.bin',
+    'https://huggingface.co/distil-whisper/distil-small.en/resolve/main/ggml-distil-small.en.bin',
+    336191657,
   ),
   _ModelSpec(
-    'ggml-tiny-vaani-hindi.bin',
-    'https://huggingface.co/skaturanus/whisper-vaani-hindi-ggml/resolve/main/whisper-tiny-vaani-ggml.bin',
-    77691730,
+    'ggml-small-vaani-hindi-q6.bin',
+    'https://huggingface.co/skaturanus/whisper-vaani-hindi-ggml/resolve/main/whisper-small-vaani-ggml-q6.bin',
+    206820806,
   ),
   _ModelSpec(
     'ggml-hindi2hinglish-apex-q5_1.bin',
