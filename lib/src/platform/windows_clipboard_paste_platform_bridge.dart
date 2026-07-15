@@ -121,6 +121,7 @@ class WindowsClipboardPastePlatformBridge implements PlatformBridge {
     final overlayScriptFile = File(
       '${Directory.systemTemp.path}${Platform.pathSeparator}typemate-listening-overlay.ps1',
     );
+    await overlayScriptFile.parent.create(recursive: true);
     await overlayScriptFile.writeAsString(_overlayScript, flush: true);
 
     _overlayProcess = await overlayProcessStarter('powershell.exe', [

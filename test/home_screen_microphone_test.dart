@@ -36,6 +36,55 @@ void main() {
     },
   );
 
+  testWidgets('insights page shows real local usage metrics and streak grid', (
+    tester,
+  ) async {
+    final historyController = DictationHistoryController();
+
+    await tester.pumpHome(historyController: historyController);
+    await historyController.addTranscript(
+      'Ship local dictation quickly',
+      duration: const Duration(seconds: 30),
+    );
+    await historyController.addTranscript(
+      'Create reports',
+      duration: const Duration(seconds: 30),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Insights'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('insights-page')), findsOneWidget);
+    expect(find.text('Your Usage'), findsOneWidget);
+    expect(find.text('Your Voice'), findsNothing);
+    expect(find.text('Leaderboard'), findsNothing);
+    expect(find.text('Words per minute'), findsOneWidget);
+    expect(find.text('Dictation sessions'), findsOneWidget);
+    expect(find.text('Total words dictated'), findsOneWidget);
+    expect(find.text('Dictation activity'), findsOneWidget);
+    expect(find.text('6 words from local history'), findsOneWidget);
+    expect(find.text('6 TODAY'), findsOneWidget);
+    expect(find.text('TOTAL SESSIONS | 2'), findsOneWidget);
+    expect(find.text('1 day streak'), findsOneWidget);
+    expect(find.text('LONGEST STREAK | 1 DAY'), findsOneWidget);
+    expect(find.byKey(const Key('insights-streak-grid')), findsOneWidget);
+  });
+
+  testWidgets('insights page lays out at desktop width without exceptions', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpHome();
+    await tester.tap(find.text('Insights'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('insights-page')), findsOneWidget);
+  });
+
   testWidgets('settings page scans and shows microphones', (tester) async {
     await tester.pumpHome(
       microphoneDiscovery: FakeMicrophoneDiscovery([
