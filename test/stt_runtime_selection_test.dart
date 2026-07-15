@@ -24,6 +24,10 @@ void main() {
         'hi': 'C:/apps/typemate/models/ggml-tiny-vaani-hindi.bin',
         'hinglish': 'C:/apps/typemate/models/ggml-hindi2hinglish-apex-q5_1.bin',
       });
+      expect(
+        whisper.vadModelPath,
+        'C:/apps/typemate/models/ggml-silero-v5.1.2.bin',
+      );
       expect(whisper.languageCodeProvider(), 'auto');
     },
   );
