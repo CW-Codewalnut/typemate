@@ -133,6 +133,9 @@ class ParakeetServerSttEngine implements DisposableSttEngine {
       // No --model-type: Parakeet is a NeMo transducer, which the server's
       // model-type shortcut list does not cover; auto-detection handles it.
       '--num-work-threads=4',
+      // The server's default log file is ./log.txt in the working
+      // directory; keep it out of the app folder.
+      '--log-file=${Directory.systemTemp.path}/typemate-sherpa-server.log',
     ]);
     // The server logs verbosely while loading the model; without draining,
     // the full OS pipe buffer blocks it before it ever starts listening.
