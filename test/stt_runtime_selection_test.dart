@@ -1,63 +1,121 @@
 import 'package:typemate/src/app.dart';
-import 'package:typemate/src/core/stt/mock_stt_engine.dart';
 import 'package:typemate/src/core/stt/whisper_cli_stt_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
-    'uses verified local base Whisper model when environment is not configured',
+    'uses the bundled CLI and turbo model when environment is not configured',
     () {
       final engine = createDefaultSttEngine(
         environment: const {},
         pathExists: (_) => true,
+        currentDirectoryPath: 'C:/apps/typemate',
+        executableDirectoryPath: 'C:/apps/typemate/build/runner',
       );
 
       expect(engine, isA<WhisperCliSttEngine>());
       final whisper = engine as WhisperCliSttEngine;
       expect(
         whisper.executable,
-        'R:/Tools/whisper.cpp/v1.9.1-x64/Release/whisper-cli.exe',
+        'C:/apps/typemate/bin/whisper/whisper-cli.exe',
       );
-      expect(whisper.modelPath, 'R:/Models/whisper/ggml-base.bin');
+      expect(
+        whisper.modelPath,
+        'C:/apps/typemate/models/ggml-large-v3-turbo-q5_0.bin',
+      );
       expect(whisper.languageCodeProvider(), 'auto');
     },
   );
 
-  test('falls back to mock STT when no configured or verified paths exist', () {
-    final engine = createDefaultSttEngine(
-      environment: const {},
-      pathExists: (_) => false,
-    );
-
-    expect(engine, isA<MockSttEngine>());
-  });
-
   test(
-    'uses mock STT when only one whisper environment value is configured',
+    'falls back to executable directory when working directory has no runtime',
     () {
+      const executableCliPath =
+          'C:/apps/typemate/build/runner/bin/whisper/whisper-cli.exe';
+      const executableModelPath =
+          'C:/apps/typemate/build/runner/models/ggml-large-v3-turbo-q5_0.bin';
       final engine = createDefaultSttEngine(
-        environment: const {
-          'TYPEMATE_WHISPER_CLI': 'R:/Tools/whisper/whisper-cli.exe',
-        },
-        pathExists: (_) => false,
+        environment: const {},
+        pathExists: (path) =>
+            path == executableCliPath || path == executableModelPath,
+        currentDirectoryPath: 'C:/somewhere/else',
+        executableDirectoryPath: 'C:/apps/typemate/build/runner',
       );
 
-      expect(engine, isA<MockSttEngine>());
+      final whisper = engine as WhisperCliSttEngine;
+      expect(whisper.executable, executableCliPath);
+      expect(whisper.modelPath, executableModelPath);
     },
   );
 
-  test('uses whisper CLI STT when runtime and model are configured', () {
+  test('throws a clear error when the bundled whisper CLI is missing', () {
+    expect(
+      () => createDefaultSttEngine(
+        environment: const {},
+        pathExists: (_) => false,
+        currentDirectoryPath: 'C:/apps/typemate',
+        executableDirectoryPath: 'C:/apps/typemate/build/runner',
+      ),
+      throwsA(
+        isA<SttRuntimeException>().having(
+          (error) => error.message,
+          'message',
+          contains('bin/whisper/whisper-cli.exe'),
+        ),
+      ),
+    );
+  });
+
+  test('throws a clear error when the bundled model is missing', () {
+    expect(
+      () => createDefaultSttEngine(
+        environment: const {},
+        pathExists: (path) => path.endsWith('whisper-cli.exe'),
+        currentDirectoryPath: 'C:/apps/typemate',
+        executableDirectoryPath: 'C:/apps/typemate/build/runner',
+      ),
+      throwsA(
+        isA<SttRuntimeException>().having(
+          (error) => error.message,
+          'message',
+          contains('models/ggml-large-v3-turbo-q5_0.bin'),
+        ),
+      ),
+    );
+  });
+
+  test('environment overrides win over the bundled runtime', () {
     final engine = createDefaultSttEngine(
       environment: const {
         'TYPEMATE_WHISPER_CLI': 'R:/Tools/whisper/whisper-cli.exe',
-        'TYPEMATE_WHISPER_MODEL': 'R:/Models/ggml-base.bin',
+        'TYPEMATE_WHISPER_MODEL': 'R:/Models/whisper/ggml-large-v3.bin',
       },
+      pathExists: (_) => true,
+      currentDirectoryPath: 'C:/apps/typemate',
+      executableDirectoryPath: 'C:/apps/typemate/build/runner',
     );
 
-    expect(engine, isA<WhisperCliSttEngine>());
     final whisper = engine as WhisperCliSttEngine;
     expect(whisper.executable, 'R:/Tools/whisper/whisper-cli.exe');
-    expect(whisper.modelPath, 'R:/Models/ggml-base.bin');
+    expect(whisper.modelPath, 'R:/Models/whisper/ggml-large-v3.bin');
+  });
+
+  test('mixes an environment CLI override with the bundled model', () {
+    final engine = createDefaultSttEngine(
+      environment: const {
+        'TYPEMATE_WHISPER_CLI': 'R:/Tools/whisper/whisper-cli.exe',
+      },
+      pathExists: (path) => path.endsWith('.bin'),
+      currentDirectoryPath: 'C:/apps/typemate',
+      executableDirectoryPath: 'C:/apps/typemate/build/runner',
+    );
+
+    final whisper = engine as WhisperCliSttEngine;
+    expect(whisper.executable, 'R:/Tools/whisper/whisper-cli.exe');
+    expect(
+      whisper.modelPath,
+      'C:/apps/typemate/models/ggml-large-v3-turbo-q5_0.bin',
+    );
   });
 
   test('trims whisper environment values before creating the runtime', () {
@@ -66,6 +124,7 @@ void main() {
         'TYPEMATE_WHISPER_CLI': '  whisper-cli  ',
         'TYPEMATE_WHISPER_MODEL': '  models/tiny.bin  ',
       },
+      pathExists: (_) => true,
     );
 
     final whisper = engine as WhisperCliSttEngine;

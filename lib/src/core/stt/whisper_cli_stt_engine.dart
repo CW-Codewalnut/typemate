@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../speech_settings_controller.dart';
+import '../../models/speech_language_options.dart';
 import '../audio/audio_recorder.dart';
 import 'stt_engine.dart';
 
@@ -66,6 +66,13 @@ class WhisperCliSttEngine implements SttEngine {
       '-f',
       recording.path,
       '--no-timestamps',
+      // Greedy decoding keeps push-to-talk latency low; whisper-cli's default
+      // 5-beam search is several times slower on large models.
+      '--beam-size',
+      '1',
+      '--best-of',
+      '1',
+      ..._audioContextArguments(recording.duration, languageCode),
       '-otxt',
       '-of',
       outputFilePrefix,
@@ -102,6 +109,31 @@ class WhisperCliSttEngine implements SttEngine {
     } finally {
       await outputFile.delete().catchError((_) => outputFile);
     }
+  }
+
+  // Whisper always encodes a 30s window (1500 frames), so encoding cost is
+  // fixed no matter how short the clip is. Shrinking the window to the clip
+  // length (plus margin) cuts CPU latency several-fold for short dictation.
+  // Language auto-detection misfires on a reduced window and produces garbage
+  // transcripts, so the speedup only applies to an explicit language.
+  static const _fullAudioContextFrames = 1500;
+  static const _minimumAudioContextFrames = 128;
+  static const _audioContextMarginSeconds = 2.0;
+
+  List<String> _audioContextArguments(Duration duration, String languageCode) {
+    if (languageCode == 'auto' || duration <= Duration.zero) {
+      return const [];
+    }
+    final paddedSeconds =
+        duration.inMilliseconds / 1000 + _audioContextMarginSeconds;
+    if (paddedSeconds >= 30) {
+      return const [];
+    }
+    final frames = (paddedSeconds / 30 * _fullAudioContextFrames).ceil();
+    final context = frames < _minimumAudioContextFrames
+        ? _minimumAudioContextFrames
+        : frames;
+    return ['--audio-ctx', '$context'];
   }
 
   String _normalizedLanguageCode() {

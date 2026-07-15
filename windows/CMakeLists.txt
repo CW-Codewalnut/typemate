@@ -87,6 +87,22 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
+# Bundle the whisper runtime (model + CLI) next to the executable so
+# dictation works without any user configuration. Provision the source
+# folders with tool/fetch_whisper_runtime.dart.
+set(WHISPER_MODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../models")
+if(EXISTS "${WHISPER_MODEL_DIR}")
+  install(DIRECTORY "${WHISPER_MODEL_DIR}"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}"
+    COMPONENT Runtime)
+endif()
+set(WHISPER_CLI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../bin")
+if(EXISTS "${WHISPER_CLI_DIR}")
+  install(DIRECTORY "${WHISPER_CLI_DIR}"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}"
+    COMPONENT Runtime)
+endif()
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"

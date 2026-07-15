@@ -71,13 +71,13 @@ Rules:
 
 ## Local STT runtime
 
-- App runtime selection uses `TYPEMATE_WHISPER_CLI` and `TYPEMATE_WHISPER_MODEL`.
-- If either env var is missing, the app intentionally falls back to `MockSttEngine` preview mode.
-- `MockSttEngine` exists for tests and local preview when the real whisper.cpp runtime is not configured. Do not use it as proof that real dictation works.
-- Current verified Windows paths are:
-  - `R:/Tools/whisper.cpp/v1.9.1-x64/Release/whisper-cli.exe`
-  - portable default: `R:/Models/whisper/ggml-base.bin`
-  - optional high-quality override: `R:/Models/whisper/ggml-large-v3.bin` via `TYPEMATE_WHISPER_MODEL` on high-memory machines
+- The whisper runtime is fully bundled with the app: the model at `models/ggml-large-v3-turbo-q5_0.bin` and the CLI (whisper.cpp v1.9.1 OpenBLAS build) at `bin/whisper/whisper-cli.exe`. No machine-specific paths.
+- Both are gitignored (the model exceeds GitHub's 100 MB file limit). Provision a fresh clone with `dart run tool/fetch_whisper_runtime.dart`. Windows release builds copy `models/` and `bin/` next to the executable.
+- Resolution order for each piece: env override (`TYPEMATE_WHISPER_CLI` / `TYPEMATE_WHISPER_MODEL`), then the bundled path relative to the working directory, then relative to the executable directory.
+- There is no mock fallback in production. If the CLI or model cannot be found, `createDefaultSttEngine` throws `SttRuntimeException` — a missing runtime is an installation defect, not a mode.
+- `MockSttEngine` exists for tests only, injected explicitly (e.g. `DictationFlowApp(sttEngine: MockSttEngine())`). Do not use it as proof that real dictation works.
+- The engine uses greedy decoding and, when an explicit language is selected, right-sizes `--audio-ctx` to the clip length; both are required for acceptable push-to-talk latency on laptop CPUs. Do not pass a reduced `--audio-ctx` with `auto` language — detection misfires and produces garbage transcripts.
+- Optional high-quality override: `R:/Models/whisper/ggml-large-v3.bin` via `TYPEMATE_WHISPER_MODEL` on high-memory machines.
 - Use `tool/benchmark_whisper_cli.dart` to prove real transcription with a WAV sample.
 - Keep stderr diagnostics out of successful transcripts; whisper.cpp writes model/timing logs to stderr.
 
