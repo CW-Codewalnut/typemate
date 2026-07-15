@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/insights_stats.dart';
 import '../../../utils/text_metrics.dart';
+import '../../../components/auto_fit_text.dart';
 import '../../../components/dashboard_cards.dart';
 
 class InsightsActivityCard extends StatelessWidget {
@@ -65,25 +66,23 @@ class _ActivityCardHeader extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: Text(
+          child: AutoFitText(
             title,
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w800,
             ),
-            overflow: TextOverflow.ellipsis,
           ),
         ),
         const SizedBox(width: 12),
         Flexible(
-          child: Text(
+          child: AutoFitText(
             'TOTAL SESSIONS | $sessionCount',
-            key: const Key('insights-total-sessions'),
-            textAlign: TextAlign.end,
+            textKey: const Key('insights-total-sessions'),
+            alignment: Alignment.centerRight,
             style: theme.textTheme.labelSmall?.copyWith(
               fontWeight: FontWeight.w800,
               letterSpacing: 0.8,
             ),
-            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -121,14 +120,13 @@ class _UsageBar extends StatelessWidget {
                     Icon(row.icon, size: 18),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
+                      child: AutoFitText(
                         '${formatCompactNumber(row.words)} ${row.label}'
                             .toUpperCase(),
                         style: theme.textTheme.labelMedium?.copyWith(
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.5,
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -166,14 +164,13 @@ class _UsageBar extends StatelessWidget {
               const SizedBox(width: 12),
               SizedBox(
                 width: 170,
-                child: Text(
+                child: AutoFitText(
                   '${formatCompactNumber(row.words)} ${row.label}'
                       .toUpperCase(),
                   style: theme.textTheme.labelMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.5,
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],

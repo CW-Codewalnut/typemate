@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/insights_stats.dart';
 import '../../../utils/text_metrics.dart';
+import '../../../components/auto_fit_text.dart';
 import '../../../components/dashboard_cards.dart';
 
 class InsightsMetricsRow extends StatelessWidget {
@@ -139,10 +140,9 @@ class _SummaryLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Text(
+    return AutoFitText(
       '$value $label',
       style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-      overflow: TextOverflow.ellipsis,
     );
   }
 }

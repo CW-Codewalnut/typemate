@@ -21,33 +21,49 @@ class HistoryEntryCard extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 18),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 82,
-              child: Text(
-                formatTimeOfDay(entry.createdAt),
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
-                ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final time = Text(
+              formatTimeOfDay(entry.createdAt),
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
               ),
-            ),
-            const SizedBox(width: 22),
-            Expanded(
-              child: SelectableText(
-                entry.text,
-                style: theme.textTheme.bodyLarge,
-              ),
-            ),
-            const SizedBox(width: 12),
-            IconButton(
+            );
+            final transcript = SelectableText(
+              entry.text,
+              style: theme.textTheme.bodyLarge,
+            );
+            final copyButton = IconButton(
               tooltip: 'Copy transcription',
               onPressed: () => _copyToClipboard(context),
               icon: const Icon(Icons.copy),
-            ),
-          ],
+            );
+
+            // On narrow layouts the fixed time column eats too much width,
+            // so the time moves above the transcript instead.
+            if (constraints.maxWidth < 480) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [time, const Spacer(), copyButton]),
+                  const SizedBox(height: 4),
+                  transcript,
+                ],
+              );
+            }
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(width: 82, child: time),
+                const SizedBox(width: 22),
+                Expanded(child: transcript),
+                const SizedBox(width: 12),
+                copyButton,
+              ],
+            );
+          },
         ),
       ),
     );
