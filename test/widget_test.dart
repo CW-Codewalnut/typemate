@@ -1,6 +1,7 @@
 import 'package:typemate/src/app.dart';
 import 'package:typemate/src/core/audio/ffmpeg_microphone_discovery.dart';
 import 'package:typemate/src/core/hold_shortcut_controller.dart';
+import 'package:typemate/src/core/stt/mock_stt_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -10,6 +11,7 @@ void main() {
       DictationFlowApp(
         microphoneDiscovery: FakeMicrophoneDiscovery(),
         holdShortcutRegistrar: const NoopHoldShortcutRegistrar(),
+        sttEngine: MockSttEngine(),
       ),
     );
     await tester.pump(const Duration(milliseconds: 200));

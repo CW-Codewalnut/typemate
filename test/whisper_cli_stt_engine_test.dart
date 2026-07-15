@@ -96,6 +96,104 @@ void main() {
     expect(runner.arguments, containsAllInOrder(['-l', 'auto']));
   });
 
+  test(
+    'transcribe uses greedy decoding to keep dictation latency low',
+    () async {
+      final runner = FakeSttProcessRunner(
+        result: const SttProcessResult(exitCode: 0, output: 'Hello.\n'),
+      );
+      final engine = WhisperCliSttEngine(
+        executable: 'whisper-cli',
+        modelPath: 'models/ggml-large-v3-turbo-q5_0.bin',
+        processRunner: runner,
+      );
+
+      await engine.transcribe(
+        const AudioRecording(
+          path: 'build/recordings/sample.wav',
+          duration: Duration(seconds: 1),
+        ),
+      );
+
+      expect(runner.arguments, containsAllInOrder(['--beam-size', '1']));
+      expect(runner.arguments, containsAllInOrder(['--best-of', '1']));
+    },
+  );
+
+  test(
+    'transcribe right-sizes the encoder window to the clip length',
+    () async {
+      final runner = FakeSttProcessRunner(
+        result: const SttProcessResult(exitCode: 0, output: 'Hello.\n'),
+      );
+      final engine = WhisperCliSttEngine(
+        executable: 'whisper-cli',
+        modelPath: 'models/ggml-large-v3-turbo-q5_0.bin',
+        languageCodeProvider: () => 'en',
+        processRunner: runner,
+      );
+
+      // 8 seconds of audio + 2s margin = 10s of the 30s window -> 500 frames.
+      await engine.transcribe(
+        const AudioRecording(path: 'clip.wav', duration: Duration(seconds: 8)),
+      );
+      expect(runner.arguments, containsAllInOrder(['--audio-ctx', '500']));
+
+      // Very short clips keep a minimum context.
+      await engine.transcribe(
+        const AudioRecording(path: 'clip.wav', duration: Duration(seconds: 1)),
+      );
+      expect(runner.arguments, containsAllInOrder(['--audio-ctx', '150']));
+    },
+  );
+
+  test(
+    'transcribe keeps the full encoder window for auto language detection',
+    () async {
+      // Language detection misfires on a reduced window and produces garbage
+      // transcripts, so the speedup only applies to an explicit language.
+      final runner = FakeSttProcessRunner(
+        result: const SttProcessResult(exitCode: 0, output: 'Hello.\n'),
+      );
+      final engine = WhisperCliSttEngine(
+        executable: 'whisper-cli',
+        modelPath: 'models/ggml-large-v3-turbo-q5_0.bin',
+        languageCodeProvider: () => 'auto',
+        processRunner: runner,
+      );
+
+      await engine.transcribe(
+        const AudioRecording(path: 'clip.wav', duration: Duration(seconds: 8)),
+      );
+      expect(runner.arguments, isNot(contains('--audio-ctx')));
+    },
+  );
+
+  test(
+    'transcribe keeps the full encoder window when duration is unknown or long',
+    () async {
+      final runner = FakeSttProcessRunner(
+        result: const SttProcessResult(exitCode: 0, output: 'Hello.\n'),
+      );
+      final engine = WhisperCliSttEngine(
+        executable: 'whisper-cli',
+        modelPath: 'models/ggml-large-v3-turbo-q5_0.bin',
+        languageCodeProvider: () => 'en',
+        processRunner: runner,
+      );
+
+      await engine.transcribe(
+        const AudioRecording(path: 'clip.wav', duration: Duration.zero),
+      );
+      expect(runner.arguments, isNot(contains('--audio-ctx')));
+
+      await engine.transcribe(
+        const AudioRecording(path: 'clip.wav', duration: Duration(seconds: 40)),
+      );
+      expect(runner.arguments, isNot(contains('--audio-ctx')));
+    },
+  );
+
   test('transcribe passes the selected language to whisper CLI', () async {
     final runner = FakeSttProcessRunner(
       result: const SttProcessResult(exitCode: 0, output: 'नमस्ते।\n'),

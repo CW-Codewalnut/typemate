@@ -16,7 +16,6 @@ import 'core/platform/mock_platform_bridge.dart';
 import 'core/platform/platform_bridge.dart';
 import 'core/platform/windows_clipboard_paste_platform_bridge.dart';
 import 'core/platform/windows_polling_hold_shortcut_registrar.dart';
-import 'core/stt/mock_stt_engine.dart';
 import 'core/stt/stt_engine.dart';
 import 'core/stt/whisper_cli_stt_engine.dart';
 import 'features/home/home_screen.dart';
@@ -26,10 +25,12 @@ class DictationFlowApp extends StatefulWidget {
     super.key,
     this.microphoneDiscovery,
     this.holdShortcutRegistrar,
+    this.sttEngine,
   });
 
   final MicrophoneDiscovery? microphoneDiscovery;
   final HoldShortcutRegistrar? holdShortcutRegistrar;
+  final SttEngine? sttEngine;
 
   @override
   State<DictationFlowApp> createState() => _DictationFlowAppState();
@@ -63,9 +64,11 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
     platformBridge = createDefaultPlatformBridge();
     controller = DictationController(
       platformBridge: platformBridge,
-      sttEngine: createDefaultSttEngine(
-        languageCodeProvider: () => speechSettingsController.languageCode,
-      ),
+      sttEngine:
+          widget.sttEngine ??
+          createDefaultSttEngine(
+            languageCodeProvider: () => speechSettingsController.languageCode,
+          ),
       onTranscriptGenerated: historyController.addTranscript,
       audioRecorderProvider: () {
         final selectedMicrophone = microphoneController.selectedMicrophone;
@@ -216,40 +219,70 @@ Directory _typeMateDataDirectory({Map<String, String>? environment}) {
 
 typedef PathExists = bool Function(String path);
 
-const verifiedWhisperCliPath =
-    'R:/Tools/whisper.cpp/v1.9.1-x64/Release/whisper-cli.exe';
-const verifiedWhisperModelPath = 'R:/Models/whisper/ggml-base.bin';
+const bundledWhisperCliRelativePath = 'bin/whisper/whisper-cli.exe';
+const bundledWhisperModelRelativePath = 'models/ggml-large-v3-turbo-q5_0.bin';
 
+/// Creates the production STT engine backed by the whisper runtime that
+/// ships with the app. The runtime is required: a missing CLI or model is an
+/// installation defect and throws instead of degrading silently.
 SttEngine createDefaultSttEngine({
   Map<String, String>? environment,
   PathExists? pathExists,
   SttLanguageCodeProvider? languageCodeProvider,
+  String? currentDirectoryPath,
+  String? executableDirectoryPath,
 }) {
   final values = environment ?? Platform.environment;
-  final executable = values['TYPEMATE_WHISPER_CLI']?.trim() ?? '';
-  final modelPath = values['TYPEMATE_WHISPER_MODEL']?.trim() ?? '';
-
-  if (executable.isNotEmpty && modelPath.isNotEmpty) {
-    return WhisperCliSttEngine(
-      executable: executable,
-      modelPath: modelPath,
-      languageCodeProvider: languageCodeProvider,
-    );
-  }
-
   final exists = pathExists ?? (path) => File(path).existsSync();
-  if (executable.isEmpty &&
-      modelPath.isEmpty &&
-      exists(verifiedWhisperCliPath)) {
-    if (!exists(verifiedWhisperModelPath)) {
-      return MockSttEngine();
-    }
-    return WhisperCliSttEngine(
-      executable: verifiedWhisperCliPath,
-      modelPath: verifiedWhisperModelPath,
-      languageCodeProvider: languageCodeProvider,
-    );
+  final searchDirectories = [
+    currentDirectoryPath ?? Directory.current.path,
+    executableDirectoryPath ?? File(Platform.resolvedExecutable).parent.path,
+  ];
+
+  final executable = _resolveRuntimeFile(
+    environmentValue: values['TYPEMATE_WHISPER_CLI'],
+    relativePath: bundledWhisperCliRelativePath,
+    searchDirectories: searchDirectories,
+    exists: exists,
+  );
+  final modelPath = _resolveRuntimeFile(
+    environmentValue: values['TYPEMATE_WHISPER_MODEL'],
+    relativePath: bundledWhisperModelRelativePath,
+    searchDirectories: searchDirectories,
+    exists: exists,
+  );
+
+  return WhisperCliSttEngine(
+    executable: executable,
+    modelPath: modelPath,
+    languageCodeProvider: languageCodeProvider,
+  );
+}
+
+String _resolveRuntimeFile({
+  required String? environmentValue,
+  required String relativePath,
+  required List<String> searchDirectories,
+  required PathExists exists,
+}) {
+  final override = environmentValue?.trim() ?? '';
+  if (override.isNotEmpty) {
+    return override;
   }
 
-  return MockSttEngine();
+  final candidates = [
+    for (final directory in searchDirectories)
+      '${directory.replaceAll('\\', '/')}/$relativePath',
+  ];
+  for (final candidate in candidates) {
+    if (exists(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw SttRuntimeException(
+    'TypeMate installation is broken: $relativePath was not found. '
+    'Searched: ${candidates.join(', ')}. '
+    'Reinstall the app or run: dart run tool/fetch_whisper_runtime.dart',
+  );
 }

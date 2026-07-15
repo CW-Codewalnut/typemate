@@ -36,6 +36,14 @@ migrate_working_dir/
 node_modules/
 .gitnexus/
 
+# The bundled whisper runtime (model + CLI binaries) is fetched with
+# tool/fetch_whisper_runtime.dart. The model is too large for git (GitHub
+# rejects files over 100 MB) and the CLI binaries follow it for consistency.
+/models/*.bin
+/models/*.part
+/bin/whisper/*.exe
+/bin/whisper/*.dll
+
 # Symbolication related
 app.*.symbols
 
