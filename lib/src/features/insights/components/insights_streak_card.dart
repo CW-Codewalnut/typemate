@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/insights_stats.dart';
 import '../../../utils/text_metrics.dart';
+import '../../../components/auto_fit_text.dart';
 import '../../../components/dashboard_cards.dart';
 
 class InsightsStreakCard extends StatelessWidget {
@@ -44,26 +45,24 @@ class _StreakHeader extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: Text(
+          child: AutoFitText(
             currentStreakLabel,
-            key: const Key('insights-current-streak'),
+            textKey: const Key('insights-current-streak'),
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w800,
             ),
-            overflow: TextOverflow.ellipsis,
           ),
         ),
         const SizedBox(width: 12),
         Flexible(
-          child: Text(
+          child: AutoFitText(
             longestStreakLabel,
-            key: const Key('insights-longest-streak'),
-            textAlign: TextAlign.end,
+            textKey: const Key('insights-longest-streak'),
+            alignment: Alignment.centerRight,
             style: theme.textTheme.labelSmall?.copyWith(
               fontWeight: FontWeight.w800,
               letterSpacing: 0.5,
             ),
-            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],

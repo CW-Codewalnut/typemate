@@ -104,6 +104,96 @@ void main() {
     }
   });
 
+  testWidgets('insights card labels scale down instead of truncating', (
+    tester,
+  ) async {
+    final historyController = DictationHistoryController();
+    await tester.pumpHome(historyController: historyController);
+    await historyController.addTranscript(
+      'Ship local dictation quickly',
+      duration: const Duration(seconds: 30),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Insights'));
+    await tester.pumpAndSettle();
+
+    for (final key in const [
+      'insights-total-sessions',
+      'insights-current-streak',
+      'insights-longest-streak',
+    ]) {
+      expect(
+        find.ancestor(
+          of: find.byKey(Key(key)),
+          matching: find.byType(FittedBox),
+        ),
+        findsWidgets,
+        reason: '$key should scale down to fit instead of showing an ellipsis',
+      );
+    }
+  });
+
+  testWidgets('history entries stack the time above the transcript on '
+      'mobile width', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final historyController = DictationHistoryController();
+    await tester.pumpHome(historyController: historyController);
+    await historyController.addTranscript(
+      'Ship local dictation quickly',
+      duration: const Duration(seconds: 30),
+    );
+    await tester.pumpAndSettle();
+
+    final timeFinder = find.byWidgetPredicate(
+      (widget) =>
+          widget is Text &&
+          RegExp(r'^\d{2}:\d{2}$').hasMatch(widget.data ?? ''),
+    );
+    final transcriptFinder = find.text('Ship local dictation quickly');
+
+    expect(timeFinder, findsOneWidget);
+    expect(
+      tester.getTopLeft(transcriptFinder).dy,
+      greaterThan(tester.getBottomLeft(timeFinder).dy - 1),
+      reason: 'transcript should sit below the time on narrow layouts',
+    );
+    expect(
+      tester.getTopLeft(transcriptFinder).dx,
+      moreOrLessEquals(tester.getTopLeft(timeFinder).dx, epsilon: 1),
+      reason: 'transcript should align with the time, not indent past it',
+    );
+  });
+
+  testWidgets('history entries keep the time beside the transcript on '
+      'desktop width', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final historyController = DictationHistoryController();
+    await tester.pumpHome(historyController: historyController);
+    await historyController.addTranscript(
+      'Ship local dictation quickly',
+      duration: const Duration(seconds: 30),
+    );
+    await tester.pumpAndSettle();
+
+    final timeFinder = find.byWidgetPredicate(
+      (widget) =>
+          widget is Text &&
+          RegExp(r'^\d{2}:\d{2}$').hasMatch(widget.data ?? ''),
+    );
+    final transcriptFinder = find.text('Ship local dictation quickly');
+
+    expect(
+      tester.getTopLeft(transcriptFinder).dx,
+      greaterThan(tester.getTopRight(timeFinder).dx),
+      reason: 'transcript should sit beside the time on wide layouts',
+    );
+  });
+
   testWidgets('settings page uses the shared content shell layout', (
     tester,
   ) async {
