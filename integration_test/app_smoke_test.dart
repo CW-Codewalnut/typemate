@@ -7,7 +7,12 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('app shell loads with history and settings', (tester) async {
-    await tester.pumpWidget(DictationFlowApp(sttEngine: MockSttEngine()));
+    await tester.pumpWidget(
+      DictationFlowApp(
+        sttEngine: MockSttEngine(),
+        splashDuration: Duration.zero,
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('TypeMate'), findsOneWidget);

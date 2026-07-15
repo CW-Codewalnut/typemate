@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'components/app_scroll_behavior.dart';
+import 'components/splash_screen.dart';
 import 'core/audio/ffmpeg_microphone_discovery.dart';
 import 'core/audio/microphone_audio_recorder_factory.dart';
 import 'core/dictation_controller.dart';
@@ -26,11 +27,13 @@ class DictationFlowApp extends StatefulWidget {
     this.microphoneDiscovery,
     this.holdShortcutRegistrar,
     this.sttEngine,
+    this.splashDuration = const Duration(milliseconds: 900),
   });
 
   final MicrophoneDiscovery? microphoneDiscovery;
   final HoldShortcutRegistrar? holdShortcutRegistrar;
   final SttEngine? sttEngine;
+  final Duration splashDuration;
 
   @override
   State<DictationFlowApp> createState() => _DictationFlowAppState();
@@ -43,10 +46,19 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
   late final SpeechSettingsController speechSettingsController;
   late final HoldShortcutController shortcutController;
   late final PlatformBridge platformBridge;
+  late bool _showSplash;
 
   @override
   void initState() {
     super.initState();
+    _showSplash = widget.splashDuration > Duration.zero;
+    if (_showSplash) {
+      Timer(widget.splashDuration, () {
+        if (mounted) {
+          setState(() => _showSplash = false);
+        }
+      });
+    }
     final recorderFactory = MicrophoneAudioRecorderFactory.windows(
       outputDirectory: Directory('build/recordings'),
     );
@@ -141,12 +153,17 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
         ],
         useMaterial3: true,
       ),
-      home: HomeScreen(
-        controller: controller,
-        historyController: historyController,
-        microphoneController: microphoneController,
-        speechSettingsController: speechSettingsController,
-        shortcutController: shortcutController,
+      home: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        child: _showSplash
+            ? const SplashScreen()
+            : HomeScreen(
+                controller: controller,
+                historyController: historyController,
+                microphoneController: microphoneController,
+                speechSettingsController: speechSettingsController,
+                shortcutController: shortcutController,
+              ),
       ),
     );
   }
