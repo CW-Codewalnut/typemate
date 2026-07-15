@@ -23,7 +23,7 @@ class NoopSpeechSettingsStore implements SpeechSettingsStore {
 
   @override
   Future<SpeechSettingsSnapshot> load() async =>
-      const SpeechSettingsSnapshot(languageCode: 'auto');
+      const SpeechSettingsSnapshot(languageCode: 'en');
 
   @override
   Future<void> save(SpeechSettingsSnapshot snapshot) async {}
@@ -37,7 +37,7 @@ class FileSpeechSettingsStore implements SpeechSettingsStore {
   @override
   Future<SpeechSettingsSnapshot> load() async {
     if (!await file.exists()) {
-      return const SpeechSettingsSnapshot(languageCode: 'auto');
+      return const SpeechSettingsSnapshot(languageCode: 'en');
     }
 
     final decoded = jsonDecode(await file.readAsString());
@@ -47,7 +47,7 @@ class FileSpeechSettingsStore implements SpeechSettingsStore {
       );
     }
 
-    return const SpeechSettingsSnapshot(languageCode: 'auto');
+    return const SpeechSettingsSnapshot(languageCode: 'en');
   }
 
   @override
@@ -60,7 +60,7 @@ class FileSpeechSettingsStore implements SpeechSettingsStore {
   }
 
   static String _knownLanguageCode(String code) =>
-      speechLanguageOptionForCode(code) != null ? code : 'auto';
+      speechLanguageOptionForCode(code) != null ? code : 'en';
 }
 
 class SpeechSettingsController extends ChangeNotifier {
@@ -68,7 +68,7 @@ class SpeechSettingsController extends ChangeNotifier {
 
   final SpeechSettingsStore store;
 
-  String _languageCode = 'auto';
+  String _languageCode = 'en';
 
   String get languageCode => _languageCode;
   SpeechLanguageOption get selectedLanguage => speechLanguageOptions.firstWhere(

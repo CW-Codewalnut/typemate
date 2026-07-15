@@ -83,7 +83,7 @@ class WhisperCliSttEngine implements SttEngine {
       '-of',
       outputFilePrefix,
       '-l',
-      languageCode,
+      _cliLanguageByCode[languageCode] ?? languageCode,
       ..._promptArgumentsForLanguage(languageCode),
     ]);
 
@@ -142,13 +142,19 @@ class WhisperCliSttEngine implements SttEngine {
     return ['--audio-ctx', '$context'];
   }
 
+  // TypeMate-internal codes that whisper-cli does not know: Hinglish is
+  // Hindi speech decoded by a fine-tune that writes romanized output.
+  static const _cliLanguageByCode = {'hinglish': 'hi'};
+
   String _normalizedLanguageCode() {
     final code = languageCodeProvider().trim().toLowerCase();
     return code.isEmpty ? 'auto' : code;
   }
 
   List<String> _promptArgumentsForLanguage(String languageCode) {
-    if (languageCode == 'auto') {
+    if (languageCode == 'auto' || languageCode == 'hinglish') {
+      // The Hinglish fine-tune is task-trained; a Devanagari prompt would
+      // fight its romanized output.
       return const [];
     }
     final languageLabel = speechLanguageLabelForCode(languageCode);

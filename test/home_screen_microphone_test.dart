@@ -280,20 +280,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Speech recognition'), findsOneWidget);
-    expect(find.text('Auto'), findsOneWidget);
+    expect(find.text('English'), findsOneWidget);
     expect(find.textContaining('Model:'), findsNothing);
     expect(find.textContaining('Whisper.cpp'), findsNothing);
 
-    await tester.tap(find.text('Auto'));
+    await tester.tap(find.text('English'));
     await tester.pumpAndSettle();
-    for (
-      var attempt = 0;
-      attempt < 20 && find.text('Hindi').evaluate().isEmpty;
-      attempt++
-    ) {
-      await tester.drag(find.byType(Scrollable).last, const Offset(0, -360));
-      await tester.pumpAndSettle();
-    }
     await tester.tap(find.text('Hindi').last);
     await tester.pumpAndSettle();
 
