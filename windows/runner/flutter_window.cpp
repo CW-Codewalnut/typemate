@@ -4,8 +4,55 @@
 #include <flutter/standard_method_codec.h>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "flutter/generated_plugin_registrant.h"
+
+namespace {
+
+// Types text into the focused field of whichever window has keyboard focus,
+// using SendInput unicode events. Unlike clipboard-paste insertion, this
+// leaves the user's clipboard untouched and works for any script whisper can
+// produce (Latin, Devanagari, CJK, ...).
+bool InsertTextIntoFocusedField(const std::string& utf8_text) {
+  if (utf8_text.empty()) {
+    return true;
+  }
+
+  int wide_length = ::MultiByteToWideChar(
+      CP_UTF8, 0, utf8_text.data(), static_cast<int>(utf8_text.size()),
+      nullptr, 0);
+  if (wide_length <= 0) {
+    return false;
+  }
+  std::wstring wide_text(wide_length, L'\0');
+  ::MultiByteToWideChar(CP_UTF8, 0, utf8_text.data(),
+                        static_cast<int>(utf8_text.size()), wide_text.data(),
+                        wide_length);
+
+  std::vector<INPUT> inputs;
+  inputs.reserve(wide_text.size() * 2);
+  for (wchar_t unit : wide_text) {
+    // Edit controls expect carriage return for line breaks.
+    if (unit == L'\n') {
+      unit = L'\r';
+    }
+    INPUT key_down = {};
+    key_down.type = INPUT_KEYBOARD;
+    key_down.ki.wScan = unit;
+    key_down.ki.dwFlags = KEYEVENTF_UNICODE;
+    INPUT key_up = key_down;
+    key_up.ki.dwFlags |= KEYEVENTF_KEYUP;
+    inputs.push_back(key_down);
+    inputs.push_back(key_up);
+  }
+
+  UINT sent = ::SendInput(static_cast<UINT>(inputs.size()), inputs.data(),
+                          sizeof(INPUT));
+  return sent == inputs.size();
+}
+
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -56,6 +103,28 @@ bool FlutterWindow::OnCreate() {
         if (call.method_name() == "hideOverlay") {
           overlay_.Hide();
           result->Success();
+          return;
+        }
+        if (call.method_name() == "insertText") {
+          std::string text;
+          const auto* arguments =
+              std::get_if<flutter::EncodableMap>(call.arguments());
+          if (arguments) {
+            auto text_it = arguments->find(flutter::EncodableValue("text"));
+            if (text_it != arguments->end()) {
+              if (const auto* text_string =
+                      std::get_if<std::string>(&text_it->second)) {
+                text = *text_string;
+              }
+            }
+          }
+          if (InsertTextIntoFocusedField(text)) {
+            result->Success();
+          } else {
+            result->Error("insert_failed",
+                          "SendInput could not deliver the transcript to the "
+                          "focused field.");
+          }
           return;
         }
         result->NotImplemented();

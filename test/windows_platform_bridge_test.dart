@@ -1,8 +1,8 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:typemate/src/core/platform/windows_clipboard_paste_platform_bridge.dart';
+import 'package:typemate/src/core/platform/windows_platform_bridge.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -24,10 +24,48 @@ void main() {
   });
 
   test(
-    'copies transcript to clipboard and sends Ctrl+V through PowerShell',
+    'types transcript through the native channel without using the clipboard',
+    () async {
+      final nativeCalls = <({String method, Object? arguments})>[];
+      final processCalls = <({String executable, List<String> arguments})>[];
+      final bridge = WindowsPlatformBridge(
+        nativeMethodInvoker: <T>(method, [arguments]) async {
+          nativeCalls.add((method: method, arguments: arguments));
+          return null;
+        },
+        processRunner: (executable, arguments) async {
+          processCalls.add((executable: executable, arguments: arguments));
+          return const PlatformProcessResult(exitCode: 0);
+        },
+      );
+
+      await bridge.insertTextIntoFocusedField('नमस्ते TypeMate');
+
+      expect(nativeCalls, hasLength(1));
+      expect(nativeCalls.single.method, 'insertText');
+      expect(nativeCalls.single.arguments, {'text': 'नमस्ते TypeMate'});
+      expect(platformCalls, isEmpty, reason: 'clipboard must stay untouched');
+      expect(processCalls, isEmpty);
+    },
+  );
+
+  test('native runner injects keystrokes with SendInput unicode events', () {
+    final source = File('windows/runner/flutter_window.cpp').readAsStringSync();
+
+    expect(source, contains('insertText'));
+    expect(source, contains('KEYEVENTF_UNICODE'));
+    expect(source, contains('SendInput'));
+    expect(source, contains('MultiByteToWideChar'));
+  });
+
+  test(
+    'falls back to clipboard paste when the native channel is unavailable',
     () async {
       final processCalls = <({String executable, List<String> arguments})>[];
-      final bridge = WindowsClipboardPastePlatformBridge(
+      final bridge = WindowsPlatformBridge(
+        nativeMethodInvoker: <T>(method, [arguments]) async {
+          throw MissingPluginException();
+        },
         processRunner: (executable, arguments) async {
           processCalls.add((executable: executable, arguments: arguments));
           return const PlatformProcessResult(exitCode: 0);
@@ -47,8 +85,11 @@ void main() {
     },
   );
 
-  test('throws when paste command fails', () async {
-    final bridge = WindowsClipboardPastePlatformBridge(
+  test('throws when the fallback paste command fails', () async {
+    final bridge = WindowsPlatformBridge(
+      nativeMethodInvoker: <T>(method, [arguments]) async {
+        throw MissingPluginException();
+      },
       processRunner: (_, _) async =>
           const PlatformProcessResult(exitCode: 1, stderr: 'paste failed'),
     );
@@ -61,7 +102,7 @@ void main() {
 
   test('shows native overlay through Windows method channel', () async {
     final calls = <({String method, Object? arguments})>[];
-    final bridge = WindowsClipboardPastePlatformBridge(
+    final bridge = WindowsPlatformBridge(
       nativeMethodInvoker: <T>(method, [arguments]) async {
         calls.add((method: method, arguments: arguments));
         return null;
@@ -88,7 +129,7 @@ void main() {
     () async {
       final started = <({String executable, List<String> arguments})>[];
       final overlayProcess = FakeOverlayProcess();
-      final bridge = WindowsClipboardPastePlatformBridge(
+      final bridge = WindowsPlatformBridge(
         overlayProcessStarter: (executable, arguments) async {
           started.add((executable: executable, arguments: arguments));
           return overlayProcess;
@@ -133,7 +174,7 @@ void main() {
     final started = <({String executable, List<String> arguments})>[];
     final listeningProcess = FakeOverlayProcess();
     final transcribingProcess = FakeOverlayProcess();
-    final bridge = WindowsClipboardPastePlatformBridge(
+    final bridge = WindowsPlatformBridge(
       overlayProcessStarter: (executable, arguments) async {
         started.add((executable: executable, arguments: arguments));
         return started.length == 1 ? listeningProcess : transcribingProcess;
@@ -169,7 +210,7 @@ void main() {
     'registers TypeMate in the Run key and Startup folder shortcut',
     () async {
       final processCalls = <({String executable, List<String> arguments})>[];
-      final bridge = WindowsClipboardPastePlatformBridge(
+      final bridge = WindowsPlatformBridge(
         processRunner: (executable, arguments) async {
           processCalls.add((executable: executable, arguments: arguments));
           return const PlatformProcessResult(exitCode: 0);
@@ -199,7 +240,7 @@ void main() {
   );
 
   test('throws when startup registration fails', () async {
-    final bridge = WindowsClipboardPastePlatformBridge(
+    final bridge = WindowsPlatformBridge(
       processRunner: (_, _) async =>
           const PlatformProcessResult(exitCode: 1, stderr: 'registry failed'),
     );
