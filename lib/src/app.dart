@@ -17,6 +17,8 @@ import 'core/platform/mock_platform_bridge.dart';
 import 'core/platform/platform_bridge.dart';
 import 'core/platform/windows_platform_bridge.dart';
 import 'core/platform/windows_polling_hold_shortcut_registrar.dart';
+import 'core/stt/language_routing_stt_engine.dart';
+import 'core/stt/parakeet_server_stt_engine.dart';
 import 'core/stt/stt_engine.dart';
 import 'core/stt/whisper_cli_stt_engine.dart';
 import 'features/home/home_screen.dart';
@@ -46,6 +48,7 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
   late final SpeechSettingsController speechSettingsController;
   late final HoldShortcutController shortcutController;
   late final PlatformBridge platformBridge;
+  late final SttEngine _sttEngine;
   late bool _showSplash;
 
   @override
@@ -74,13 +77,14 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
       store: createDefaultSpeechSettingsStore(),
     );
     platformBridge = createDefaultPlatformBridge();
+    _sttEngine =
+        widget.sttEngine ??
+        createDefaultSttEngine(
+          languageCodeProvider: () => speechSettingsController.languageCode,
+        );
     controller = DictationController(
       platformBridge: platformBridge,
-      sttEngine:
-          widget.sttEngine ??
-          createDefaultSttEngine(
-            languageCodeProvider: () => speechSettingsController.languageCode,
-          ),
+      sttEngine: _sttEngine,
       onTranscriptGenerated: historyController.addTranscript,
       audioRecorderProvider: () {
         final selectedMicrophone = microphoneController.selectedMicrophone;
@@ -105,6 +109,10 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
 
   @override
   void dispose() {
+    final engine = _sttEngine;
+    if (engine is DisposableSttEngine) {
+      unawaited(engine.shutdown());
+    }
     shortcutController.dispose();
     speechSettingsController.dispose();
     historyController.dispose();
@@ -237,11 +245,8 @@ Directory _typeMateDataDirectory({Map<String, String>? environment}) {
 typedef PathExists = bool Function(String path);
 
 const bundledWhisperCliRelativePath = 'bin/whisper/whisper-cli.exe';
-// One validated model per supported language: distil-small.en for English
-// (tiny.en loops and mishears Indian-English content), the Vaani Hindi
-// fine-tune for Hindi, and the turbo-sized Oriserve Apex fine-tune for
-// romanized Hinglish output.
-const bundledWhisperModelRelativePath = 'models/ggml-distil-small.en.bin';
+// Hindi uses the Vaani small fine-tune; Hinglish the turbo-sized Oriserve
+// Apex fine-tune. Both run through the whisper CLI per utterance.
 const bundledHindiWhisperModelRelativePath =
     'models/ggml-small-vaani-hindi-q6.bin';
 const bundledHinglishWhisperModelRelativePath =
@@ -249,9 +254,22 @@ const bundledHinglishWhisperModelRelativePath =
 // Silero VAD trims hold-to-talk silence before decoding; without it whisper
 // loops and repeats sentences while decoding the silent tail.
 const bundledVadModelRelativePath = 'models/ggml-silero-v5.1.2.bin';
+// English runs on a resident sherpa-onnx server with NVIDIA Parakeet TDT
+// 0.6B v3: the model loads once at app start, then each utterance decodes
+// in about a second with the best accuracy of every model benchmarked.
+const bundledSherpaServerRelativePath =
+    'bin/sherpa/sherpa-onnx-offline-websocket-server.exe';
+const bundledParakeetDirRelativePath = 'models/parakeet-tdt-0.6b-v3-int8';
+// The 25 languages Parakeet TDT 0.6B v3 transcribes, with automatic
+// language detection — every one routes to the same resident server.
+const parakeetLanguageCodes = [
+  'en', 'bg', 'hr', 'cs', 'da', 'nl', 'et', 'fi', 'fr', 'de', 'el', 'hu', //
+  'it', 'lv', 'lt', 'mt', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'es', 'sv',
+  'uk',
+];
 
-/// Creates the production STT engine backed by the whisper runtime that
-/// ships with the app. The runtime is required: a missing CLI or model is an
+/// Creates the production STT engine backed by the runtimes that ship with
+/// the app. Every file is required: a missing binary or model is an
 /// installation defect and throws instead of degrading silently.
 SttEngine createDefaultSttEngine({
   Map<String, String>? environment,
@@ -267,49 +285,53 @@ SttEngine createDefaultSttEngine({
     executableDirectoryPath ?? File(Platform.resolvedExecutable).parent.path,
   ];
 
-  final executable = _resolveRuntimeFile(
-    environmentValue: values['TYPEMATE_WHISPER_CLI'],
-    relativePath: bundledWhisperCliRelativePath,
-    searchDirectories: searchDirectories,
-    exists: exists,
-  );
-  final envModelPath = values['TYPEMATE_WHISPER_MODEL']?.trim() ?? '';
-  final modelPath = _resolveRuntimeFile(
-    environmentValue: envModelPath,
-    relativePath: bundledWhisperModelRelativePath,
-    searchDirectories: searchDirectories,
-    exists: exists,
-  );
-  // An explicit model override applies to every language; otherwise Hindi
-  // and Hinglish route to their dedicated fine-tuned models.
-  final modelPathOverridesByLanguage = envModelPath.isNotEmpty
-      ? const <String, String>{}
-      : {
-          'hi': _resolveRuntimeFile(
-            environmentValue: null,
-            relativePath: bundledHindiWhisperModelRelativePath,
-            searchDirectories: searchDirectories,
-            exists: exists,
-          ),
-          'hinglish': _resolveRuntimeFile(
-            environmentValue: null,
-            relativePath: bundledHinglishWhisperModelRelativePath,
-            searchDirectories: searchDirectories,
-            exists: exists,
-          ),
-        };
+  String resolve(String relativePath, {String? environmentValue}) =>
+      _resolveRuntimeFile(
+        environmentValue: environmentValue,
+        relativePath: relativePath,
+        searchDirectories: searchDirectories,
+        exists: exists,
+      );
 
-  return WhisperCliSttEngine(
-    executable: executable,
-    modelPath: modelPath,
-    modelPathOverridesByLanguage: modelPathOverridesByLanguage,
-    vadModelPath: _resolveRuntimeFile(
-      environmentValue: null,
-      relativePath: bundledVadModelRelativePath,
-      searchDirectories: searchDirectories,
-      exists: exists,
-    ),
+  final whisperCli = resolve(
+    bundledWhisperCliRelativePath,
+    environmentValue: values['TYPEMATE_WHISPER_CLI'],
+  );
+
+  // An explicit model override applies to every language and bypasses the
+  // Parakeet server entirely (power-user escape hatch).
+  final envModelPath = values['TYPEMATE_WHISPER_MODEL']?.trim() ?? '';
+  if (envModelPath.isNotEmpty) {
+    return WhisperCliSttEngine(
+      executable: whisperCli,
+      modelPath: envModelPath,
+      vadModelPath: resolve(bundledVadModelRelativePath),
+      languageCodeProvider: languageCodeProvider,
+    );
+  }
+
+  final whisper = WhisperCliSttEngine(
+    executable: whisperCli,
+    modelPath: resolve(bundledHindiWhisperModelRelativePath),
+    modelPathOverridesByLanguage: {
+      'hinglish': resolve(bundledHinglishWhisperModelRelativePath),
+    },
+    vadModelPath: resolve(bundledVadModelRelativePath),
     languageCodeProvider: languageCodeProvider,
+  );
+
+  final parakeet = ParakeetServerSttEngine(
+    serverExecutable: resolve(bundledSherpaServerRelativePath),
+    encoderPath: resolve('$bundledParakeetDirRelativePath/encoder.int8.onnx'),
+    decoderPath: resolve('$bundledParakeetDirRelativePath/decoder.int8.onnx'),
+    joinerPath: resolve('$bundledParakeetDirRelativePath/joiner.int8.onnx'),
+    tokensPath: resolve('$bundledParakeetDirRelativePath/tokens.txt'),
+  );
+
+  return LanguageRoutingSttEngine(
+    routes: {for (final code in parakeetLanguageCodes) code: parakeet},
+    fallback: whisper,
+    languageCodeProvider: languageCodeProvider ?? (() => 'en'),
   );
 }
 

@@ -1,10 +1,12 @@
-﻿import 'dart:io';
+import 'dart:io';
 
-/// Provisions the whisper runtime that ships with TypeMate:
-/// - models/ggml-distil-small.en.bin (English)
+/// Provisions the speech runtimes that ship with TypeMate:
+/// - models/parakeet-tdt-0.6b-v3-int8/ (English, resident sherpa server)
 /// - models/ggml-small-vaani-hindi-q6.bin (Hindi, Vaani fine-tune)
 /// - models/ggml-hindi2hinglish-apex-q5_1.bin (Hinglish, Oriserve Apex)
+/// - models/ggml-silero-v5.1.2.bin (VAD)
 /// - bin/whisper/ (whisper-cli and its DLLs, OpenBLAS build)
+/// - bin/sherpa/ (sherpa-onnx websocket server for the Parakeet model)
 ///
 /// All are gitignored because they exceed practical git limits, so a fresh
 /// clone runs this once. Release bundles copy both folders next to the
@@ -18,11 +20,29 @@ class _ModelSpec {
   final int expectedSizeBytes;
 }
 
+const _parakeetBaseUrl =
+    'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main';
+
 const _models = [
   _ModelSpec(
-    'ggml-distil-small.en.bin',
-    'https://huggingface.co/distil-whisper/distil-small.en/resolve/main/ggml-distil-small.en.bin',
-    336191657,
+    'parakeet-tdt-0.6b-v3-int8/encoder.int8.onnx',
+    '$_parakeetBaseUrl/encoder.int8.onnx',
+    652184281,
+  ),
+  _ModelSpec(
+    'parakeet-tdt-0.6b-v3-int8/decoder.int8.onnx',
+    '$_parakeetBaseUrl/decoder.int8.onnx',
+    11845275,
+  ),
+  _ModelSpec(
+    'parakeet-tdt-0.6b-v3-int8/joiner.int8.onnx',
+    '$_parakeetBaseUrl/joiner.int8.onnx',
+    6355277,
+  ),
+  _ModelSpec(
+    'parakeet-tdt-0.6b-v3-int8/tokens.txt',
+    '$_parakeetBaseUrl/tokens.txt',
+    93939,
   ),
   _ModelSpec(
     'ggml-small-vaani-hindi-q6.bin',
@@ -60,8 +80,61 @@ Future<void> main(List<String> arguments) async {
       await _fetchModel(client, model, force: force);
     }
     await _fetchCli(client, force: force);
+    await _fetchSherpaServer(client, force: force);
   } finally {
     client.close();
+  }
+}
+
+const _sherpaArchiveUrl =
+    'https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.4/'
+    'sherpa-onnx-v1.13.4-win-x64-static-MD-MinSizeRel-no-tts.tar.bz2';
+const _sherpaArchiveServerPath =
+    'sherpa-onnx-v1.13.4-win-x64-static-MD-MinSizeRel-no-tts/bin/'
+    'sherpa-onnx-offline-websocket-server.exe';
+const _sherpaServerFileName = 'sherpa-onnx-offline-websocket-server.exe';
+
+Future<void> _fetchSherpaServer(
+  HttpClient client, {
+  required bool force,
+}) async {
+  final targetFile = File('bin/sherpa/$_sherpaServerFileName');
+  if (!force && targetFile.existsSync()) {
+    stdout.writeln('sherpa_ready=${targetFile.absolute.path}');
+    return;
+  }
+
+  stdout.writeln('downloading=$_sherpaArchiveUrl');
+  final stagingDirectory = await Directory.systemTemp.createTemp(
+    'typemate-sherpa',
+  );
+  try {
+    final archive = File('${stagingDirectory.path}/sherpa.tar.bz2');
+    if (!await _download(client, _sherpaArchiveUrl, archive)) {
+      exitCode = 1;
+      return;
+    }
+
+    final extract = await Process.run('tar', [
+      '-xf',
+      archive.path,
+      '-C',
+      stagingDirectory.path,
+      _sherpaArchiveServerPath,
+    ]);
+    if (extract.exitCode != 0) {
+      stderr.writeln('sherpa_extract_failed=${extract.stderr}');
+      exitCode = 1;
+      return;
+    }
+
+    await targetFile.parent.create(recursive: true);
+    await File(
+      '${stagingDirectory.path}/$_sherpaArchiveServerPath',
+    ).copy(targetFile.path);
+    stdout.writeln('sherpa_ready=${targetFile.absolute.path}');
+  } finally {
+    await stagingDirectory.delete(recursive: true);
   }
 }
 

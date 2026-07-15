@@ -2,6 +2,7 @@ import 'package:typemate/src/app.dart';
 import 'package:typemate/src/core/audio/ffmpeg_microphone_discovery.dart';
 import 'package:typemate/src/core/hold_shortcut_controller.dart';
 import 'package:typemate/src/core/stt/mock_stt_engine.dart';
+import 'package:typemate/src/core/stt/stt_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -27,6 +28,25 @@ void main() {
 
     expect(find.byKey(const Key('splash-logo')), findsNothing);
     expect(find.text('Speech history'), findsOneWidget);
+  });
+
+  testWidgets('shuts down disposable engines when the app closes', (
+    tester,
+  ) async {
+    final engine = ShutdownTrackingSttEngine();
+    await tester.pumpWidget(
+      DictationFlowApp(
+        microphoneDiscovery: FakeMicrophoneDiscovery(),
+        holdShortcutRegistrar: const NoopHoldShortcutRegistrar(),
+        sttEngine: engine,
+        splashDuration: Duration.zero,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+
+    expect(engine.shutdownCalls, 1);
   });
 
   testWidgets('renders the desktop dictation shell', (tester) async {
@@ -55,4 +75,14 @@ void main() {
 class FakeMicrophoneDiscovery implements MicrophoneDiscovery {
   @override
   Future<List<MicrophoneDevice>> listMicrophones() async => const [];
+}
+
+class ShutdownTrackingSttEngine extends MockSttEngine
+    implements DisposableSttEngine {
+  int shutdownCalls = 0;
+
+  @override
+  Future<void> shutdown() async {
+    shutdownCalls += 1;
+  }
 }

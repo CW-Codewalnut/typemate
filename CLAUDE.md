@@ -71,8 +71,10 @@ Rules:
 
 ## Local STT runtime
 
-- The whisper runtime is fully bundled with the app: models under `models/` and the CLI (whisper.cpp v1.9.1 OpenBLAS build) at `bin/whisper/whisper-cli.exe`. No machine-specific paths.
-- Three bundled models, one per supported language (benchmarked on the target i5-11300H laptop): English uses `models/ggml-distil-small.en.bin` (~1.5s per clip; tiny.en looped and misheard Indian-English content), Hindi uses `models/ggml-small-vaani-hindi-q6.bin` (Vaani small fine-tune, ~2.8s, more noise-robust than the tiny variant), Hinglish uses `models/ggml-hindi2hinglish-apex-q5_1.bin` (Oriserve Apex fine-tune; turbo-sized so ~7s, writes romanized Hinglish). `TYPEMATE_WHISPER_MODEL` overrides all and applies to every language.
+- The speech runtimes are fully bundled with the app: models under `models/`, the whisper CLI (whisper.cpp v1.9.1 OpenBLAS build) at `bin/whisper/whisper-cli.exe`, and the sherpa-onnx websocket server at `bin/sherpa/`. No machine-specific paths.
+- English runs on a RESIDENT server: `LanguageRoutingSttEngine` routes `en` to `ParakeetServerSttEngine`, which keeps a sherpa-onnx websocket server (NVIDIA Parakeet TDT 0.6B v3 int8, `models/parakeet-tdt-0.6b-v3-int8/`) loaded in memory. The server starts at app open (engine prepare), is adopted if already running on port 43007, self-heals on next use if it crashes, and is killed on app dispose. Per-utterance English is ~1s with the best accuracy of every model benchmarked.
+- Hindi and Hinglish stay on spawn-per-utterance whisper-cli (benchmarked on the target i5-11300H laptop): Hindi uses `models/ggml-small-vaani-hindi-q6.bin` (Vaani small fine-tune, ~2.8s, noise-robust), Hinglish uses `models/ggml-hindi2hinglish-apex-q5_1.bin` (Oriserve Apex fine-tune; turbo-sized so ~7s, writes romanized Hinglish). A resident server would not help them: their latency is encoder compute, not model loading.
+- `TYPEMATE_WHISPER_MODEL` overrides everything: it bypasses the Parakeet server and routes every language through whisper-cli with that model.
 - `hinglish` is a TypeMate-internal language code: the engine maps it to whisper's `hi` flag and sends no script prompt (the fine-tune romanizes on its own).
 - There is no Auto language option: detection needs the full encoder window (several times slower) and misfires into garbage transcripts. Default language is English.
 - All models are gitignored (they exceed practical git limits). The Windows CMake build fetches anything missing automatically via `tool/fetch_whisper_runtime.dart`, so `flutter build windows` and `flutter run -d windows` work on a fresh clone; the script can also be run manually. Release builds copy `models/` and `bin/` next to the executable.
@@ -82,7 +84,7 @@ Rules:
 - The engine uses greedy decoding and, when an explicit language is selected, right-sizes `--audio-ctx` to the clip length; both are required for acceptable push-to-talk latency on laptop CPUs. Do not pass a reduced `--audio-ctx` with `auto` language — detection misfires and produces garbage transcripts.
 - The engine always runs Silero VAD (`models/ggml-silero-v5.1.2.bin`, `--vad-speech-pad-ms 100`) to trim hold-to-talk silence. Without it whisper loops and repeats sentences while decoding the silent lead/tail; 100ms padding keeps the first word intact (larger padding garbles segment boundaries).
 - Optional high-quality override: `R:/Models/whisper/ggml-large-v3.bin` via `TYPEMATE_WHISPER_MODEL` on high-memory machines.
-- The language picker is curated (`lib/src/models/speech_language_options.dart`): English, Hindi, and Hinglish only. Do not add a language without a validated dedicated model (quality and latency) first.
+- The language picker is curated (`lib/src/models/speech_language_options.dart`): the 25 Parakeet languages (English + 24 European, all served by the resident server with automatic language detection) plus Hindi and Hinglish. Do not add a language without a validated dedicated model (quality and latency) first.
 - Use `tool/benchmark_whisper_cli.dart` to prove real transcription with a WAV sample.
 - Keep stderr diagnostics out of successful transcripts; whisper.cpp writes model/timing logs to stderr.
 

@@ -4,8 +4,11 @@ TypeMate bundles one validated model per supported language and routes by
 the language selected in Settings (benchmarks from the target i5-11300H
 laptop, ~13s clip):
 
-- `ggml-distil-small.en.bin` (~321 MB) — English (distil-whisper), ~1.5s
-  per clip; robust to Indian-English where tiny.en looped and misheard.
+- `parakeet-tdt-0.6b-v3-int8/` (~640 MB) — English plus 24 European
+  languages (NVIDIA Parakeet TDT 0.6B v3, int8 ONNX, automatic language
+  detection). Served by a resident sherpa-onnx server that loads it once
+  at app start; roughly a second per short clip with the best accuracy of
+  every model benchmarked, including Indian-English.
 - `ggml-small-vaani-hindi-q6.bin` (~197 MB) — Hindi (Vaani small
   fine-tune, q6), ~2.8s per clip; more noise-robust than the tiny
   variant with near-turbo Hindi accuracy.

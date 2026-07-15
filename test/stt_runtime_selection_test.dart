@@ -1,74 +1,91 @@
 import 'package:typemate/src/app.dart';
+import 'package:typemate/src/core/stt/language_routing_stt_engine.dart';
+import 'package:typemate/src/core/stt/parakeet_server_stt_engine.dart';
 import 'package:typemate/src/core/stt/whisper_cli_stt_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test(
-    'uses the bundled CLI and turbo model when environment is not configured',
-    () {
-      final engine = createDefaultSttEngine(
-        environment: const {},
-        pathExists: (_) => true,
-        currentDirectoryPath: 'C:/apps/typemate',
-        executableDirectoryPath: 'C:/apps/typemate/build/runner',
-      );
+  test('routes English to the Parakeet server and the rest to whisper', () {
+    final engine = createDefaultSttEngine(
+      environment: const {},
+      pathExists: (_) => true,
+      currentDirectoryPath: 'C:/apps/typemate',
+      executableDirectoryPath: 'C:/apps/typemate/build/runner',
+    );
 
-      expect(engine, isA<WhisperCliSttEngine>());
-      final whisper = engine as WhisperCliSttEngine;
-      expect(
-        whisper.executable,
-        'C:/apps/typemate/bin/whisper/whisper-cli.exe',
-      );
-      expect(
-        whisper.modelPath,
-        'C:/apps/typemate/models/ggml-distil-small.en.bin',
-      );
-      expect(whisper.modelPathOverridesByLanguage, {
-        'hi': 'C:/apps/typemate/models/ggml-small-vaani-hindi-q6.bin',
-        'hinglish': 'C:/apps/typemate/models/ggml-hindi2hinglish-apex-q5_1.bin',
-      });
-      expect(
-        whisper.vadModelPath,
-        'C:/apps/typemate/models/ggml-silero-v5.1.2.bin',
-      );
-      expect(whisper.languageCodeProvider(), 'auto');
-    },
-  );
+    expect(engine, isA<LanguageRoutingSttEngine>());
+    final routing = engine as LanguageRoutingSttEngine;
 
-  test(
-    'falls back to executable directory when working directory has no runtime',
-    () {
-      const executableDirectory = 'C:/apps/typemate/build/runner';
-      const executableCliPath =
-          '$executableDirectory/bin/whisper/whisper-cli.exe';
-      const executableModelPath =
-          '$executableDirectory/models/ggml-distil-small.en.bin';
-      const executableHindiModelPath =
-          '$executableDirectory/models/ggml-small-vaani-hindi-q6.bin';
-      const executableHinglishModelPath =
-          '$executableDirectory/models/ggml-hindi2hinglish-apex-q5_1.bin';
-      final engine = createDefaultSttEngine(
-        environment: const {},
-        pathExists: (path) => path.startsWith(executableDirectory),
-        currentDirectoryPath: 'C:/somewhere/else',
-        executableDirectoryPath: executableDirectory,
-      );
+    // Every Parakeet language shares the same resident server engine.
+    expect(routing.routes.keys, containsAll(parakeetLanguageCodes));
+    expect(routing.routes.values.toSet(), hasLength(1));
+    expect(routing.routes.containsKey('hi'), isFalse);
+    expect(routing.routes.containsKey('hinglish'), isFalse);
 
-      final whisper = engine as WhisperCliSttEngine;
-      expect(whisper.executable, executableCliPath);
-      expect(whisper.modelPath, executableModelPath);
-      expect(whisper.modelPathOverridesByLanguage, {
-        'hi': executableHindiModelPath,
-        'hinglish': executableHinglishModelPath,
-      });
-    },
-  );
+    final parakeet = routing.routes['en'] as ParakeetServerSttEngine;
+    expect(
+      parakeet.serverExecutable,
+      'C:/apps/typemate/bin/sherpa/sherpa-onnx-offline-websocket-server.exe',
+    );
+    expect(
+      parakeet.encoderPath,
+      'C:/apps/typemate/models/parakeet-tdt-0.6b-v3-int8/encoder.int8.onnx',
+    );
+    expect(
+      parakeet.decoderPath,
+      'C:/apps/typemate/models/parakeet-tdt-0.6b-v3-int8/decoder.int8.onnx',
+    );
+    expect(
+      parakeet.joinerPath,
+      'C:/apps/typemate/models/parakeet-tdt-0.6b-v3-int8/joiner.int8.onnx',
+    );
+    expect(
+      parakeet.tokensPath,
+      'C:/apps/typemate/models/parakeet-tdt-0.6b-v3-int8/tokens.txt',
+    );
 
-  test('throws a clear error when the bundled whisper CLI is missing', () {
+    final whisper = routing.fallback as WhisperCliSttEngine;
+    expect(whisper.executable, 'C:/apps/typemate/bin/whisper/whisper-cli.exe');
+    expect(
+      whisper.modelPath,
+      'C:/apps/typemate/models/ggml-small-vaani-hindi-q6.bin',
+    );
+    expect(whisper.modelPathOverridesByLanguage, {
+      'hinglish': 'C:/apps/typemate/models/ggml-hindi2hinglish-apex-q5_1.bin',
+    });
+    expect(
+      whisper.vadModelPath,
+      'C:/apps/typemate/models/ggml-silero-v5.1.2.bin',
+    );
+  });
+
+  test('falls back to executable directory paths', () {
+    const executableDirectory = 'C:/apps/typemate/build/runner';
+    final engine = createDefaultSttEngine(
+      environment: const {},
+      pathExists: (path) => path.startsWith(executableDirectory),
+      currentDirectoryPath: 'C:/somewhere/else',
+      executableDirectoryPath: executableDirectory,
+    );
+
+    final routing = engine as LanguageRoutingSttEngine;
+    final parakeet = routing.routes['en'] as ParakeetServerSttEngine;
+    expect(
+      parakeet.encoderPath,
+      '$executableDirectory/models/parakeet-tdt-0.6b-v3-int8/encoder.int8.onnx',
+    );
+    final whisper = routing.fallback as WhisperCliSttEngine;
+    expect(
+      whisper.modelPath,
+      '$executableDirectory/models/ggml-small-vaani-hindi-q6.bin',
+    );
+  });
+
+  test('throws a clear error when the sherpa server binary is missing', () {
     expect(
       () => createDefaultSttEngine(
         environment: const {},
-        pathExists: (_) => false,
+        pathExists: (path) => !path.contains('sherpa'),
         currentDirectoryPath: 'C:/apps/typemate',
         executableDirectoryPath: 'C:/apps/typemate/build/runner',
       ),
@@ -76,17 +93,17 @@ void main() {
         isA<SttRuntimeException>().having(
           (error) => error.message,
           'message',
-          contains('bin/whisper/whisper-cli.exe'),
+          contains('sherpa-onnx-offline-websocket-server.exe'),
         ),
       ),
     );
   });
 
-  test('throws a clear error when the bundled model is missing', () {
+  test('throws a clear error when a Parakeet model file is missing', () {
     expect(
       () => createDefaultSttEngine(
         environment: const {},
-        pathExists: (path) => path.endsWith('whisper-cli.exe'),
+        pathExists: (path) => !path.contains('encoder.int8.onnx'),
         currentDirectoryPath: 'C:/apps/typemate',
         executableDirectoryPath: 'C:/apps/typemate/build/runner',
       ),
@@ -94,13 +111,13 @@ void main() {
         isA<SttRuntimeException>().having(
           (error) => error.message,
           'message',
-          contains('models/ggml-distil-small.en.bin'),
+          contains('encoder.int8.onnx'),
         ),
       ),
     );
   });
 
-  test('environment overrides win over the bundled runtime', () {
+  test('environment model override routes every language to whisper', () {
     final engine = createDefaultSttEngine(
       environment: const {
         'TYPEMATE_WHISPER_CLI': 'R:/Tools/whisper/whisper-cli.exe',
@@ -111,45 +128,14 @@ void main() {
       executableDirectoryPath: 'C:/apps/typemate/build/runner',
     );
 
+    expect(
+      engine,
+      isA<WhisperCliSttEngine>(),
+      reason: 'an explicit model override bypasses the Parakeet server',
+    );
     final whisper = engine as WhisperCliSttEngine;
     expect(whisper.executable, 'R:/Tools/whisper/whisper-cli.exe');
     expect(whisper.modelPath, 'R:/Models/whisper/ggml-large-v3.bin');
-    expect(
-      whisper.modelPathOverridesByLanguage,
-      isEmpty,
-      reason: 'an explicit model override applies to every language',
-    );
-  });
-
-  test('mixes an environment CLI override with the bundled model', () {
-    final engine = createDefaultSttEngine(
-      environment: const {
-        'TYPEMATE_WHISPER_CLI': 'R:/Tools/whisper/whisper-cli.exe',
-      },
-      pathExists: (path) => path.endsWith('.bin'),
-      currentDirectoryPath: 'C:/apps/typemate',
-      executableDirectoryPath: 'C:/apps/typemate/build/runner',
-    );
-
-    final whisper = engine as WhisperCliSttEngine;
-    expect(whisper.executable, 'R:/Tools/whisper/whisper-cli.exe');
-    expect(
-      whisper.modelPath,
-      'C:/apps/typemate/models/ggml-distil-small.en.bin',
-    );
-  });
-
-  test('trims whisper environment values before creating the runtime', () {
-    final engine = createDefaultSttEngine(
-      environment: const {
-        'TYPEMATE_WHISPER_CLI': '  whisper-cli  ',
-        'TYPEMATE_WHISPER_MODEL': '  models/tiny.bin  ',
-      },
-      pathExists: (_) => true,
-    );
-
-    final whisper = engine as WhisperCliSttEngine;
-    expect(whisper.executable, 'whisper-cli');
-    expect(whisper.modelPath, 'models/tiny.bin');
+    expect(whisper.modelPathOverridesByLanguage, isEmpty);
   });
 }

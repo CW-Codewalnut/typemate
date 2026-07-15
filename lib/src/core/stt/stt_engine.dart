@@ -7,3 +7,9 @@ abstract interface class SttEngine {
 
   Future<String> transcribe(AudioRecording recording);
 }
+
+/// Engines that own background resources (e.g. a resident model server)
+/// and must be shut down when the app exits.
+abstract interface class DisposableSttEngine implements SttEngine {
+  Future<void> shutdown();
+}
