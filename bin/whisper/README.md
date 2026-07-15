@@ -6,7 +6,8 @@ for it at `bin/whisper/whisper-cli.exe`, first relative to the working
 directory and then relative to the executable directory. Windows release
 builds copy this folder (and `models/`) next to the executable.
 
-The binaries are gitignored. Provision them together with the model:
+The binaries are gitignored. The Windows CMake build fetches them
+automatically when missing. To provision manually:
 
 ```bash
 dart run tool/fetch_whisper_runtime.dart

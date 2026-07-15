@@ -47,7 +47,10 @@ Future<void> _fetchModel(HttpClient client, {required bool force}) async {
   stdout.writeln('downloading=$modelUrl');
   await targetFile.parent.create(recursive: true);
   final partFile = File('${targetFile.path}.part');
-  await _download(client, modelUrl, partFile);
+  if (!await _download(client, modelUrl, partFile)) {
+    exitCode = 1;
+    return;
+  }
 
   final downloadedSize = partFile.lengthSync();
   if (downloadedSize != expectedModelSizeBytes) {
@@ -84,7 +87,10 @@ Future<void> _fetchCli(HttpClient client, {required bool force}) async {
   );
   try {
     final zipFile = File('${stagingDirectory.path}/whisper.zip');
-    await _download(client, whisperZipUrl, zipFile);
+    if (!await _download(client, whisperZipUrl, zipFile)) {
+      exitCode = 1;
+      return;
+    }
 
     // Windows 10+ ships bsdtar, which extracts zip archives.
     final extract = await Process.run('tar', [
@@ -118,14 +124,14 @@ Future<void> _fetchCli(HttpClient client, {required bool force}) async {
   }
 }
 
-Future<void> _download(HttpClient client, String url, File target) async {
+Future<bool> _download(HttpClient client, String url, File target) async {
   final request = await client.getUrl(Uri.parse(url));
   final response = await request.close();
   if (response.statusCode != HttpStatus.ok) {
     stderr.writeln('download_failed url=$url status=${response.statusCode}');
-    exitCode = 1;
-    return;
+    return false;
   }
   final sink = target.openWrite();
   await response.pipe(sink);
+  return true;
 }

@@ -58,6 +58,37 @@ add_subdirectory("runner")
 include(flutter/generated_plugins.cmake)
 
 
+# === Whisper runtime provisioning ===
+# The bundled model and CLI are gitignored (the model exceeds git hosting
+# limits), so fetch anything missing automatically. This makes a fresh clone
+# build and run without manual steps; the script is a fast no-op when the
+# files are already present.
+include("${FLUTTER_MANAGED_DIR}/ephemeral/generated_config.cmake" OPTIONAL)
+if(DEFINED FLUTTER_ROOT)
+  set(DART_EXECUTABLE "${FLUTTER_ROOT}/bin/dart.bat")
+else()
+  set(DART_EXECUTABLE "dart")
+endif()
+execute_process(
+  COMMAND "${DART_EXECUTABLE}" tool/fetch_whisper_runtime.dart
+  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+  RESULT_VARIABLE WHISPER_FETCH_RESULT
+)
+if(NOT WHISPER_FETCH_RESULT EQUAL 0)
+  message(FATAL_ERROR
+    "Failed to provision the bundled whisper runtime (model + CLI). "
+    "Check your network connection or run manually: "
+    "dart run tool/fetch_whisper_runtime.dart")
+endif()
+# Re-check on every build (not just configure) so a deleted model heals
+# itself without a flutter clean.
+add_custom_target(whisper_runtime ALL
+  COMMAND "${DART_EXECUTABLE}" tool/fetch_whisper_runtime.dart
+  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+  COMMENT "Checking bundled whisper runtime (model + CLI)")
+add_dependencies(${BINARY_NAME} whisper_runtime)
+
+
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can
 # run in place. This is done instead of making a separate bundle (as on Linux)
