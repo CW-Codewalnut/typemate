@@ -6,7 +6,7 @@ import 'package:typemate/src/core/platform/mock_platform_bridge.dart';
 import 'package:typemate/src/core/stt/stt_engine.dart';
 
 void main() {
-  test('registers Win+Alt hold as the safe default shortcut', () async {
+  test('registers Ctrl+Win hold as the safe default shortcut', () async {
     final registrar = FakeHoldShortcutRegistrar();
     final controller = HoldShortcutController(
       dictationController: createDictationController(),
@@ -17,12 +17,12 @@ void main() {
 
     expect(registrar.isRegistered, isTrue);
     expect(controller.isRegistered, isTrue);
-    expect(controller.statusMessage, 'Global shortcut ready: hold Win+Alt.');
+    expect(controller.statusMessage, 'Global shortcut ready: hold Ctrl+Win.');
     expect(registrar.shortcut?.id, defaultHoldShortcutId);
-    expect(registrar.shortcut?.virtualKeyCodes, [0x5B, 0x12]);
+    expect(registrar.shortcut?.virtualKeyCodes, [0x11, 0x5B]);
   });
 
-  test('migrates old shortcuts to Win+Alt hold', () async {
+  test('migrates old shortcuts to Ctrl+Win hold', () async {
     for (final legacyShortcutId in legacyShortcutIds) {
       final registrar = FakeHoldShortcutRegistrar();
       final store = MemoryHoldShortcutSettingsStore(legacyShortcutId);
@@ -88,7 +88,7 @@ void main() {
     );
   });
 
-  test('reset shortcut restores the default Win+Alt hold shortcut', () async {
+  test('reset shortcut restores the default Ctrl+Win hold shortcut', () async {
     final registrar = FakeHoldShortcutRegistrar();
     final store = MemoryHoldShortcutSettingsStore('custom:17-16-65');
     final controller = HoldShortcutController(

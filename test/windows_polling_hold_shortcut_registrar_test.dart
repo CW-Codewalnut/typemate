@@ -4,7 +4,7 @@ import 'package:typemate/src/core/platform/windows_polling_hold_shortcut_registr
 
 void main() {
   test(
-    'starts listening when Win+Alt is held and stops when released',
+    'starts listening when Ctrl+Win is held and stops when released',
     () async {
       final keysDown = <int>{};
       var pressCount = 0;
@@ -23,7 +23,7 @@ void main() {
         onReleased: () async => releaseCount += 1,
       );
 
-      keysDown.addAll([0x5B, 0x12]);
+      keysDown.addAll([0x11, 0x5B]);
       await Future<void>.delayed(const Duration(milliseconds: 10));
       expect(pressCount, 1);
       expect(releaseCount, 0);

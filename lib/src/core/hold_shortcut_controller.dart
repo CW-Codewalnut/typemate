@@ -22,11 +22,16 @@ class HoldShortcutOption {
   final bool isDefaultGesture;
 }
 
-const defaultHoldShortcutId = 'win-alt';
+const defaultHoldShortcutId = 'ctrl-win';
 
 const holdShortcutOptions = [
   HoldShortcutOption(
     id: defaultHoldShortcutId,
+    label: 'Ctrl+Win',
+    virtualKeyCodes: [0x11, 0x5B],
+  ),
+  HoldShortcutOption(
+    id: 'win-alt',
     label: 'Win+Alt',
     virtualKeyCodes: [0x5B, 0x12],
   ),
