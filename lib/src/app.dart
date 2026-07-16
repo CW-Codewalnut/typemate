@@ -82,6 +82,9 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
         createDefaultSttEngine(
           languageCodeProvider: () => speechSettingsController.languageCode,
         );
+    if (platformBridge case final QuitRequestSource quitSource) {
+      quitSource.onQuitRequested = _shutDownAndExit;
+    }
     controller = DictationController(
       platformBridge: platformBridge,
       sttEngine: _sttEngine,
@@ -105,6 +108,16 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
     unawaited(platformBridge.ensureLaunchAtStartup());
     historyController.load();
     speechSettingsController.load();
+  }
+
+  /// Answers the tray's Quit request: stop the resident speech server, then
+  /// end the process (the native side force-quits if this never returns).
+  Future<void> _shutDownAndExit() async {
+    final engine = _sttEngine;
+    if (engine is DisposableSttEngine) {
+      await engine.shutdown();
+    }
+    exit(0);
   }
 
   @override

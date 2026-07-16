@@ -11,3 +11,10 @@ abstract interface class PlatformBridge {
 
   Future<void> ensureLaunchAtStartup();
 }
+
+/// Bridges that can receive a quit request from the platform (e.g. the
+/// Windows tray menu). The app answers by shutting resident services down
+/// and exiting the process.
+abstract interface class QuitRequestSource {
+  set onQuitRequested(Future<void> Function()? handler);
+}

@@ -6,6 +6,8 @@ import 'package:typemate/src/core/platform/windows_platform_bridge.dart';
 import 'package:typemate/src/core/platform/windows_polling_hold_shortcut_registrar.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('uses Windows clipboard paste bridge on Windows', () {
     expect(
       createDefaultPlatformBridge(isWindows: true),
