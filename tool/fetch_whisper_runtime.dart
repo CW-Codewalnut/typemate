@@ -56,18 +56,12 @@ const _models = [
     'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/ggml-hindi2hinglish-swift.bin',
     147951465,
   ),
-  // GGML q5_0 quantizations of AI4Bharat Vistaar/IndicWhisper per-language
-  // fine-tunes (MIT), hosted on this repo's releases because no public GGML
-  // exists. Marathi has no small checkpoint, so it ships as medium.
+  // GGML q5_0 quantization of the AI4Bharat Vistaar Tamil fine-tune (MIT),
+  // hosted on this repo's releases because no public GGML exists.
   _ModelSpec(
     'ggml-vistaar-tamil-small-q5_0.bin',
     'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/ggml-vistaar-tamil-small-q5_0.bin',
     175209663,
-  ),
-  _ModelSpec(
-    'ggml-indicwhisper-marathi-medium-q5_0.bin',
-    'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/ggml-indicwhisper-marathi-medium-q5_0.bin',
-    539212484,
   ),
   _ModelSpec(
     'ggml-silero-v5.1.2.bin',
@@ -170,7 +164,7 @@ Future<void> _fetchModel(
   stdout.writeln('downloading=${model.url}');
   await targetFile.parent.create(recursive: true);
   final partFile = File('${targetFile.path}.part');
-  if (!await _download(client, model.url, partFile)) {
+  if (!await _downloadWithReleaseFallback(client, model.url, partFile)) {
     exitCode = 1;
     return;
   }
@@ -245,6 +239,46 @@ Future<void> _fetchCli(HttpClient client, {required bool force}) async {
   } finally {
     await stagingDirectory.delete(recursive: true);
   }
+}
+
+const _repoReleasePrefix =
+    'https://github.com/Ranjan-Bhagat/typemate/releases/download/';
+
+/// While the repo is private its release assets 404 for anonymous requests,
+/// so fall back to `gh release download`, which uses the local gh auth that
+/// anyone able to clone the repo already has.
+Future<bool> _downloadWithReleaseFallback(
+  HttpClient client,
+  String url,
+  File target,
+) async {
+  if (await _download(client, url, target)) {
+    return true;
+  }
+  if (!url.startsWith(_repoReleasePrefix)) {
+    return false;
+  }
+  final segments = url.substring(_repoReleasePrefix.length).split('/');
+  final tag = segments.first;
+  final assetName = segments.last;
+  stdout.writeln('retrying_via_gh=$assetName');
+  final result = await Process.run('gh', [
+    'release',
+    'download',
+    tag,
+    '--repo',
+    'Ranjan-Bhagat/typemate',
+    '--pattern',
+    assetName,
+    '--output',
+    target.path,
+    '--clobber',
+  ]);
+  if (result.exitCode != 0) {
+    stderr.writeln('gh_download_failed=${result.stderr}');
+    return false;
+  }
+  return true;
 }
 
 Future<bool> _download(HttpClient client, String url, File target) async {
