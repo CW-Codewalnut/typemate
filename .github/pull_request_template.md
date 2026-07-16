@@ -1,41 +1,31 @@
-## Summary
+# PR Template & Definition of Done
 
-<!-- What changed and why? -->
+## What does this PR do?
 
-## Type of change
+-
+-
+-
 
-- [ ] feat
-- [ ] fix
-- [ ] test
-- [ ] docs
-- [ ] chore
-- [ ] ci
-- [ ] refactor
+## What steps does your reviewer have to take to test this PR manually?
 
-## Proof
+1.
+2.
+3.
 
-Paste concise proof that the change works.
+## Testing checklist - Please check off
 
-- [ ] Targeted tests pass
-- [ ] `flutter analyze` passes
-- [ ] `flutter test` passes
-- [ ] UI proof attached if the change affects UI behavior
-- [ ] No secrets or sensitive data included
+- [ ] I have written unit tests for all components and modules that I have worked on, which cover both positive and negative use-cases.
+- [ ] I have written unit tests for all helper functions that I have worked on, which cover both common and edge-cases.
+- [ ] I have written integration tests for the features that I have worked on, which cover the end-to-end functionality of the API.
 
-## Architecture checklist
+### If you have not added tests for any of the above, please explain why below.
 
-- [ ] Clear separation between UI, core flow, audio, platform, and STT layers
-- [ ] YAGNI followed, no unnecessary scope added
-- [ ] DRY followed without premature abstraction
-- [ ] Conventional commit title used
+...
 
-## Product checklist
+## Definition of Done - Please check off
 
-- [ ] Local-only privacy posture preserved
-- [ ] No visible model picker added
-- [ ] Direct insertion flow preserved
-- [ ] Desktop-first behavior preserved
-
-## Notes for reviewer
-
-<!-- Risks, follow-ups, or known limitations. -->
+- [ ] I have completed the above testing checklist so my code is well tested and I have confidence my code works as I expect in a variety of situations.
+- [ ] I have Biome enabled to run on file save and I have fixed all errors highlighted by Biome.
+- [ ] I have added complete type definitions without using `any` for all my controllers, models and helper functions.
+- [ ] I have deleted all non-descriptive comments and dead code from the files I've touched.
+- [ ] I have rebased my branch with the base branch I want to merge into and all the commits in this PR are my own.
