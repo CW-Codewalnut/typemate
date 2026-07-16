@@ -10,6 +10,9 @@ on:
 jobs:
   flutter-quality:
     name: Flutter quality gates
+    # Same-repo branches are already tested by the push trigger; only PRs
+    # from forks need the pull_request run, so one commit runs CI once.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: windows-latest
 
     steps:
