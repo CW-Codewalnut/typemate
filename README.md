@@ -1,51 +1,43 @@
 # TypeMate
 
-A desktop first local speech powered typing app for developers, AI agent users, and heavy typers.
+A desktop-first, fully local speech-to-typing app for developers, AI agent users, and heavy typers.
 
-Focus a text field, hold a shortcut, speak, release, and the transcript appears in the focused field.
+Focus any text field, hold **Ctrl+Win**, speak, release — the transcript is typed straight into the focused field. No cloud, no account, no audio leaves your machine.
 
-## Status
+## Features
 
-The current app contains the product shell, dictation state machine, microphone discovery/selection UI, FFmpeg recording adapters, local STT contracts, a whisper.cpp CLI adapter, runtime-selection fallback, and failure recovery for recording, transcription, and insertion. Native global hotkey registration and real focused-field insertion are still pending.
+- **Hold-to-dictate global shortcut** (default Ctrl+Win, customizable in Settings, including fully custom key combos)
+- **Direct insertion** into whatever field has focus, in any app
+- **100% local transcription** — all models run on your machine
+- **29 languages**, each backed by a model validated for quality and latency:
+  - English + 24 European languages on a resident NVIDIA Parakeet server (~1s per utterance, automatic language detection between them, native punctuation)
+  - Hindi (Vaani fine-tune, noise-robust Devanagari)
+  - Hinglish (writes Hindi speech as romanized Hinglish)
+  - Tamil (AI4Bharat Vistaar fine-tune)
+- **RAM-friendly**: only the selected language's model stays loaded; switching languages swaps servers automatically
+- **System tray**: closing the window hides to tray; dictation keeps working in the background
+- **Launch at startup**, dictation history, and a local-only insights dashboard
+- No telemetry, no network calls at runtime
 
-## V1 direction
+## Install (Windows)
 
-- Desktop first: Windows, macOS, Linux
-- Local speech to text only
-- One default model selected by us
-- No visible model picker in v1
-- Global hold to dictate shortcut
-- Direct insertion into the focused text field
+1. Download `TypeMate-vX.Y.Z-windows-x64.zip` from the latest [GitHub release](https://github.com/Ranjan-Bhagat/typemate/releases).
+2. Extract it anywhere (all models and runtimes are bundled).
+3. Run `typemate.exe`.
+4. Pick a microphone in Settings, focus a text field, hold **Ctrl+Win**, and speak.
 
 ## Development
+
+Requires Flutter (managed via FVM in this repo) and Windows for the full dictation loop.
 
 ```bash
 flutter pub get
 flutter analyze
 flutter test
-flutter test integration_test
 flutter run -d windows
 ```
 
-### Local whisper.cpp runtime
-
-TypeMate uses `MockSttEngine` unless both runtime environment variables are set:
-
-```bash
-export TYPEMATE_WHISPER_CLI="R:/Tools/whisper.cpp/v1.9.1-x64/Release/whisper-cli.exe"
-export TYPEMATE_WHISPER_MODEL="R:/Models/whisper/ggml-base.bin"
-```
-
-With those set, the app constructs `WhisperCliSttEngine` and uses the configured local model. No model picker is exposed in the UI.
-You can point `TYPEMATE_WHISPER_MODEL` at `ggml-large-v3.bin` for better multilingual quality on high-memory machines, but it is not the portable default because it is roughly 3GB and slower on lower-end devices.
-
-To benchmark/prove the real local STT path with a WAV sample:
-
-```bash
-dart run tool/benchmark_whisper_cli.dart --audio build/recordings/typemate-benchmark.wav
-```
-
-The benchmark prints the runtime path, model path, audio path, elapsed milliseconds, and transcript.
+The Windows build auto-fetches all speech runtimes (models, whisper.cpp, sherpa-onnx) via `tool/fetch_whisper_runtime.dart`, so a fresh clone builds without manual setup. While the repo is private, assets hosted on this repo's releases download through your authenticated `gh` CLI automatically.
 
 Install local git hooks once per clone:
 
@@ -53,13 +45,23 @@ Install local git hooks once per clone:
 bash scripts/install-git-hooks.sh
 ```
 
-The hooks run formatting, analyzer, tests, and conventional commit checks before code reaches GitHub.
+The hooks run formatting, analyzer, tests, and conventional-commit checks before code reaches GitHub.
+
+### Speech runtime notes
+
+- Engine wiring and model table live in `lib/src/app.dart`; the curated language list in `lib/src/models/speech_language_options.dart`.
+- `TYPEMATE_WHISPER_MODEL` overrides every bundled model (power-user escape hatch), e.g. point it at `ggml-large-v3.bin` on a high-memory machine.
+- Benchmark any model against the persistent audio corpus (`test_assets/stt_benchmark/`):
+
+```bash
+dart run tool/benchmark_stt_corpus.dart --model <path.bin> --language hi
+```
+
+- Model choices, rejected candidates, and the validation bar are documented in `models/README.md` and `CLAUDE.md`.
 
 ## Documentation
 
-- `AGENTS.md`
-- `CLAUDE.md`
-- `PLAN.md`
-- `DESIGN.md`
-- `docs/requirements.md`
-- `docs/architecture.md`
+- `CLAUDE.md` — engineering guide, STT runtime details, quality bars
+- `DESIGN.md` — UI principles
+- `models/README.md` — bundled models and why each was chosen
+- `docs/requirements.md`, `docs/architecture.md`
