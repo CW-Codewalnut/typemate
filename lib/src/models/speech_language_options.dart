@@ -13,6 +13,10 @@
 /// - Hindi uses the Vaani small whisper fine-tune (~2.8s).
 /// - Hinglish uses the Oriserve Swift whisper fine-tune (base-sized,
 ///   ~1.2s), which writes Hindi speech as romanized Hinglish.
+/// - Tamil and Marathi use AI4Bharat Vistaar/IndicWhisper fine-tunes, each
+///   on its own resident whisper server. Telugu, Kannada, and Gujarati were
+///   evaluated and dropped: their checkpoints hallucinate or corrupt output
+///   non-deterministically, which fails the quality bar below.
 ///
 /// There is no Auto option in the picker; within the Parakeet languages the
 /// model detects the spoken language on its own.
@@ -27,6 +31,8 @@ const speechLanguageOptions = [
   SpeechLanguageOption(code: 'hi', label: 'Hindi'),
   SpeechLanguageOption(code: 'hinglish', label: 'Hinglish'),
   SpeechLanguageOption(code: 'bg', label: 'Bulgarian'),
+  SpeechLanguageOption(code: 'mr', label: 'Marathi'),
+  SpeechLanguageOption(code: 'ta', label: 'Tamil'),
   SpeechLanguageOption(code: 'hr', label: 'Croatian'),
   SpeechLanguageOption(code: 'cs', label: 'Czech'),
   SpeechLanguageOption(code: 'da', label: 'Danish'),

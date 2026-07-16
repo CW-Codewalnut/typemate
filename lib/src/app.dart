@@ -274,18 +274,69 @@ typedef PathExists = bool Function(String path);
 
 const bundledWhisperCliRelativePath = 'bin/whisper/whisper-cli.exe';
 const bundledWhisperServerRelativePath = 'bin/whisper/whisper-server.exe';
-// Hindi uses the Vaani small fine-tune; Hinglish the base-sized Oriserve
-// Swift fine-tune. Each runs on its own resident whisper server, but only
-// the selected language's server is kept loaded (RAM policy).
-const bundledHindiWhisperModelRelativePath =
-    'models/ggml-small-vaani-hindi-q6.bin';
-const bundledHinglishWhisperModelRelativePath =
-    'models/ggml-hindi2hinglish-swift.bin';
 const hindiServerPort = 43008;
 const hinglishServerPort = 43009;
 const _hindiDevanagariPrompt =
     'हिंदी भाषण को देवनागरी लिपि में ठीक-ठीक लिखें। '
     'अंग्रेज़ी में अनुवाद न करें।';
+
+/// A language served by its own resident whisper.cpp HTTP server. Only the
+/// selected language's server is kept loaded (RAM policy). Ports are fixed
+/// per language so an orphaned server from an unclean exit is adopted
+/// rather than duplicated.
+class WhisperServerLanguage {
+  const WhisperServerLanguage({
+    required this.code,
+    required this.modelRelativePath,
+    required this.port,
+    this.cliLanguage,
+    this.prompt,
+  });
+
+  final String code;
+  final String modelRelativePath;
+  final int port;
+
+  /// Whisper's language flag when it differs from [code] (e.g. Hinglish
+  /// decodes as Hindi and romanizes on its own).
+  final String? cliLanguage;
+  final String? prompt;
+}
+
+const whisperServerLanguages = [
+  // Vaani small fine-tune, noise-robust Devanagari output.
+  WhisperServerLanguage(
+    code: 'hi',
+    modelRelativePath: 'models/ggml-small-vaani-hindi-q6.bin',
+    port: hindiServerPort,
+    prompt: _hindiDevanagariPrompt,
+  ),
+  // Oriserve Swift fine-tune, base-sized, romanized output; a script
+  // prompt would fight it.
+  WhisperServerLanguage(
+    code: 'hinglish',
+    modelRelativePath: 'models/ggml-hindi2hinglish-swift.bin',
+    port: hinglishServerPort,
+    cliLanguage: 'hi',
+  ),
+  // Vistaar (AI4Bharat) per-language fine-tunes, small-sized, quantized to
+  // q5_0 by this repo (hosted on the models-v1 GitHub release).
+  WhisperServerLanguage(
+    code: 'ta',
+    modelRelativePath: 'models/ggml-vistaar-tamil-small-q5_0.bin',
+    port: 43011,
+  ),
+  // Telugu, Kannada, and Gujarati are intentionally absent: their Vistaar
+  // checkpoints decode non-deterministically (thin logit margins flip
+  // tokens into hallucinations run-to-run, at any quantization level and
+  // even fp16), failing the "visible languages must work" bar.
+  // IndicWhisper (Vistaar) Marathi is medium-sized; there is no small.
+  WhisperServerLanguage(
+    code: 'mr',
+    modelRelativePath: 'models/ggml-indicwhisper-marathi-medium-q5_0.bin',
+    port: 43015,
+  ),
+];
 // Silero VAD trims hold-to-talk silence before decoding; without it whisper
 // loops and repeats sentences while decoding the silent tail.
 const bundledVadModelRelativePath = 'models/ggml-silero-v5.1.2.bin';
@@ -348,24 +399,17 @@ SttEngine createDefaultSttEngine({
   final whisperServer = resolve(bundledWhisperServerRelativePath);
   final vadModel = resolve(bundledVadModelRelativePath);
 
-  final hindi = WhisperServerSttEngine(
-    serverExecutable: whisperServer,
-    modelPath: resolve(bundledHindiWhisperModelRelativePath),
-    vadModelPath: vadModel,
-    cliLanguage: 'hi',
-    prompt: _hindiDevanagariPrompt,
-    port: hindiServerPort,
-  );
-
-  final hinglish = WhisperServerSttEngine(
-    serverExecutable: whisperServer,
-    modelPath: resolve(bundledHinglishWhisperModelRelativePath),
-    vadModelPath: vadModel,
-    // The Hinglish fine-tune decodes as Hindi and romanizes on its own; a
-    // script prompt would fight it.
-    cliLanguage: 'hi',
-    port: hinglishServerPort,
-  );
+  final whisperEnginesByCode = {
+    for (final language in whisperServerLanguages)
+      language.code: WhisperServerSttEngine(
+        serverExecutable: whisperServer,
+        modelPath: resolve(language.modelRelativePath),
+        vadModelPath: vadModel,
+        cliLanguage: language.cliLanguage ?? language.code,
+        prompt: language.prompt,
+        port: language.port,
+      ),
+  };
 
   final parakeet = ParakeetServerSttEngine(
     serverExecutable: resolve(bundledSherpaServerRelativePath),
@@ -378,9 +422,9 @@ SttEngine createDefaultSttEngine({
   return LanguageRoutingSttEngine(
     routes: {
       for (final code in parakeetLanguageCodes) code: parakeet,
-      'hinglish': hinglish,
+      ...whisperEnginesByCode,
     },
-    fallback: hindi,
+    fallback: whisperEnginesByCode['hi']!,
     languageCodeProvider: languageCodeProvider ?? (() => 'en'),
   );
 }

@@ -56,6 +56,19 @@ const _models = [
     'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/ggml-hindi2hinglish-swift.bin',
     147951465,
   ),
+  // GGML q5_0 quantizations of AI4Bharat Vistaar/IndicWhisper per-language
+  // fine-tunes (MIT), hosted on this repo's releases because no public GGML
+  // exists. Marathi has no small checkpoint, so it ships as medium.
+  _ModelSpec(
+    'ggml-vistaar-tamil-small-q5_0.bin',
+    'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/ggml-vistaar-tamil-small-q5_0.bin',
+    175209663,
+  ),
+  _ModelSpec(
+    'ggml-indicwhisper-marathi-medium-q5_0.bin',
+    'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/ggml-indicwhisper-marathi-medium-q5_0.bin',
+    539212484,
+  ),
   _ModelSpec(
     'ggml-silero-v5.1.2.bin',
     'https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin',

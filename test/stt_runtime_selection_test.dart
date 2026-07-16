@@ -29,36 +29,44 @@ void main() {
       'C:/apps/typemate/models/parakeet-tdt-0.6b-v3-int8/encoder.int8.onnx',
     );
 
-    // Hindi is the fallback: a whisper server with the Vaani model and the
-    // Devanagari prompt.
-    final hindi = routing.fallback as WhisperServerSttEngine;
-    expect(
-      hindi.serverExecutable,
-      'C:/apps/typemate/bin/whisper/whisper-server.exe',
-    );
-    expect(
-      hindi.modelPath,
-      'C:/apps/typemate/models/ggml-small-vaani-hindi-q6.bin',
-    );
-    expect(hindi.cliLanguage, 'hi');
-    expect(hindi.port, hindiServerPort);
-    expect(hindi.prompt, contains('देवनागरी'));
-    expect(
-      hindi.vadModelPath,
-      'C:/apps/typemate/models/ggml-silero-v5.1.2.bin',
-    );
+    // Every whisper-server language gets its own engine on its own port.
+    final seenPorts = <int>{};
+    for (final language in whisperServerLanguages) {
+      final server = routing.routes[language.code] as WhisperServerSttEngine;
+      expect(
+        server.serverExecutable,
+        'C:/apps/typemate/bin/whisper/whisper-server.exe',
+      );
+      expect(
+        server.modelPath,
+        'C:/apps/typemate/${language.modelRelativePath}',
+      );
+      expect(server.port, language.port);
+      expect(
+        seenPorts.add(server.port),
+        isTrue,
+        reason: 'ports must be unique per language server',
+      );
+      expect(
+        server.vadModelPath,
+        'C:/apps/typemate/models/ggml-silero-v5.1.2.bin',
+      );
+    }
 
-    // Hinglish gets its own whisper server on a distinct port, without a
-    // script prompt.
+    // Hindi is also the fallback, with the Devanagari prompt; Hinglish
+    // decodes as Hindi without a prompt.
+    final hindi = routing.routes['hi'] as WhisperServerSttEngine;
+    expect(identical(routing.fallback, hindi), isTrue);
+    expect(hindi.cliLanguage, 'hi');
+    expect(hindi.prompt, contains('देवनागरी'));
     final hinglish = routing.routes['hinglish'] as WhisperServerSttEngine;
-    expect(
-      hinglish.modelPath,
-      'C:/apps/typemate/models/ggml-hindi2hinglish-swift.bin',
-    );
     expect(hinglish.cliLanguage, 'hi');
-    expect(hinglish.port, hinglishServerPort);
     expect(hinglish.prompt, isNull);
-    expect(hinglish.port, isNot(hindi.port));
+
+    // The new Indian languages decode under their own whisper codes.
+    final tamil = routing.routes['ta'] as WhisperServerSttEngine;
+    expect(tamil.cliLanguage, 'ta');
+    expect(tamil.prompt, isNull);
   });
 
   test('falls back to executable directory paths', () {

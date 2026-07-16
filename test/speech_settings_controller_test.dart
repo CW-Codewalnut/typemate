@@ -11,23 +11,36 @@ void main() {
       );
     });
 
-    test('offers every Parakeet language plus Hindi and Hinglish', () {
+    test('offers every language that has a dedicated engine', () {
       final codes = speechLanguageOptions
           .map((language) => language.code)
           .toSet();
 
       expect(codes, containsAll(parakeetLanguageCodes));
-      expect(codes, contains('hi'));
-      expect(codes, contains('hinglish'));
       expect(
         codes,
-        hasLength(parakeetLanguageCodes.length + 2),
+        containsAll(whisperServerLanguages.map((language) => language.code)),
+      );
+      expect(
+        codes,
+        hasLength(parakeetLanguageCodes.length + whisperServerLanguages.length),
         reason: 'every visible language must have a validated model',
       );
     });
 
     test('does not offer auto detection or unsupported languages', () {
-      for (final unsupported in ['auto', 'mr', 'bn', 'ta', 'zh', 'ja', 'ar']) {
+      for (final unsupported in [
+        'auto',
+        'bn',
+        'gu',
+        'kn',
+        'te',
+        'ml',
+        'pa',
+        'ur',
+        'ja',
+        'ar',
+      ]) {
         expect(
           speechLanguageOptionForCode(unsupported),
           isNull,
@@ -54,11 +67,11 @@ void main() {
 
     test('ignores selection of languages that are not offered', () async {
       final controller = SpeechSettingsController();
-      await controller.selectLanguage('mr');
+      await controller.selectLanguage('bn');
       expect(controller.languageCode, 'en');
 
-      await controller.selectLanguage('de');
-      expect(controller.languageCode, 'de');
+      await controller.selectLanguage('mr');
+      expect(controller.languageCode, 'mr');
     });
   });
 }

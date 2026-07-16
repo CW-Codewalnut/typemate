@@ -16,6 +16,17 @@ laptop, ~13s clip):
   fine-tune, base-sized) writes Hindi speech as romanized Hinglish at
   ~1.2s per clip. Our own GGML conversion (no public one exists), hosted
   on this repo's GitHub releases.
+- `ggml-vistaar-tamil-small-q5_0.bin` (~167 MB) — Tamil (AI4Bharat
+  Vistaar small fine-tune, quantized to q5_0 by this repo, hosted on the
+  `models-v1` GitHub release), ~2s per clip and stable across repeated
+  requests.
+- `ggml-indicwhisper-marathi-medium-q5_0.bin` (~514 MB) — Marathi
+  (IndicWhisper medium fine-tune; no small checkpoint exists), same
+  conversion and hosting, ~5.5s per clip and word-perfect.
+- Telugu, Kannada, and Gujarati were evaluated and dropped: their
+  Vistaar checkpoints decode non-deterministically (identical requests
+  flip between correct output and hallucinations at every quantization
+  level, including fp16) on the benchmark corpus.
 - `ggml-silero-v5.1.2.bin` (~1 MB) — Silero VAD, always on; trims
   hold-to-talk silence so whisper does not loop and repeat sentences while
   decoding it.
