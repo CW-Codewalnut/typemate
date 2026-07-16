@@ -136,7 +136,7 @@ class DictationController extends ChangeNotifier {
     } finally {
       // Audio never outlives its transcription: dictation is private, so
       // the WAV is discarded whether transcription succeeded or not.
-      await _discardRecording(recording);
+      _discardRecording(recording);
     }
     final usableTranscript = _normalizeTranscript(transcript);
     if (usableTranscript.isEmpty) {
@@ -187,14 +187,16 @@ class DictationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _discardRecording(AudioRecording recording) async {
+  void _discardRecording(AudioRecording recording) {
     if (recording.path.isEmpty) {
       return;
     }
     try {
+      // Synchronous on purpose: async file IO never completes inside the
+      // widget-test fake-async zone, deadlocking any test that dictates.
       final file = File(recording.path);
-      if (await file.exists()) {
-        await file.delete();
+      if (file.existsSync()) {
+        file.deleteSync();
       }
     } catch (_) {
       // Best effort; a locked file is retried by the startup purge.

@@ -212,13 +212,15 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
 /// Deletes leftover dictation WAVs. Recordings are deleted right after
 /// transcription; this catches files stranded by crashes or older builds.
 Future<void> purgeStaleRecordings(Directory directory) async {
-  if (!await directory.exists()) {
+  // Synchronous IO on purpose: async file IO never completes inside the
+  // widget-test fake-async zone, and this runs once at startup.
+  if (!directory.existsSync()) {
     return;
   }
-  await for (final entry in directory.list()) {
+  for (final entry in directory.listSync()) {
     if (entry is File && entry.path.toLowerCase().endsWith('.wav')) {
       try {
-        await entry.delete();
+        entry.deleteSync();
       } catch (_) {
         // A file still locked by a recorder is picked up next launch.
       }
