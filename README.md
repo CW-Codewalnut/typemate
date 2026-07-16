@@ -21,10 +21,11 @@ Focus any text field, hold **Ctrl+Win**, speak, release — the transcript is ty
 
 ## Install (Windows)
 
-1. Download `TypeMate-vX.Y.Z-windows-x64.zip` from the latest [GitHub release](https://github.com/Ranjan-Bhagat/typemate/releases).
-2. Extract it anywhere (all models and runtimes are bundled).
-3. Run `typemate.exe`.
-4. Pick a microphone in Settings, focus a text field, hold **Ctrl+Win**, and speak.
+1. Download `TypeMate-Setup-vX.Y.Z.exe` from the [latest release](https://github.com/Ranjan-Bhagat/typemate/releases/latest) and run it.
+2. Launch Type Mate from the Start menu.
+3. Pick a microphone in Settings, focus a text field, hold **Ctrl+Win**, and speak.
+
+Prefer a portable app? Each release also ships `TypeMate-vX.Y.Z-windows-x64.zip` — extract anywhere and run `typemate.exe` directly. All models and runtimes are bundled in both.
 
 ## Development
 
