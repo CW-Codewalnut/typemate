@@ -329,13 +329,10 @@ const whisperServerLanguages = [
   // Telugu, Kannada, and Gujarati are intentionally absent: their Vistaar
   // checkpoints decode non-deterministically (thin logit margins flip
   // tokens into hallucinations run-to-run, at any quantization level and
-  // even fp16), failing the "visible languages must work" bar.
-  // IndicWhisper (Vistaar) Marathi is medium-sized; there is no small.
-  WhisperServerLanguage(
-    code: 'mr',
-    modelRelativePath: 'models/ggml-indicwhisper-marathi-medium-q5_0.bin',
-    port: 43015,
-  ),
+  // even fp16), failing the "visible languages must work" bar. Marathi
+  // validated cleanly but was cut for install size: its only checkpoint is
+  // medium-sized (~514 MB, kept at R:/Models/whisper and on the models-v1
+  // release for an easy re-add).
 ];
 // Silero VAD trims hold-to-talk silence before decoding; without it whisper
 // loops and repeats sentences while decoding the silent tail.

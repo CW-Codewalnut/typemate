@@ -34,6 +34,7 @@ void main() {
         'bn',
         'gu',
         'kn',
+        'mr',
         'te',
         'ml',
         'pa',
@@ -70,8 +71,8 @@ void main() {
       await controller.selectLanguage('bn');
       expect(controller.languageCode, 'en');
 
-      await controller.selectLanguage('mr');
-      expect(controller.languageCode, 'mr');
+      await controller.selectLanguage('ta');
+      expect(controller.languageCode, 'ta');
     });
   });
 }
