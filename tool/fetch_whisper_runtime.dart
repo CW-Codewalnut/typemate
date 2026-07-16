@@ -67,6 +67,7 @@ const whisperZipUrl =
     'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-blas-bin-x64.zip';
 const whisperCliFiles = [
   'whisper-cli.exe',
+  'whisper-server.exe',
   'whisper.dll',
   'ggml.dll',
   'ggml-base.dll',

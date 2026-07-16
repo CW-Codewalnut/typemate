@@ -1,11 +1,12 @@
-﻿import 'package:typemate/src/app.dart';
+import 'package:typemate/src/app.dart';
 import 'package:typemate/src/core/stt/language_routing_stt_engine.dart';
 import 'package:typemate/src/core/stt/parakeet_server_stt_engine.dart';
 import 'package:typemate/src/core/stt/whisper_cli_stt_engine.dart';
+import 'package:typemate/src/core/stt/whisper_server_stt_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('routes English to the Parakeet server and the rest to whisper', () {
+  test('routes each language to its own resident server engine', () {
     final engine = createDefaultSttEngine(
       environment: const {},
       pathExists: (_) => true,
@@ -18,10 +19,6 @@ void main() {
 
     // Every Parakeet language shares the same resident server engine.
     expect(routing.routes.keys, containsAll(parakeetLanguageCodes));
-    expect(routing.routes.values.toSet(), hasLength(1));
-    expect(routing.routes.containsKey('hi'), isFalse);
-    expect(routing.routes.containsKey('hinglish'), isFalse);
-
     final parakeet = routing.routes['en'] as ParakeetServerSttEngine;
     expect(
       parakeet.serverExecutable,
@@ -31,32 +28,37 @@ void main() {
       parakeet.encoderPath,
       'C:/apps/typemate/models/parakeet-tdt-0.6b-v3-int8/encoder.int8.onnx',
     );
-    expect(
-      parakeet.decoderPath,
-      'C:/apps/typemate/models/parakeet-tdt-0.6b-v3-int8/decoder.int8.onnx',
-    );
-    expect(
-      parakeet.joinerPath,
-      'C:/apps/typemate/models/parakeet-tdt-0.6b-v3-int8/joiner.int8.onnx',
-    );
-    expect(
-      parakeet.tokensPath,
-      'C:/apps/typemate/models/parakeet-tdt-0.6b-v3-int8/tokens.txt',
-    );
 
-    final whisper = routing.fallback as WhisperCliSttEngine;
-    expect(whisper.executable, 'C:/apps/typemate/bin/whisper/whisper-cli.exe');
+    // Hindi is the fallback: a whisper server with the Vaani model and the
+    // Devanagari prompt.
+    final hindi = routing.fallback as WhisperServerSttEngine;
     expect(
-      whisper.modelPath,
+      hindi.serverExecutable,
+      'C:/apps/typemate/bin/whisper/whisper-server.exe',
+    );
+    expect(
+      hindi.modelPath,
       'C:/apps/typemate/models/ggml-small-vaani-hindi-q6.bin',
     );
-    expect(whisper.modelPathOverridesByLanguage, {
-      'hinglish': 'C:/apps/typemate/models/ggml-hindi2hinglish-swift.bin',
-    });
+    expect(hindi.cliLanguage, 'hi');
+    expect(hindi.port, hindiServerPort);
+    expect(hindi.prompt, contains('देवनागरी'));
     expect(
-      whisper.vadModelPath,
+      hindi.vadModelPath,
       'C:/apps/typemate/models/ggml-silero-v5.1.2.bin',
     );
+
+    // Hinglish gets its own whisper server on a distinct port, without a
+    // script prompt.
+    final hinglish = routing.routes['hinglish'] as WhisperServerSttEngine;
+    expect(
+      hinglish.modelPath,
+      'C:/apps/typemate/models/ggml-hindi2hinglish-swift.bin',
+    );
+    expect(hinglish.cliLanguage, 'hi');
+    expect(hinglish.port, hinglishServerPort);
+    expect(hinglish.prompt, isNull);
+    expect(hinglish.port, isNot(hindi.port));
   });
 
   test('falls back to executable directory paths', () {
@@ -74,9 +76,9 @@ void main() {
       parakeet.encoderPath,
       '$executableDirectory/models/parakeet-tdt-0.6b-v3-int8/encoder.int8.onnx',
     );
-    final whisper = routing.fallback as WhisperCliSttEngine;
+    final hindi = routing.fallback as WhisperServerSttEngine;
     expect(
-      whisper.modelPath,
+      hindi.modelPath,
       '$executableDirectory/models/ggml-small-vaani-hindi-q6.bin',
     );
   });
@@ -94,6 +96,24 @@ void main() {
           (error) => error.message,
           'message',
           contains('sherpa-onnx-offline-websocket-server.exe'),
+        ),
+      ),
+    );
+  });
+
+  test('throws a clear error when the whisper server binary is missing', () {
+    expect(
+      () => createDefaultSttEngine(
+        environment: const {},
+        pathExists: (path) => !path.contains('whisper-server.exe'),
+        currentDirectoryPath: 'C:/apps/typemate',
+        executableDirectoryPath: 'C:/apps/typemate/build/runner',
+      ),
+      throwsA(
+        isA<SttRuntimeException>().having(
+          (error) => error.message,
+          'message',
+          contains('whisper-server.exe'),
         ),
       ),
     );
@@ -117,7 +137,7 @@ void main() {
     );
   });
 
-  test('environment model override routes every language to whisper', () {
+  test('environment model override routes every language to whisper CLI', () {
     final engine = createDefaultSttEngine(
       environment: const {
         'TYPEMATE_WHISPER_CLI': 'R:/Tools/whisper/whisper-cli.exe',
@@ -131,7 +151,7 @@ void main() {
     expect(
       engine,
       isA<WhisperCliSttEngine>(),
-      reason: 'an explicit model override bypasses the Parakeet server',
+      reason: 'an explicit model override bypasses the resident servers',
     );
     final whisper = engine as WhisperCliSttEngine;
     expect(whisper.executable, 'R:/Tools/whisper/whisper-cli.exe');

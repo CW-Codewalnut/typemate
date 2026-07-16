@@ -3,9 +3,11 @@ import 'stt_engine.dart';
 import 'whisper_cli_stt_engine.dart';
 
 /// Routes each transcription to the engine registered for the selected
-/// language, falling back to [fallback] for everything else. This lets
-/// English run on the resident Parakeet server while Hindi and Hinglish
-/// stay on the whisper CLI.
+/// language, falling back to [fallback] for everything else.
+///
+/// Only the selected language's engine is kept warm: preparing or using a
+/// language shuts every other disposable engine down first, so a single
+/// resident model server occupies RAM at a time.
 class LanguageRoutingSttEngine implements DisposableSttEngine {
   LanguageRoutingSttEngine({
     required this.routes,
@@ -17,31 +19,38 @@ class LanguageRoutingSttEngine implements DisposableSttEngine {
   final SttEngine fallback;
   final SttLanguageCodeProvider languageCodeProvider;
 
-  Iterable<SttEngine> get _allEngines => [...routes.values, fallback];
+  Iterable<SttEngine> get _allEngines => {...routes.values, fallback};
 
-  SttEngine get _currentEngine =>
+  SttEngine get _activeEngine =>
       routes[languageCodeProvider().trim().toLowerCase()] ?? fallback;
+
+  Future<SttEngine> _syncToActiveEngine() async {
+    final active = _activeEngine;
+    for (final engine in _allEngines) {
+      if (!identical(engine, active) && engine is DisposableSttEngine) {
+        await engine.shutdown();
+      }
+    }
+    return active;
+  }
 
   @override
   Future<bool> isReady() async {
-    for (final engine in _allEngines) {
-      if (!await engine.isReady()) {
-        return false;
-      }
-    }
-    return true;
+    final active = await _syncToActiveEngine();
+    return active.isReady();
   }
 
   @override
   Future<void> prepare() async {
-    for (final engine in _allEngines) {
-      await engine.prepare();
-    }
+    final active = await _syncToActiveEngine();
+    await active.prepare();
   }
 
   @override
-  Future<String> transcribe(AudioRecording recording) =>
-      _currentEngine.transcribe(recording);
+  Future<String> transcribe(AudioRecording recording) async {
+    final active = await _syncToActiveEngine();
+    return active.transcribe(recording);
+  }
 
   @override
   Future<void> shutdown() async {

@@ -12,8 +12,8 @@ void main() {
   test(
     'routes transcription to the engine for the selected language',
     () async {
-      final english = RecordingSttEngine('english transcript');
-      final fallback = RecordingSttEngine('fallback transcript');
+      final english = DisposableRecordingSttEngine('english transcript');
+      final fallback = DisposableRecordingSttEngine('fallback transcript');
       var language = 'en';
       final engine = LanguageRoutingSttEngine(
         routes: {'en': english},
@@ -28,67 +28,77 @@ void main() {
       language = 'hi';
       expect(await engine.transcribe(recording), 'fallback transcript');
       expect(fallback.transcribeCalls, 1);
-
-      language = 'hinglish';
-      expect(await engine.transcribe(recording), 'fallback transcript');
-      expect(fallback.transcribeCalls, 2);
     },
   );
 
-  test(
-    'prepare readies every engine so the server starts at app open',
-    () async {
-      final english = RecordingSttEngine('a');
-      final fallback = RecordingSttEngine('b');
-      final engine = LanguageRoutingSttEngine(
-        routes: {'en': english},
-        fallback: fallback,
-        languageCodeProvider: () => 'en',
-      );
-
-      await engine.prepare();
-
-      expect(english.prepareCalls, 1);
-      expect(fallback.prepareCalls, 1);
-    },
-  );
-
-  test('isReady is false when any engine is not ready', () async {
-    final english = RecordingSttEngine('a')..ready = false;
-    final fallback = RecordingSttEngine('b');
+  test('keeps only the selected language engine warm to save RAM', () async {
+    final english = DisposableRecordingSttEngine('a');
+    final hindi = DisposableRecordingSttEngine('b');
+    var language = 'en';
     final engine = LanguageRoutingSttEngine(
-      routes: {'en': english},
-      fallback: fallback,
-      languageCodeProvider: () => 'en',
+      routes: {'en': english, 'hi': hindi},
+      fallback: hindi,
+      languageCodeProvider: () => language,
     );
 
-    expect(await engine.isReady(), isFalse);
-    english.ready = true;
-    expect(await engine.isReady(), isTrue);
+    // Preparing English shuts the Hindi server down, not English.
+    await engine.prepare();
+    expect(english.prepareCalls, 1);
+    expect(english.shutdownCalls, 0);
+    expect(hindi.shutdownCalls, 1);
+
+    // Switching to Hindi and preparing shuts English down.
+    language = 'hi';
+    await engine.prepare();
+    expect(hindi.prepareCalls, 1);
+    expect(english.shutdownCalls, 1);
+
+    // Transcribing also enforces the single-active-engine rule.
+    language = 'en';
+    await engine.transcribe(recording);
+    expect(hindi.shutdownCalls, 2);
+    expect(english.transcribeCalls, 1);
   });
 
-  test('shutdown reaches disposable engines only', () async {
-    final english = DisposableRecordingSttEngine('a');
-    final fallback = RecordingSttEngine('b');
+  test('isReady reflects the active engine only', () async {
+    final english = DisposableRecordingSttEngine('a')..ready = false;
+    final hindi = DisposableRecordingSttEngine('b');
+    var language = 'hi';
     final engine = LanguageRoutingSttEngine(
-      routes: {'en': english},
-      fallback: fallback,
+      routes: {'en': english, 'hi': hindi},
+      fallback: hindi,
+      languageCodeProvider: () => language,
+    );
+
+    expect(await engine.isReady(), isTrue);
+    language = 'en';
+    expect(await engine.isReady(), isFalse);
+  });
+
+  test('shutdown reaches every disposable engine', () async {
+    final english = DisposableRecordingSttEngine('a');
+    final hindi = DisposableRecordingSttEngine('b');
+    final engine = LanguageRoutingSttEngine(
+      routes: {'en': english, 'hi': hindi},
+      fallback: hindi,
       languageCodeProvider: () => 'en',
     );
 
     await engine.shutdown();
 
     expect(english.shutdownCalls, 1);
+    expect(hindi.shutdownCalls, 1);
   });
 }
 
-class RecordingSttEngine implements SttEngine {
-  RecordingSttEngine(this.transcript);
+class DisposableRecordingSttEngine implements DisposableSttEngine {
+  DisposableRecordingSttEngine(this.transcript);
 
   final String transcript;
   bool ready = true;
   int prepareCalls = 0;
   int transcribeCalls = 0;
+  int shutdownCalls = 0;
 
   @override
   Future<bool> isReady() async => ready;
@@ -103,13 +113,6 @@ class RecordingSttEngine implements SttEngine {
     transcribeCalls += 1;
     return transcript;
   }
-}
-
-class DisposableRecordingSttEngine extends RecordingSttEngine
-    implements DisposableSttEngine {
-  DisposableRecordingSttEngine(super.transcript);
-
-  int shutdownCalls = 0;
 
   @override
   Future<void> shutdown() async {

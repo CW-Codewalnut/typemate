@@ -21,6 +21,7 @@ import 'core/stt/language_routing_stt_engine.dart';
 import 'core/stt/parakeet_server_stt_engine.dart';
 import 'core/stt/stt_engine.dart';
 import 'core/stt/whisper_cli_stt_engine.dart';
+import 'core/stt/whisper_server_stt_engine.dart';
 import 'features/home/home_screen.dart';
 
 class DictationFlowApp extends StatefulWidget {
@@ -108,6 +109,19 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
     unawaited(platformBridge.ensureLaunchAtStartup());
     historyController.load();
     speechSettingsController.load();
+    // Swap resident speech servers as soon as the language changes so the
+    // newly selected model is warm before the next dictation, and the old
+    // one's RAM is released.
+    speechSettingsController.addListener(_onLanguageChanged);
+  }
+
+  void _onLanguageChanged() {
+    unawaited(
+      _sttEngine.prepare().catchError((_) {
+        // Preloading is best-effort; a failure surfaces on the next
+        // dictation with a proper error state.
+      }),
+    );
   }
 
   /// Answers the tray's Quit request: stop the resident speech server, then
@@ -122,6 +136,7 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
 
   @override
   void dispose() {
+    speechSettingsController.removeListener(_onLanguageChanged);
     final engine = _sttEngine;
     if (engine is DisposableSttEngine) {
       unawaited(engine.shutdown());
@@ -258,12 +273,19 @@ Directory _typeMateDataDirectory({Map<String, String>? environment}) {
 typedef PathExists = bool Function(String path);
 
 const bundledWhisperCliRelativePath = 'bin/whisper/whisper-cli.exe';
+const bundledWhisperServerRelativePath = 'bin/whisper/whisper-server.exe';
 // Hindi uses the Vaani small fine-tune; Hinglish the base-sized Oriserve
-// Swift fine-tune. Both run through the whisper CLI per utterance.
+// Swift fine-tune. Each runs on its own resident whisper server, but only
+// the selected language's server is kept loaded (RAM policy).
 const bundledHindiWhisperModelRelativePath =
     'models/ggml-small-vaani-hindi-q6.bin';
 const bundledHinglishWhisperModelRelativePath =
     'models/ggml-hindi2hinglish-swift.bin';
+const hindiServerPort = 43008;
+const hinglishServerPort = 43009;
+const _hindiDevanagariPrompt =
+    'हिंदी भाषण को देवनागरी लिपि में ठीक-ठीक लिखें। '
+    'अंग्रेज़ी में अनुवाद न करें।';
 // Silero VAD trims hold-to-talk silence before decoding; without it whisper
 // loops and repeats sentences while decoding the silent tail.
 const bundledVadModelRelativePath = 'models/ggml-silero-v5.1.2.bin';
@@ -323,14 +345,26 @@ SttEngine createDefaultSttEngine({
     );
   }
 
-  final whisper = WhisperCliSttEngine(
-    executable: whisperCli,
+  final whisperServer = resolve(bundledWhisperServerRelativePath);
+  final vadModel = resolve(bundledVadModelRelativePath);
+
+  final hindi = WhisperServerSttEngine(
+    serverExecutable: whisperServer,
     modelPath: resolve(bundledHindiWhisperModelRelativePath),
-    modelPathOverridesByLanguage: {
-      'hinglish': resolve(bundledHinglishWhisperModelRelativePath),
-    },
-    vadModelPath: resolve(bundledVadModelRelativePath),
-    languageCodeProvider: languageCodeProvider,
+    vadModelPath: vadModel,
+    cliLanguage: 'hi',
+    prompt: _hindiDevanagariPrompt,
+    port: hindiServerPort,
+  );
+
+  final hinglish = WhisperServerSttEngine(
+    serverExecutable: whisperServer,
+    modelPath: resolve(bundledHinglishWhisperModelRelativePath),
+    vadModelPath: vadModel,
+    // The Hinglish fine-tune decodes as Hindi and romanizes on its own; a
+    // script prompt would fight it.
+    cliLanguage: 'hi',
+    port: hinglishServerPort,
   );
 
   final parakeet = ParakeetServerSttEngine(
@@ -342,8 +376,11 @@ SttEngine createDefaultSttEngine({
   );
 
   return LanguageRoutingSttEngine(
-    routes: {for (final code in parakeetLanguageCodes) code: parakeet},
-    fallback: whisper,
+    routes: {
+      for (final code in parakeetLanguageCodes) code: parakeet,
+      'hinglish': hinglish,
+    },
+    fallback: hindi,
     languageCodeProvider: languageCodeProvider ?? (() => 'en'),
   );
 }
