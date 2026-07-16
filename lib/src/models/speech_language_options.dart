@@ -1,4 +1,4 @@
-class SpeechLanguageOption {
+﻿class SpeechLanguageOption {
   const SpeechLanguageOption({required this.code, required this.label});
 
   final String code;
@@ -11,8 +11,8 @@ class SpeechLanguageOption {
 ///   0.6B v3 server (~1s per clip, automatic language detection, native
 ///   punctuation). Parakeet supports exactly these 25 languages.
 /// - Hindi uses the Vaani small whisper fine-tune (~2.8s).
-/// - Hinglish uses the Oriserve Apex whisper fine-tune, which writes Hindi
-///   speech as romanized Hinglish (turbo-sized, so ~7s).
+/// - Hinglish uses the Oriserve Swift whisper fine-tune (base-sized,
+///   ~1.2s), which writes Hindi speech as romanized Hinglish.
 ///
 /// There is no Auto option in the picker; within the Parakeet languages the
 /// model detects the spoken language on its own.

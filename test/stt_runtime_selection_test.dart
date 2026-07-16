@@ -1,4 +1,4 @@
-import 'package:typemate/src/app.dart';
+﻿import 'package:typemate/src/app.dart';
 import 'package:typemate/src/core/stt/language_routing_stt_engine.dart';
 import 'package:typemate/src/core/stt/parakeet_server_stt_engine.dart';
 import 'package:typemate/src/core/stt/whisper_cli_stt_engine.dart';
@@ -51,7 +51,7 @@ void main() {
       'C:/apps/typemate/models/ggml-small-vaani-hindi-q6.bin',
     );
     expect(whisper.modelPathOverridesByLanguage, {
-      'hinglish': 'C:/apps/typemate/models/ggml-hindi2hinglish-apex-q5_1.bin',
+      'hinglish': 'C:/apps/typemate/models/ggml-hindi2hinglish-swift.bin',
     });
     expect(
       whisper.vadModelPath,

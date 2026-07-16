@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -258,12 +258,12 @@ Directory _typeMateDataDirectory({Map<String, String>? environment}) {
 typedef PathExists = bool Function(String path);
 
 const bundledWhisperCliRelativePath = 'bin/whisper/whisper-cli.exe';
-// Hindi uses the Vaani small fine-tune; Hinglish the turbo-sized Oriserve
-// Apex fine-tune. Both run through the whisper CLI per utterance.
+// Hindi uses the Vaani small fine-tune; Hinglish the base-sized Oriserve
+// Swift fine-tune. Both run through the whisper CLI per utterance.
 const bundledHindiWhisperModelRelativePath =
     'models/ggml-small-vaani-hindi-q6.bin';
 const bundledHinglishWhisperModelRelativePath =
-    'models/ggml-hindi2hinglish-apex-q5_1.bin';
+    'models/ggml-hindi2hinglish-swift.bin';
 // Silero VAD trims hold-to-talk silence before decoding; without it whisper
 // loops and repeats sentences while decoding the silent tail.
 const bundledVadModelRelativePath = 'models/ggml-silero-v5.1.2.bin';

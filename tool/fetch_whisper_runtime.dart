@@ -3,7 +3,7 @@ import 'dart:io';
 /// Provisions the speech runtimes that ship with TypeMate:
 /// - models/parakeet-tdt-0.6b-v3-int8/ (English, resident sherpa server)
 /// - models/ggml-small-vaani-hindi-q6.bin (Hindi, Vaani fine-tune)
-/// - models/ggml-hindi2hinglish-apex-q5_1.bin (Hinglish, Oriserve Apex)
+/// - models/ggml-hindi2hinglish-swift.bin (Hinglish, Oriserve Swift)
 /// - models/ggml-silero-v5.1.2.bin (VAD)
 /// - bin/whisper/ (whisper-cli and its DLLs, OpenBLAS build)
 /// - bin/sherpa/ (sherpa-onnx websocket server for the Parakeet model)
@@ -50,9 +50,11 @@ const _models = [
     206820806,
   ),
   _ModelSpec(
-    'ggml-hindi2hinglish-apex-q5_1.bin',
-    'https://huggingface.co/voquill/whisper-hindi2hinglish-apex-ggml/resolve/main/ggml-hindi2hinglish-apex-q5_1.bin',
-    624065675,
+    // GGML conversion of Oriserve/Whisper-Hindi2Hinglish-Swift (Apache-2.0),
+    // hosted on this repo's releases because no public GGML exists.
+    'ggml-hindi2hinglish-swift.bin',
+    'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/ggml-hindi2hinglish-swift.bin',
+    147951465,
   ),
   _ModelSpec(
     'ggml-silero-v5.1.2.bin',

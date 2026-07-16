@@ -12,9 +12,10 @@ laptop, ~13s clip):
 - `ggml-small-vaani-hindi-q6.bin` (~197 MB) — Hindi (Vaani small
   fine-tune, q6), ~2.8s per clip; more noise-robust than the tiny
   variant with near-turbo Hindi accuracy.
-- `ggml-hindi2hinglish-apex-q5_1.bin` (~595 MB) — Hinglish (Oriserve Apex
-  fine-tune) writes Hindi speech as romanized Hinglish; turbo-sized, so
-  noticeably slower (~7s per clip).
+- `ggml-hindi2hinglish-swift.bin` (~141 MB) — Hinglish (Oriserve Swift
+  fine-tune, base-sized) writes Hindi speech as romanized Hinglish at
+  ~1.2s per clip. Our own GGML conversion (no public one exists), hosted
+  on this repo's GitHub releases.
 - `ggml-silero-v5.1.2.bin` (~1 MB) — Silero VAD, always on; trims
   hold-to-talk silence so whisper does not loop and repeat sentences while
   decoding it.
