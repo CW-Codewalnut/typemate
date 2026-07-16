@@ -63,8 +63,12 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
         }
       });
     }
+    final recordingsDirectory = Directory('build/recordings');
+    // Dictation audio is transcribe-and-delete; sweep anything a crash or
+    // an older build left behind so no speech sits on disk.
+    unawaited(purgeStaleRecordings(recordingsDirectory));
     final recorderFactory = MicrophoneAudioRecorderFactory.windows(
-      outputDirectory: Directory('build/recordings'),
+      outputDirectory: recordingsDirectory,
     );
     microphoneController = MicrophoneSettingsController(
       discovery:
@@ -202,6 +206,23 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
               ),
       ),
     );
+  }
+}
+
+/// Deletes leftover dictation WAVs. Recordings are deleted right after
+/// transcription; this catches files stranded by crashes or older builds.
+Future<void> purgeStaleRecordings(Directory directory) async {
+  if (!await directory.exists()) {
+    return;
+  }
+  await for (final entry in directory.list()) {
+    if (entry is File && entry.path.toLowerCase().endsWith('.wav')) {
+      try {
+        await entry.delete();
+      } catch (_) {
+        // A file still locked by a recorder is picked up next launch.
+      }
+    }
   }
 }
 

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:typemate/src/core/audio/audio_recorder.dart';
 import 'package:typemate/src/core/dictation_controller.dart';
 import 'package:typemate/src/models/dictation_state.dart';
@@ -34,6 +36,51 @@ void main() {
       controller.statusMessage,
       'Unable to prepare local speech engine. Check the speech runtime and model file, then try again.',
     );
+  });
+
+  test('deletes the recording file after it is transcribed', () async {
+    final directory = Directory.systemTemp.createTempSync('typemate-rec');
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final wavFile = File('${directory.path}/voice.wav')
+      ..writeAsBytesSync([1, 2, 3]);
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: FakeSttEngine(transcript: 'hello'),
+      audioRecorder: FakeAudioRecorder(
+        recording: AudioRecording(
+          path: wavFile.path,
+          duration: const Duration(seconds: 2),
+        ),
+      ),
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(controller.latestTranscript, 'hello');
+    expect(wavFile.existsSync(), isFalse);
+  });
+
+  test('deletes the recording file when transcription fails', () async {
+    final directory = Directory.systemTemp.createTempSync('typemate-rec');
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final wavFile = File('${directory.path}/voice.wav')
+      ..writeAsBytesSync([1, 2, 3]);
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: ThrowingSttEngine(),
+      audioRecorder: FakeAudioRecorder(
+        recording: AudioRecording(
+          path: wavFile.path,
+          duration: const Duration(seconds: 2),
+        ),
+      ),
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(wavFile.existsSync(), isFalse);
   });
 
   test('startListening starts recording and shows overlay', () async {

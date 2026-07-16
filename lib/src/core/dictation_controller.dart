@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
 import 'audio/audio_recorder.dart';
@@ -131,6 +133,10 @@ class DictationController extends ChangeNotifier {
         'Unable to transcribe locally. Check the speech runtime and model file, then try again.',
       );
       return;
+    } finally {
+      // Audio never outlives its transcription: dictation is private, so
+      // the WAV is discarded whether transcription succeeded or not.
+      await _discardRecording(recording);
     }
     final usableTranscript = _normalizeTranscript(transcript);
     if (usableTranscript.isEmpty) {
@@ -179,6 +185,20 @@ class DictationController extends ChangeNotifier {
     _phase = phase;
     _statusMessage = message;
     notifyListeners();
+  }
+
+  Future<void> _discardRecording(AudioRecording recording) async {
+    if (recording.path.isEmpty) {
+      return;
+    }
+    try {
+      final file = File(recording.path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {
+      // Best effort; a locked file is retried by the startup purge.
+    }
   }
 
   String _normalizeTranscript(String transcript) {

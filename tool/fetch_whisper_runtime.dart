@@ -86,10 +86,19 @@ Future<void> main(List<String> arguments) async {
   final force = arguments.contains('--force');
   final client = HttpClient();
   try {
+    // Fail fast: a broken download means the build cannot ship anyway, so
+    // stop at the first error instead of burning time on the remaining
+    // multi-hundred-MB fetches.
     for (final model in _models) {
       await _fetchModel(client, model, force: force);
+      if (exitCode != 0) {
+        return;
+      }
     }
     await _fetchCli(client, force: force);
+    if (exitCode != 0) {
+      return;
+    }
     await _fetchSherpaServer(client, force: force);
   } finally {
     client.close();
