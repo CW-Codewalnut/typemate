@@ -100,6 +100,38 @@ void main() {
     );
   });
 
+  test('invokes onQuitRequested when the tray asks to quit', () async {
+    final bridge = WindowsPlatformBridge(
+      nativeMethodInvoker: <T>(method, [arguments]) async => null,
+    );
+    var quitRequests = 0;
+    bridge.onQuitRequested = () async {
+      quitRequests += 1;
+    };
+
+    const codec = StandardMethodCodec();
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+          'typemate/windows',
+          codec.encodeMethodCall(const MethodCall('quitRequested')),
+          (_) {},
+        );
+
+    expect(quitRequests, 1);
+  });
+
+  test('native runner shows a tray icon and hides the window on close', () {
+    final source = File('windows/runner/flutter_window.cpp').readAsStringSync();
+
+    expect(source, contains('Shell_NotifyIcon(NIM_ADD'));
+    expect(source, contains('Shell_NotifyIcon(NIM_DELETE'));
+    expect(source, contains('L"Open Type Mate"'));
+    expect(source, contains('L"Quit Type Mate"'));
+    expect(source, contains('quitRequested'));
+    expect(source, contains('case WM_CLOSE:'));
+    expect(source, contains('SW_HIDE'));
+  });
+
   test('shows native overlay through Windows method channel', () async {
     final calls = <({String method, Object? arguments})>[];
     final bridge = WindowsPlatformBridge(
@@ -215,6 +247,7 @@ void main() {
           processCalls.add((executable: executable, arguments: arguments));
           return const PlatformProcessResult(exitCode: 0);
         },
+        executablePath: r'C:\Apps\TypeMate\typemate.exe',
       );
 
       await bridge.ensureLaunchAtStartup();
@@ -226,6 +259,7 @@ void main() {
         command,
         contains(r'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'),
       );
+      expect(command, contains(r'C:\Apps\TypeMate\typemate.exe'));
       expect(command, contains('TypeMate'));
       expect(command, contains('Set-ItemProperty'));
       expect(command, contains('WScript.Shell'));
@@ -239,8 +273,27 @@ void main() {
     },
   );
 
+  test('never registers a non-app executable for startup', () async {
+    // Widget tests once wrote flutter_tester.exe into the user's Run key;
+    // registration must be limited to the real typemate.exe.
+    final processCalls = <({String executable, List<String> arguments})>[];
+    final bridge = WindowsPlatformBridge(
+      processRunner: (executable, arguments) async {
+        processCalls.add((executable: executable, arguments: arguments));
+        return const PlatformProcessResult(exitCode: 0);
+      },
+      executablePath:
+          r'C:\Users\dev\flutter\bin\cache\artifacts\engine\flutter_tester.exe',
+    );
+
+    await bridge.ensureLaunchAtStartup();
+
+    expect(processCalls, isEmpty);
+  });
+
   test('throws when startup registration fails', () async {
     final bridge = WindowsPlatformBridge(
+      executablePath: r'C:\Apps\TypeMate\typemate.exe',
       processRunner: (_, _) async =>
           const PlatformProcessResult(exitCode: 1, stderr: 'registry failed'),
     );

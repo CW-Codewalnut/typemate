@@ -69,16 +69,35 @@ Future<OverlayProcess> startOverlayProcess(
 typedef NativeMethodInvoker =
     Future<T?> Function<T>(String method, [Object? arguments]);
 
-class WindowsPlatformBridge implements PlatformBridge {
+class WindowsPlatformBridge implements PlatformBridge, QuitRequestSource {
   WindowsPlatformBridge({
     this.processRunner = runPlatformProcess,
     this.overlayProcessStarter = startOverlayProcess,
     NativeMethodInvoker? nativeMethodInvoker,
-  }) : nativeMethodInvoker = nativeMethodInvoker ?? _nativeChannel.invokeMethod;
+    String? executablePath,
+  }) : nativeMethodInvoker = nativeMethodInvoker ?? _nativeChannel.invokeMethod,
+       _executablePath = executablePath ?? Platform.resolvedExecutable {
+    _nativeChannel.setMethodCallHandler(_handleNativeCall);
+  }
 
   final PlatformProcessRunner processRunner;
   final OverlayProcessStarter overlayProcessStarter;
   final NativeMethodInvoker nativeMethodInvoker;
+  final String _executablePath;
+
+  Future<void> Function()? _onQuitRequested;
+
+  @override
+  set onQuitRequested(Future<void> Function()? handler) {
+    _onQuitRequested = handler;
+  }
+
+  Future<dynamic> _handleNativeCall(MethodCall call) async {
+    if (call.method == 'quitRequested') {
+      await _onQuitRequested?.call();
+    }
+    return null;
+  }
 
   OverlayProcess? _overlayProcess;
   String? _overlayState;
@@ -151,7 +170,13 @@ class WindowsPlatformBridge implements PlatformBridge {
 
   @override
   Future<void> ensureLaunchAtStartup() async {
-    final executablePath = Platform.resolvedExecutable;
+    final executablePath = _executablePath;
+    // Never register the Flutter test harness (or anything that is not the
+    // real app) for startup: widget tests once wrote flutter_tester.exe
+    // into the user's Run key.
+    if (!executablePath.toLowerCase().endsWith('typemate.exe')) {
+      return;
+    }
     final escapedPath = executablePath.replaceAll("'", "''");
     final script =
         """

@@ -58,17 +58,24 @@ add_subdirectory("runner")
 include(flutter/generated_plugins.cmake)
 
 
-# === Whisper runtime provisioning ===
-# The bundled model and CLI are gitignored (the model exceeds git hosting
+# === Speech runtime provisioning ===
+# The bundled models and binaries are gitignored (they exceed git hosting
 # limits), so fetch anything missing automatically. This makes a fresh clone
 # build and run without manual steps; the script is a fast no-op when the
 # files are already present.
-include("${FLUTTER_MANAGED_DIR}/ephemeral/generated_config.cmake" OPTIONAL)
-if(DEFINED FLUTTER_ROOT)
-  set(DART_EXECUTABLE "${FLUTTER_ROOT}/bin/dart.bat")
-else()
-  set(DART_EXECUTABLE "dart")
-endif()
+#
+# Reading the generated config inside a function gives its PARENT_SCOPE
+# writes (FLUTTER_VERSION etc.) a parent, which they lack at the top level
+# and would otherwise warn about on every configure.
+function(typemate_resolve_dart_executable out_variable)
+  include("${FLUTTER_MANAGED_DIR}/ephemeral/generated_config.cmake" OPTIONAL)
+  if(DEFINED FLUTTER_ROOT)
+    set(${out_variable} "${FLUTTER_ROOT}/bin/dart.bat" PARENT_SCOPE)
+  else()
+    set(${out_variable} "dart" PARENT_SCOPE)
+  endif()
+endfunction()
+typemate_resolve_dart_executable(DART_EXECUTABLE)
 execute_process(
   COMMAND "${DART_EXECUTABLE}" tool/fetch_whisper_runtime.dart
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."

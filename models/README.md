@@ -4,14 +4,28 @@ TypeMate bundles one validated model per supported language and routes by
 the language selected in Settings (benchmarks from the target i5-11300H
 laptop, ~13s clip):
 
-- `ggml-distil-small.en.bin` (~321 MB) — English (distil-whisper), ~1.5s
-  per clip; robust to Indian-English where tiny.en looped and misheard.
+- `parakeet-tdt-0.6b-v3-int8/` (~640 MB) — English plus 24 European
+  languages (NVIDIA Parakeet TDT 0.6B v3, int8 ONNX, automatic language
+  detection). Served by a resident sherpa-onnx server that loads it once
+  at app start; roughly a second per short clip with the best accuracy of
+  every model benchmarked, including Indian-English.
 - `ggml-small-vaani-hindi-q6.bin` (~197 MB) — Hindi (Vaani small
   fine-tune, q6), ~2.8s per clip; more noise-robust than the tiny
   variant with near-turbo Hindi accuracy.
-- `ggml-hindi2hinglish-apex-q5_1.bin` (~595 MB) — Hinglish (Oriserve Apex
-  fine-tune) writes Hindi speech as romanized Hinglish; turbo-sized, so
-  noticeably slower (~7s per clip).
+- `ggml-hindi2hinglish-swift.bin` (~141 MB) — Hinglish (Oriserve Swift
+  fine-tune, base-sized) writes Hindi speech as romanized Hinglish at
+  ~1.2s per clip. Our own GGML conversion (no public one exists), hosted
+  on this repo's GitHub releases.
+- `ggml-vistaar-tamil-small-q5_0.bin` (~167 MB) — Tamil (AI4Bharat
+  Vistaar small fine-tune, quantized to q5_0 by this repo, hosted on the
+  `models-v1` GitHub release), ~2s per clip and stable across repeated
+  requests.
+- Telugu, Kannada, and Gujarati were evaluated and dropped: their
+  Vistaar checkpoints decode non-deterministically (identical requests
+  flip between correct output and hallucinations at every quantization
+  level, including fp16) on the benchmark corpus. Marathi validated
+  cleanly but was cut for install size (medium-only checkpoint, ~514 MB;
+  archived at `R:/Models/whisper/` and on the `models-v1` release).
 - `ggml-silero-v5.1.2.bin` (~1 MB) — Silero VAD, always on; trims
   hold-to-talk silence so whisper does not loop and repeat sentences while
   decoding it.

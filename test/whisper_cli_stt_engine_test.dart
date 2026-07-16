@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
 
 import 'package:typemate/src/core/audio/audio_recorder.dart';
@@ -344,7 +344,7 @@ void main() {
         executable: 'whisper-cli',
         modelPath: 'models/ggml-tiny.en.bin',
         modelPathOverridesByLanguage: const {
-          'hinglish': 'models/ggml-hindi2hinglish-apex-q5_1.bin',
+          'hinglish': 'models/ggml-hindi2hinglish-swift.bin',
         },
         languageCodeProvider: () => 'hinglish',
         processRunner: runner,
@@ -360,7 +360,7 @@ void main() {
       expect(transcript, 'Aaj mausam bahut achchha hai.');
       expect(
         runner.arguments,
-        containsAllInOrder(['-m', 'models/ggml-hindi2hinglish-apex-q5_1.bin']),
+        containsAllInOrder(['-m', 'models/ggml-hindi2hinglish-swift.bin']),
       );
       // whisper-cli does not know 'hinglish'; the model is task-trained to
       // romanize, so it runs as Hindi with no script prompt.

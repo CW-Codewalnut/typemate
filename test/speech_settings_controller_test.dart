@@ -1,23 +1,47 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:typemate/src/app.dart';
 import 'package:typemate/src/core/speech_settings_controller.dart';
 
 void main() {
   group('speechLanguageOptions', () {
-    test('offers exactly the languages with a validated bundled model', () {
-      expect(speechLanguageOptions.map((language) => language.code).toList(), [
-        'en',
-        'hi',
-        'hinglish',
-      ]);
-      expect(speechLanguageOptions.map((language) => language.label).toList(), [
-        'English',
-        'Hindi',
-        'Hinglish',
-      ]);
+    test('leads with the primary languages', () {
+      expect(
+        speechLanguageOptions.take(3).map((language) => language.code).toList(),
+        ['en', 'hi', 'hinglish'],
+      );
+    });
+
+    test('offers every language that has a dedicated engine', () {
+      final codes = speechLanguageOptions
+          .map((language) => language.code)
+          .toSet();
+
+      expect(codes, containsAll(parakeetLanguageCodes));
+      expect(
+        codes,
+        containsAll(whisperServerLanguages.map((language) => language.code)),
+      );
+      expect(
+        codes,
+        hasLength(parakeetLanguageCodes.length + whisperServerLanguages.length),
+        reason: 'every visible language must have a validated model',
+      );
     });
 
     test('does not offer auto detection or unsupported languages', () {
-      for (final unsupported in ['auto', 'mr', 'bn', 'ta', 'es', 'fr', 'zh']) {
+      for (final unsupported in [
+        'auto',
+        'bn',
+        'gu',
+        'kn',
+        'mr',
+        'te',
+        'ml',
+        'pa',
+        'ur',
+        'ja',
+        'ar',
+      ]) {
         expect(
           speechLanguageOptionForCode(unsupported),
           isNull,
@@ -44,11 +68,11 @@ void main() {
 
     test('ignores selection of languages that are not offered', () async {
       final controller = SpeechSettingsController();
-      await controller.selectLanguage('mr');
+      await controller.selectLanguage('bn');
       expect(controller.languageCode, 'en');
 
-      await controller.selectLanguage('hinglish');
-      expect(controller.languageCode, 'hinglish');
+      await controller.selectLanguage('ta');
+      expect(controller.languageCode, 'ta');
     });
   });
 }

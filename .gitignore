@@ -39,13 +39,15 @@ migrate_working_dir/
 node_modules/
 .gitnexus/
 
-# The bundled whisper runtime (model + CLI binaries) is fetched with
-# tool/fetch_whisper_runtime.dart. The model is too large for git (GitHub
-# rejects files over 100 MB) and the CLI binaries follow it for consistency.
+# The bundled speech runtimes (models + binaries) are fetched with
+# tool/fetch_whisper_runtime.dart. The models are too large for git (GitHub
+# rejects files over 100 MB) and the binaries follow them for consistency.
 /models/*.bin
 /models/*.part
+/models/parakeet-tdt-0.6b-v3-int8/
 /bin/whisper/*.exe
 /bin/whisper/*.dll
+/bin/sherpa/*.exe
 
 # Symbolication related
 app.*.symbols
@@ -57,3 +59,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# sherpa-onnx websocket server log when run manually from the repo root
+log.txt

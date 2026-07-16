@@ -1,0 +1,199 @@
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:typemate/src/core/audio/audio_recorder.dart';
+import 'package:typemate/src/core/stt/whisper_server_stt_engine.dart';
+import 'package:typemate/src/core/stt/whisper_cli_stt_engine.dart'
+    show SttRuntimeException;
+
+void main() {
+  const recording = AudioRecording(
+    path: 'clip.wav',
+    duration: Duration(seconds: 8),
+  );
+
+  test('starts the server once with model, language, and VAD', () async {
+    final transport = FakeHttpTransport(response: '{"text": "नमस्ते"}');
+    final engine = buildEngine(transport);
+
+    final transcript = await engine.transcribe(recording);
+
+    expect(transcript, 'नमस्ते');
+    expect(transport.startedProcesses, hasLength(1));
+    final arguments = transport.startedArguments.single.join(' ');
+    expect(arguments, contains('-m models/hindi.bin'));
+    expect(arguments, contains('--port 43008'));
+    expect(arguments, contains('-l hi'));
+    expect(arguments, contains('--beam-size 1'));
+    expect(arguments, contains('--vad-model models/vad.bin'));
+    expect(arguments, contains('--vad-speech-pad-ms 100'));
+
+    // Second transcription reuses the running server.
+    await engine.transcribe(recording);
+    expect(transport.startedProcesses, hasLength(1));
+  });
+
+  test('sends per-request fields: json, audio_ctx, and the prompt', () async {
+    final transport = FakeHttpTransport(response: '{"text": "x"}');
+    final engine = buildEngine(transport, prompt: 'देवनागरी में लिखें');
+
+    await engine.transcribe(recording);
+
+    final fields = transport.requestFields.single;
+    expect(fields['response_format'], 'json');
+    expect(fields['temperature'], '0.0');
+    // 8s clip + 2s margin = 10/30 of the window -> 500 frames.
+    expect(fields['audio_ctx'], '500');
+    expect(fields['prompt'], 'देवनागरी में लिखें');
+    expect(transport.requestPaths.single, 'clip.wav');
+  });
+
+  test(
+    'omits audio_ctx when duration is unknown and prompt when unset',
+    () async {
+      final transport = FakeHttpTransport(response: '{"text": "x"}');
+      final engine = buildEngine(transport);
+
+      await engine.transcribe(
+        const AudioRecording(path: 'clip.wav', duration: Duration.zero),
+      );
+
+      final fields = transport.requestFields.single;
+      expect(fields.containsKey('audio_ctx'), isFalse);
+      expect(fields.containsKey('prompt'), isFalse);
+    },
+  );
+
+  test('cleans replacement characters and wrapped lines from output', () async {
+    final transport = FakeHttpTransport(
+      response: '{"text": "\u{FFFD} आज मौसम\\nअच्छा है\\n"}',
+    );
+    final engine = buildEngine(transport);
+
+    expect(await engine.transcribe(recording), 'आज मौसम अच्छा है');
+  });
+
+  test(
+    'adopts an already-running server instead of starting another',
+    () async {
+      final transport = FakeHttpTransport(
+        response: '{"text": "adopted"}',
+        alreadyRunning: true,
+      );
+      final engine = buildEngine(transport);
+
+      expect(await engine.transcribe(recording), 'adopted');
+      expect(transport.startedProcesses, isEmpty);
+    },
+  );
+
+  test(
+    'throws a clear error when the server never becomes reachable',
+    () async {
+      final transport = FakeHttpTransport(
+        response: '{"text": "x"}',
+        serverEverStarts: false,
+      );
+      final engine = buildEngine(transport, startupTimeout: Duration.zero);
+
+      expect(
+        engine.prepare,
+        throwsA(
+          isA<SttRuntimeException>().having(
+            (error) => error.message,
+            'message',
+            contains('speech server'),
+          ),
+        ),
+      );
+    },
+  );
+
+  test('shutdown kills the server process', () async {
+    final transport = FakeHttpTransport(response: '{"text": "x"}');
+    final engine = buildEngine(transport);
+    await engine.prepare();
+
+    await engine.shutdown();
+
+    expect(transport.startedProcesses.single.killed, isTrue);
+  });
+}
+
+WhisperServerSttEngine buildEngine(
+  FakeHttpTransport transport, {
+  String? prompt,
+  Duration startupTimeout = const Duration(seconds: 5),
+}) {
+  return WhisperServerSttEngine(
+    serverExecutable: 'bin/whisper/whisper-server.exe',
+    modelPath: 'models/hindi.bin',
+    vadModelPath: 'models/vad.bin',
+    cliLanguage: 'hi',
+    port: 43008,
+    prompt: prompt,
+    startupTimeout: startupTimeout,
+    processStarter: transport.startProcess,
+    connectionProbe: transport.probe,
+    inferenceClient: transport.infer,
+  );
+}
+
+class FakeHttpTransport {
+  FakeHttpTransport({
+    required this.response,
+    this.alreadyRunning = false,
+    this.serverEverStarts = true,
+  });
+
+  final String response;
+  final bool alreadyRunning;
+  final bool serverEverStarts;
+
+  final startedProcesses = <FakeServerProcess>[];
+  final startedArguments = <List<String>>[];
+  final requestFields = <Map<String, String>>[];
+  final requestPaths = <String>[];
+
+  Future<Process> startProcess(
+    String executable,
+    List<String> arguments,
+  ) async {
+    final process = FakeServerProcess();
+    startedProcesses.add(process);
+    startedArguments.add(arguments);
+    return process;
+  }
+
+  Future<bool> probe(int port) async =>
+      alreadyRunning || (startedProcesses.isNotEmpty && serverEverStarts);
+
+  Future<String> infer(
+    Uri url,
+    String audioFilePath,
+    Map<String, String> fields,
+  ) async {
+    requestPaths.add(audioFilePath);
+    requestFields.add(fields);
+    return response;
+  }
+}
+
+class FakeServerProcess implements Process {
+  bool killed = false;
+
+  @override
+  Stream<List<int>> get stdout => const Stream.empty();
+
+  @override
+  Stream<List<int>> get stderr => const Stream.empty();
+
+  @override
+  bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
+    killed = true;
+    return true;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}

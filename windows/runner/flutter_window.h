@@ -35,6 +35,15 @@ class FlutterWindow : public Win32Window {
   TypeMateOverlay overlay_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       windows_channel_;
+
+  // System tray icon: the window hides to the tray on close so dictation
+  // keeps running in the background, visibly.
+  void AddTrayIcon();
+  void RemoveTrayIcon();
+  void ShowTrayMenu();
+  void ShowMainWindow();
+  void QuitFromTray();
+  HWND tray_window_ = nullptr;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
