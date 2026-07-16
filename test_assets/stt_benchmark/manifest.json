@@ -1,0 +1,23 @@
+{
+  "description": "Synthesized (edge-tts) benchmark clips for comparing STT models. Run with: dart run tool/benchmark_stt_corpus.dart --model <ggml> --language <code>",
+  "clips": [
+    {"file": "en-typemate.wav", "language": "en", "expected": "TypeMate now bundles the turbo whisper model inside the repository, so dictation works without any configuration."},
+    {"file": "en-indian-tech.wav", "language": "en", "voice": "en-IN-PrabhatNeural", "expected": "Please refactor the settings controller and add unit tests for the microphone discovery adapter. Also schedule a meeting with the design team tomorrow at eleven thirty."},
+    {"file": "hi-market.wav", "language": "hi", "expected": "आज मौसम बहुत अच्छा है और मैं अपने दोस्तों के साथ बाजार जा रहा हूँ। कल मुझे एक जरूरी मीटिंग में हिस्सा लेना है, इसलिए रिपोर्ट आज ही पूरी करनी होगी।"},
+    {"file": "hi-market-noisy.wav", "language": "hi", "note": "same text as hi-market with pink noise mixed in", "expected": "आज मौसम बहुत अच्छा है और मैं अपने दोस्तों के साथ बाजार जा रहा हूँ। कल मुझे एक जरूरी मीटिंग में हिस्सा लेना है, इसलिए रिपोर्ट आज ही पूरी करनी होगी।"},
+    {"file": "mr-market.wav", "language": "mr", "expected": "आज हवामान खूप छान आहे आणि मी माझ्या मित्रांसोबत बाजारात जात आहे. उद्या मला एका महत्त्वाच्या बैठकीत सहभागी व्हायचे आहे."},
+    {"file": "ta-market.wav", "language": "ta", "expected": "இன்று வானிலை மிகவும் நன்றாக உள்ளது, நான் என் நண்பர்களுடன் சந்தைக்கு செல்கிறேன். நாளை எனக்கு ஒரு முக்கியமான கூட்டம் உள்ளது."},
+    {"file": "te-market.wav", "language": "te", "expected": "ఈరోజు వాతావరణం చాలా బాగుంది, నేను నా స్నేహితులతో మార్కెట్‌కి వెళ్తున్నాను. రేపు నాకు ముఖ్యమైన సమావేశం ఉంది."},
+    {"file": "bn-market.wav", "language": "bn", "expected": "আজ আবহাওয়া খুব ভালো এবং আমি আমার বন্ধুদের সাথে বাজারে যাচ্ছি। আগামীকাল আমার একটি গুরুত্বপূর্ণ মিটিং আছে।"},
+    {"file": "gu-market.wav", "language": "gu", "expected": "આજે હવામાન ખૂબ સરસ છે અને હું મારા મિત્રો સાથે બજારમાં જઈ રહ્યો છું. કાલે મારે એક અગત્યની મીટિંગમાં ભાગ લેવાનો છે."},
+    {"file": "kn-market.wav", "language": "kn", "expected": "ಇಂದು ಹವಾಮಾನ ತುಂಬಾ ಚೆನ್ನಾಗಿದೆ ಮತ್ತು ನಾನು ನನ್ನ ಸ್ನೇಹಿತರೊಂದಿಗೆ ಮಾರುಕಟ್ಟೆಗೆ ಹೋಗುತ್ತಿದ್ದೇನೆ. ನಾಳೆ ನನಗೆ ಮುಖ್ಯವಾದ ಸಭೆ ಇದೆ."},
+    {"file": "es-meeting.wav", "language": "es", "expected": "Hola, mañana tengo una reunión importante con el equipo de diseño a las once y media."},
+    {"file": "fr-meeting.wav", "language": "fr", "expected": "Bonjour, demain j'ai une réunion importante avec l'équipe de design à onze heures et demie."},
+    {"file": "de-meeting.wav", "language": "de", "expected": "Hallo, morgen habe ich ein wichtiges Meeting mit dem Designteam um halb zwölf."},
+    {"file": "pt-meeting.wav", "language": "pt", "expected": "Olá, amanhã tenho uma reunião importante com a equipe de design às onze e meia."},
+    {"file": "ru-meeting.wav", "language": "ru", "expected": "Привет, завтра у меня важная встреча с командой дизайнеров в половине двенадцатого."},
+    {"file": "it-meeting.wav", "language": "it", "expected": "Ciao, domani ho una riunione importante con il team di design alle undici e mezza."},
+    {"file": "pl-meeting.wav", "language": "pl", "expected": "Cześć, jutro mam ważne spotkanie z zespołem projektowym o wpół do dwunastej."},
+    {"file": "uk-meeting.wav", "language": "uk", "expected": "Привіт, завтра в мене важлива зустріч із командою дизайнерів об одинадцятій тридцять."}
+  ]
+}
