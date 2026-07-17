@@ -1,6 +1,8 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:typemate/src/app.dart';
 import 'package:typemate/src/core/hold_shortcut_controller.dart';
+import 'package:typemate/src/core/platform/linux_platform_bridge.dart';
+import 'package:typemate/src/core/platform/linux_x11_hold_shortcut_registrar.dart';
 import 'package:typemate/src/core/platform/mock_platform_bridge.dart';
 import 'package:typemate/src/core/platform/windows_platform_bridge.dart';
 import 'package:typemate/src/core/platform/windows_polling_hold_shortcut_registrar.dart';
@@ -8,30 +10,44 @@ import 'package:typemate/src/core/platform/windows_polling_hold_shortcut_registr
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('uses Windows clipboard paste bridge on Windows', () {
+  test('uses the Windows bridge on Windows', () {
     expect(
-      createDefaultPlatformBridge(isWindows: true),
+      createDefaultPlatformBridge(isWindows: true, isLinux: false),
       isA<WindowsPlatformBridge>(),
     );
   });
 
-  test('uses mock platform bridge on non-Windows platforms', () {
+  test('uses the Linux bridge on Linux', () {
     expect(
-      createDefaultPlatformBridge(isWindows: false),
+      createDefaultPlatformBridge(isWindows: false, isLinux: true),
+      isA<LinuxPlatformBridge>(),
+    );
+  });
+
+  test('uses the mock bridge on unsupported platforms', () {
+    expect(
+      createDefaultPlatformBridge(isWindows: false, isLinux: false),
       isA<MockPlatformBridge>(),
     );
   });
 
-  test('uses Windows polling shortcut registrar on Windows', () {
+  test('uses the Windows polling shortcut registrar on Windows', () {
     expect(
-      createDefaultHoldShortcutRegistrar(isWindows: true),
+      createDefaultHoldShortcutRegistrar(isWindows: true, isLinux: false),
       isA<WindowsPollingHoldShortcutRegistrar>(),
     );
   });
 
-  test('uses noop shortcut registrar on non-Windows platforms', () {
+  test('uses the X11 polling shortcut registrar on Linux', () {
     expect(
-      createDefaultHoldShortcutRegistrar(isWindows: false),
+      createDefaultHoldShortcutRegistrar(isWindows: false, isLinux: true),
+      isA<LinuxX11HoldShortcutRegistrar>(),
+    );
+  });
+
+  test('uses the noop shortcut registrar on unsupported platforms', () {
+    expect(
+      createDefaultHoldShortcutRegistrar(isWindows: false, isLinux: false),
       isA<NoopHoldShortcutRegistrar>(),
     );
   });

@@ -9,19 +9,22 @@ typedef GetAsyncKeyState = int Function(int virtualKey);
 class WindowsPollingHoldShortcutRegistrar implements HoldShortcutRegistrar {
   WindowsPollingHoldShortcutRegistrar({
     this._pollInterval = const Duration(milliseconds: 25),
-    GetAsyncKeyState? getAsyncKeyState,
+    this._getAsyncKeyState,
     HoldShortcutOption? shortcut,
-  }) : _getAsyncKeyState =
-           getAsyncKeyState ??
-           DynamicLibrary.open(
-             'user32.dll',
-           ).lookupFunction<_GetAsyncKeyStateNative, GetAsyncKeyState>(
-             'GetAsyncKeyState',
-           ),
-       _shortcut = shortcut ?? holdShortcutOptionById(defaultHoldShortcutId);
+  }) : _shortcut = shortcut ?? holdShortcutOptionById(defaultHoldShortcutId);
 
   final Duration _pollInterval;
-  final GetAsyncKeyState _getAsyncKeyState;
+
+  /// Lazily bound on first registration so constructing the registrar off
+  /// Windows (cross-platform tests) does not try to load user32.dll.
+  GetAsyncKeyState? _getAsyncKeyState;
+
+  static GetAsyncKeyState _bindGetAsyncKeyState() =>
+      DynamicLibrary.open(
+        'user32.dll',
+      ).lookupFunction<_GetAsyncKeyStateNative, GetAsyncKeyState>(
+        'GetAsyncKeyState',
+      );
 
   Timer? _timer;
   ShortcutCallback? _onPressed;
@@ -37,6 +40,7 @@ class WindowsPollingHoldShortcutRegistrar implements HoldShortcutRegistrar {
     required ShortcutCallback onReleased,
   }) async {
     _shortcut = shortcut;
+    _getAsyncKeyState ??= _bindGetAsyncKeyState();
     _onPressed = onPressed;
     _onReleased = onReleased;
     _timer?.cancel();
@@ -80,6 +84,11 @@ class WindowsPollingHoldShortcutRegistrar implements HoldShortcutRegistrar {
     });
   }
 
-  bool _isKeyDown(int virtualKey) =>
-      (_getAsyncKeyState(virtualKey) & 0x8000) != 0;
+  bool _isKeyDown(int virtualKey) {
+    final getAsyncKeyState = _getAsyncKeyState;
+    if (getAsyncKeyState == null) {
+      return false;
+    }
+    return (getAsyncKeyState(virtualKey) & 0x8000) != 0;
+  }
 }
