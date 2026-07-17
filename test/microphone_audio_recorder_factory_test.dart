@@ -1,21 +1,24 @@
 import 'dart:io';
 
-import 'package:typemate/src/core/audio/ffmpeg_microphone_discovery.dart';
+import 'package:typemate/src/core/audio/microphone_discovery.dart';
 import 'package:typemate/src/core/audio/microphone_audio_recorder_factory.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('creates a Windows ffmpeg recorder from selected microphone', () async {
+  test('creates a Linux pulse ffmpeg recorder from selected mic', () async {
     final process = FakeRecorderProcess();
     final runner = FakeRecorderProcessRunner(process);
-    final factory = MicrophoneAudioRecorderFactory.windows(
+    final factory = MicrophoneAudioRecorderFactory.linux(
       outputDirectory: Directory('build/test-recordings'),
       processRunner: runner,
       clock: () => DateTime(2026, 7, 10, 18, 15),
     );
 
     final recorder = factory.create(
-      const MicrophoneDevice(name: 'Microphone (Brio 100)'),
+      const MicrophoneDevice(
+        name: 'Brio 100 Mono',
+        alternativeName: 'alsa_input.usb-Brio_100',
+      ),
     );
 
     await recorder.start();
@@ -26,9 +29,9 @@ void main() {
       runner.arguments,
       containsAllInOrder([
         '-f',
-        'dshow',
+        'pulse',
         '-i',
-        'audio=Microphone (Brio 100)',
+        'alsa_input.usb-Brio_100',
         '-ac',
         '1',
         '-ar',

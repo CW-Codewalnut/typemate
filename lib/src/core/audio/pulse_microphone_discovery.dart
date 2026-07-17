@@ -1,4 +1,4 @@
-import 'ffmpeg_microphone_discovery.dart';
+import 'microphone_discovery.dart';
 
 /// Lists PulseAudio capture sources via `pactl` (PipeWire ships a Pulse
 /// compatibility layer, so this covers modern Linux desktops and WSLg).

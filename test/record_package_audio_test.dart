@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:record/record.dart' as record_pkg;
-import 'package:typemate/src/core/audio/ffmpeg_microphone_discovery.dart';
+import 'package:typemate/src/core/audio/microphone_discovery.dart';
 import 'package:typemate/src/core/audio/record_package_audio.dart';
 
 class FakeRecordBackend implements RecordBackend {

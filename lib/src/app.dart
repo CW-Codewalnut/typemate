@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'components/app_scroll_behavior.dart';
 import 'components/splash_screen.dart';
-import 'core/audio/ffmpeg_microphone_discovery.dart';
+import 'core/audio/microphone_discovery.dart';
 import 'core/audio/microphone_audio_recorder_factory.dart';
 import 'core/audio/pulse_microphone_discovery.dart';
 import 'core/audio/record_package_audio.dart';
@@ -270,7 +270,8 @@ MicrophoneDiscovery createDefaultMicrophoneDiscovery({
     return const PulseMicrophoneDiscovery();
   }
 
-  return const FfmpegMicrophoneDiscovery();
+  // macOS and anything else: the record plugin captures natively there too.
+  return RecordPackageMicrophoneDiscovery();
 }
 
 AudioRecorderFactory createDefaultAudioRecorderFactory({
@@ -280,12 +281,15 @@ AudioRecorderFactory createDefaultAudioRecorderFactory({
   if (isWindows ?? Platform.isWindows) {
     return RecordPackageAudioRecorderFactory(outputDirectory: outputDirectory);
   }
-  // Linux records through ffmpeg's Pulse input; the binary comes from the
-  // distro (documented dependency), an env override, or PATH.
-  return MicrophoneAudioRecorderFactory.linux(
-    outputDirectory: outputDirectory,
-    ffmpegExecutable: resolveFfmpegExecutable(),
-  );
+  if (Platform.isLinux) {
+    // Linux records through ffmpeg's Pulse input; the binary comes from the
+    // distro (documented dependency), an env override, or PATH.
+    return MicrophoneAudioRecorderFactory.linux(
+      outputDirectory: outputDirectory,
+      ffmpegExecutable: resolveFfmpegExecutable(),
+    );
+  }
+  return RecordPackageAudioRecorderFactory(outputDirectory: outputDirectory);
 }
 
 HoldShortcutSettingsStore createDefaultHoldShortcutSettingsStore({

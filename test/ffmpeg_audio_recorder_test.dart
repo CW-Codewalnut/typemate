@@ -10,9 +10,10 @@ void main() {
       final process = FakeRecorderProcess();
       final runner = FakeRecorderProcessRunner(process);
       var now = DateTime(2026, 7, 10, 12, 30, 5);
-      final recorder = FfmpegAudioRecorder.windows(
-        deviceName: 'Microphone (Brio 100)',
+      final recorder = FfmpegAudioRecorder.linux(
+        deviceName: 'alsa_input.usb-Brio_100',
         outputDirectory: Directory('build/test-recordings'),
+        executable: '/opt/typemate/bin/ffmpeg/ffmpeg',
         processRunner: runner,
         clock: () => now,
       );
@@ -21,9 +22,9 @@ void main() {
       now = now.add(const Duration(seconds: 2));
       final recording = await recorder.stop();
 
-      expect(runner.executable, 'ffmpeg');
-      expect(runner.arguments, containsAll(['-f', 'dshow']));
-      expect(runner.arguments, contains('audio=Microphone (Brio 100)'));
+      expect(runner.executable, '/opt/typemate/bin/ffmpeg/ffmpeg');
+      expect(runner.arguments, containsAll(['-f', 'pulse']));
+      expect(runner.arguments, contains('alsa_input.usb-Brio_100'));
       expect(process.quitRequested, isTrue);
       expect(recording.path, endsWith('typemate-20260710-123005.wav'));
       expect(recording.duration, greaterThan(Duration.zero));

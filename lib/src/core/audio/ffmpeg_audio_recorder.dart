@@ -16,20 +16,6 @@ abstract interface class RecorderProcess {
 }
 
 class FfmpegAudioRecorder implements AudioRecorder {
-  FfmpegAudioRecorder.windows({
-    required String deviceName,
-    required Directory outputDirectory,
-    String executable = 'ffmpeg',
-    RecorderProcessRunner? processRunner,
-    Clock? clock,
-  }) : this._(
-         inputArguments: ['-f', 'dshow', '-i', 'audio=$deviceName'],
-         outputDirectory: outputDirectory,
-         executable: executable,
-         processRunner: processRunner ?? const DartRecorderProcessRunner(),
-         clock: clock ?? DateTime.now,
-       );
-
   /// Captures from a PulseAudio source (also served by PipeWire's Pulse
   /// compatibility layer, the default on modern desktops and WSLg).
   FfmpegAudioRecorder.linux({
