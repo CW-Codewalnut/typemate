@@ -5,7 +5,7 @@ import 'package:typemate/src/core/audio/microphone_audio_recorder_factory.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('creates a Linux pulse ffmpeg recorder from selected mic', () async {
+  test('creates a Linux alsa ffmpeg recorder from selected mic', () async {
     final process = FakeRecorderProcess();
     final runner = FakeRecorderProcessRunner(process);
     final factory = MicrophoneAudioRecorderFactory.linux(
@@ -29,7 +29,7 @@ void main() {
       runner.arguments,
       containsAllInOrder([
         '-f',
-        'pulse',
+        'alsa',
         '-i',
         'alsa_input.usb-Brio_100',
         '-ac',

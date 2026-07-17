@@ -16,8 +16,9 @@ abstract interface class RecorderProcess {
 }
 
 class FfmpegAudioRecorder implements AudioRecorder {
-  /// Captures from a PulseAudio source (also served by PipeWire's Pulse
-  /// compatibility layer, the default on modern desktops and WSLg).
+  /// Captures from an ALSA device — normally `default`, which
+  /// PipeWire/PulseAudio route to the system-selected microphone. ALSA is
+  /// the one capture API the bundled static ffmpeg supports everywhere.
   FfmpegAudioRecorder.linux({
     required String deviceName,
     required Directory outputDirectory,
@@ -25,7 +26,7 @@ class FfmpegAudioRecorder implements AudioRecorder {
     RecorderProcessRunner? processRunner,
     Clock? clock,
   }) : this._(
-         inputArguments: ['-f', 'pulse', '-i', deviceName],
+         inputArguments: ['-f', 'alsa', '-i', deviceName],
          outputDirectory: outputDirectory,
          executable: executable,
          processRunner: processRunner ?? const DartRecorderProcessRunner(),

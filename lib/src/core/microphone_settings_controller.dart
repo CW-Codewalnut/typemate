@@ -51,7 +51,7 @@ class MicrophoneSettingsController extends ChangeNotifier {
       _selectedMicrophone = null;
       _hasError = true;
       _statusMessage =
-          'Unable to scan microphones. Check FFmpeg and microphone permissions, then reopen Settings.';
+          'Unable to scan microphones. Check the microphone and its permissions, then reopen Settings.';
     } finally {
       _isLoading = false;
       notifyListeners();

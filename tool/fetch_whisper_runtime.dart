@@ -108,8 +108,86 @@ Future<void> main(List<String> arguments) async {
       return;
     }
     await _fetchSherpaServer(client, force: force);
+    if (exitCode != 0) {
+      return;
+    }
+    // Linux ships its helper tools too, so users install nothing: a static
+    // ffmpeg for ALSA capture and xdotool (with its libxdo) for typing.
+    if (!_isWindows) {
+      await _fetchToolArchive(
+        client,
+        url:
+            'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/ffmpeg-7.0.2-linux-x64-static.tar.gz',
+        targetDirectory: 'bin/ffmpeg',
+        files: const ['ffmpeg'],
+        force: force,
+      );
+      if (exitCode != 0) {
+        return;
+      }
+      await _fetchToolArchive(
+        client,
+        url:
+            'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/xdotool-linux-x64.tar.gz',
+        targetDirectory: 'bin/xdotool',
+        files: const ['xdotool', 'libxdo.so.3'],
+        force: force,
+      );
+    }
   } finally {
     client.close();
+  }
+}
+
+/// Downloads a tar.gz of prebuilt tool binaries and installs the listed
+/// files into [targetDirectory], marking them executable.
+Future<void> _fetchToolArchive(
+  HttpClient client, {
+  required String url,
+  required String targetDirectory,
+  required List<String> files,
+  required bool force,
+}) async {
+  final target = Directory(targetDirectory);
+  final missing = files
+      .where((name) => !File('${target.path}/$name').existsSync())
+      .toList();
+  if (!force && missing.isEmpty) {
+    stdout.writeln('tool_ready=${target.absolute.path}');
+    return;
+  }
+
+  stdout.writeln('downloading=$url');
+  final stagingDirectory = await Directory.systemTemp.createTemp(
+    'typemate-tool',
+  );
+  try {
+    final archive = File('${stagingDirectory.path}/tool.tar.gz');
+    if (!await _downloadWithReleaseFallback(client, url, archive)) {
+      exitCode = 1;
+      return;
+    }
+    final extract = await Process.run('tar', [
+      '-xf',
+      archive.path,
+      '-C',
+      stagingDirectory.path,
+    ]);
+    if (extract.exitCode != 0) {
+      stderr.writeln('tool_extract_failed=${extract.stderr}');
+      exitCode = 1;
+      return;
+    }
+    await target.create(recursive: true);
+    for (final name in files) {
+      final installed = await File(
+        '${stagingDirectory.path}/$name',
+      ).copy('${target.path}/$name');
+      await _markExecutable(installed);
+    }
+    stdout.writeln('tool_ready=${target.absolute.path}');
+  } finally {
+    await stagingDirectory.delete(recursive: true);
   }
 }
 
