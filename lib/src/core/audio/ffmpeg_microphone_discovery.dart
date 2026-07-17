@@ -24,14 +24,16 @@ abstract interface class MicrophoneDiscovery {
 
 class FfmpegMicrophoneDiscovery implements MicrophoneDiscovery {
   const FfmpegMicrophoneDiscovery({
+    this.executable = 'ffmpeg',
     this.processRunner = const DartDiscoveryProcessRunner(),
   });
 
+  final String executable;
   final DiscoveryProcessRunner processRunner;
 
   @override
   Future<List<MicrophoneDevice>> listMicrophones() async {
-    final result = await processRunner.run('ffmpeg', [
+    final result = await processRunner.run(executable, [
       '-hide_banner',
       '-list_devices',
       'true',

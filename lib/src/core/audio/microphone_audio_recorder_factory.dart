@@ -13,22 +13,26 @@ abstract interface class AudioRecorderFactory {
 class MicrophoneAudioRecorderFactory implements AudioRecorderFactory {
   MicrophoneAudioRecorderFactory.windows({
     required Directory outputDirectory,
+    String ffmpegExecutable = 'ffmpeg',
     RecorderProcessRunner? processRunner,
     Clock? clock,
   }) : this._(
          isWindows: true,
          outputDirectory: outputDirectory,
+         ffmpegExecutable: ffmpegExecutable,
          processRunner: processRunner,
          clock: clock,
        );
 
   MicrophoneAudioRecorderFactory.linux({
     required Directory outputDirectory,
+    String ffmpegExecutable = 'ffmpeg',
     RecorderProcessRunner? processRunner,
     Clock? clock,
   }) : this._(
          isWindows: false,
          outputDirectory: outputDirectory,
+         ffmpegExecutable: ffmpegExecutable,
          processRunner: processRunner,
          clock: clock,
        );
@@ -36,12 +40,14 @@ class MicrophoneAudioRecorderFactory implements AudioRecorderFactory {
   const MicrophoneAudioRecorderFactory._({
     required this.isWindows,
     required this.outputDirectory,
+    required this.ffmpegExecutable,
     this.processRunner,
     this.clock,
   });
 
   final bool isWindows;
   final Directory outputDirectory;
+  final String ffmpegExecutable;
   final RecorderProcessRunner? processRunner;
   final Clock? clock;
 
@@ -51,6 +57,7 @@ class MicrophoneAudioRecorderFactory implements AudioRecorderFactory {
       return FfmpegAudioRecorder.windows(
         deviceName: microphone.name,
         outputDirectory: outputDirectory,
+        executable: ffmpegExecutable,
         processRunner: processRunner,
         clock: clock,
       );
@@ -59,6 +66,7 @@ class MicrophoneAudioRecorderFactory implements AudioRecorderFactory {
     return FfmpegAudioRecorder.linux(
       deviceName: microphone.alternativeName ?? microphone.name,
       outputDirectory: outputDirectory,
+      executable: ffmpegExecutable,
       processRunner: processRunner,
       clock: clock,
     );
