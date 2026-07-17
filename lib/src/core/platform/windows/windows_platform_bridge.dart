@@ -2,7 +2,7 @@
 
 import 'package:flutter/services.dart';
 
-import 'platform_bridge.dart';
+import '../platform_bridge.dart';
 
 const _nativeChannel = MethodChannel('typemate/windows');
 

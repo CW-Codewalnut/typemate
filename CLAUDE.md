@@ -42,7 +42,9 @@ lib/
     utils/             shared non-UI helpers
     core/
       audio/           audio recording, microphone discovery, recorder factories
-      platform/        global shortcut, overlay, active field, text insertion contracts/adapters
+      platform/        global shortcut, overlay, active field, text insertion contracts
+        windows/       Win32 adapters (bridge, polling shortcut registrar)
+        linux/         X11 adapters (bridge, keymap-polling shortcut registrar)
       stt/             local transcription engine contracts/adapters
       *_controller.dart
       *_store.dart

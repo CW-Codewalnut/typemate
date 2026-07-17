@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'platform_bridge.dart';
+import '../platform_bridge.dart';
 
 typedef LinuxProcessRunner =
     Future<ProcessResult> Function(String executable, List<String> arguments);

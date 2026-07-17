@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
-import '../hold_shortcut_controller.dart';
+import '../../hold_shortcut_controller.dart';
 
 /// Reads global key state from the X server. Abstracted so tests can fake
 /// keymaps without an X display.
