@@ -36,6 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   ffi: ^2.2.0
   record: ^7.1.1
+  window_manager: ^0.5.2
 
 dev_dependencies:
   flutter_test:
