@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -7,12 +7,15 @@ import 'components/app_scroll_behavior.dart';
 import 'components/splash_screen.dart';
 import 'core/audio/ffmpeg_microphone_discovery.dart';
 import 'core/audio/microphone_audio_recorder_factory.dart';
+import 'core/audio/pulse_microphone_discovery.dart';
 import 'core/dictation_controller.dart';
 import 'core/dictation_history_controller.dart';
 import 'core/hold_shortcut_controller.dart';
 import 'core/microphone_settings_controller.dart';
 import 'core/microphone_settings_store.dart';
 import 'core/speech_settings_controller.dart';
+import 'core/platform/linux_platform_bridge.dart';
+import 'core/platform/linux_x11_hold_shortcut_registrar.dart';
 import 'core/platform/mock_platform_bridge.dart';
 import 'core/platform/platform_bridge.dart';
 import 'core/platform/windows_platform_bridge.dart';
@@ -67,12 +70,12 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
     // Dictation audio is transcribe-and-delete; sweep anything a crash or
     // an older build left behind so no speech sits on disk.
     unawaited(purgeStaleRecordings(recordingsDirectory));
-    final recorderFactory = MicrophoneAudioRecorderFactory.windows(
+    final recorderFactory = createDefaultAudioRecorderFactory(
       outputDirectory: recordingsDirectory,
     );
     microphoneController = MicrophoneSettingsController(
       discovery:
-          widget.microphoneDiscovery ?? const FfmpegMicrophoneDiscovery(),
+          widget.microphoneDiscovery ?? createDefaultMicrophoneDiscovery(),
       store: createDefaultMicrophoneSettingsStore(),
     );
     historyController = DictationHistoryController(
@@ -228,20 +231,55 @@ Future<void> purgeStaleRecordings(Directory directory) async {
   }
 }
 
-PlatformBridge createDefaultPlatformBridge({bool? isWindows}) {
+PlatformBridge createDefaultPlatformBridge({bool? isWindows, bool? isLinux}) {
   if (isWindows ?? Platform.isWindows) {
     return WindowsPlatformBridge();
+  }
+  if (isLinux ?? Platform.isLinux) {
+    return LinuxPlatformBridge();
   }
 
   return MockPlatformBridge();
 }
 
-HoldShortcutRegistrar createDefaultHoldShortcutRegistrar({bool? isWindows}) {
+HoldShortcutRegistrar createDefaultHoldShortcutRegistrar({
+  bool? isWindows,
+  bool? isLinux,
+}) {
   if (isWindows ?? Platform.isWindows) {
     return WindowsPollingHoldShortcutRegistrar();
   }
+  if (isLinux ?? Platform.isLinux) {
+    return LinuxX11HoldShortcutRegistrar();
+  }
 
   return const NoopHoldShortcutRegistrar();
+}
+
+MicrophoneDiscovery createDefaultMicrophoneDiscovery({
+  bool? isWindows,
+  bool? isLinux,
+}) {
+  if (isWindows ?? Platform.isWindows) {
+    return const FfmpegMicrophoneDiscovery();
+  }
+  if (isLinux ?? Platform.isLinux) {
+    return const PulseMicrophoneDiscovery();
+  }
+
+  return const FfmpegMicrophoneDiscovery();
+}
+
+MicrophoneAudioRecorderFactory createDefaultAudioRecorderFactory({
+  required Directory outputDirectory,
+  bool? isWindows,
+}) {
+  if (isWindows ?? Platform.isWindows) {
+    return MicrophoneAudioRecorderFactory.windows(
+      outputDirectory: outputDirectory,
+    );
+  }
+  return MicrophoneAudioRecorderFactory.linux(outputDirectory: outputDirectory);
 }
 
 HoldShortcutSettingsStore createDefaultHoldShortcutSettingsStore({
@@ -286,17 +324,34 @@ SpeechSettingsStore createDefaultSpeechSettingsStore({
 
 Directory _typeMateDataDirectory({Map<String, String>? environment}) {
   final values = environment ?? Platform.environment;
-  final baseDirectory = values['APPDATA']?.trim().isNotEmpty == true
-      ? Directory(values['APPDATA']!.trim())
-      : Directory('build/settings');
-
-  return Directory('${baseDirectory.path}/TypeMate');
+  final appData = values['APPDATA']?.trim() ?? '';
+  if (appData.isNotEmpty) {
+    return Directory('$appData/TypeMate');
+  }
+  // Linux/macOS: XDG config home, matching where autostart entries live.
+  final xdgConfigHome = values['XDG_CONFIG_HOME']?.trim() ?? '';
+  if (xdgConfigHome.isNotEmpty) {
+    return Directory('$xdgConfigHome/TypeMate');
+  }
+  final home = values['HOME']?.trim() ?? '';
+  if (home.isNotEmpty) {
+    return Directory('$home/.config/TypeMate');
+  }
+  return Directory('build/settings/TypeMate');
 }
 
 typedef PathExists = bool Function(String path);
 
-const bundledWhisperCliRelativePath = 'bin/whisper/whisper-cli.exe';
-const bundledWhisperServerRelativePath = 'bin/whisper/whisper-server.exe';
+/// Appends the Windows executable suffix; Linux binaries have none.
+String platformExecutablePath(String path, {bool? isWindows}) =>
+    (isWindows ?? Platform.isWindows) ? '$path.exe' : path;
+
+final bundledWhisperCliRelativePath = platformExecutablePath(
+  'bin/whisper/whisper-cli',
+);
+final bundledWhisperServerRelativePath = platformExecutablePath(
+  'bin/whisper/whisper-server',
+);
 const hindiServerPort = 43008;
 const hinglishServerPort = 43009;
 const _hindiDevanagariPrompt =
@@ -363,8 +418,9 @@ const bundledVadModelRelativePath = 'models/ggml-silero-v5.1.2.bin';
 // English runs on a resident sherpa-onnx server with NVIDIA Parakeet TDT
 // 0.6B v3: the model loads once at app start, then each utterance decodes
 // in about a second with the best accuracy of every model benchmarked.
-const bundledSherpaServerRelativePath =
-    'bin/sherpa/sherpa-onnx-offline-websocket-server.exe';
+final bundledSherpaServerRelativePath = platformExecutablePath(
+  'bin/sherpa/sherpa-onnx-offline-websocket-server',
+);
 const bundledParakeetDirRelativePath = 'models/parakeet-tdt-0.6b-v3-int8';
 // The 25 languages Parakeet TDT 0.6B v3 transcribes, with automatic
 // language detection — every one routes to the same resident server.

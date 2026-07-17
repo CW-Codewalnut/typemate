@@ -70,17 +70,25 @@ const _models = [
   ),
 ];
 
-const whisperZipUrl =
-    'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-blas-bin-x64.zip';
-const whisperCliFiles = [
-  'whisper-cli.exe',
-  'whisper-server.exe',
-  'whisper.dll',
-  'ggml.dll',
-  'ggml-base.dll',
-  'ggml-blas.dll',
-  'libopenblas.dll',
-];
+final _isWindows = Platform.isWindows;
+
+/// Windows: the official whisper.cpp OpenBLAS build. Linux: static
+/// binaries built from the same v1.9.1 tag by this repo (whisper.cpp does
+/// not publish Linux binaries), hosted on the models-v1 release.
+final whisperZipUrl = _isWindows
+    ? 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-blas-bin-x64.zip'
+    : 'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/whisper-v1.9.1-linux-x64.tar.gz';
+final whisperCliFiles = _isWindows
+    ? const [
+        'whisper-cli.exe',
+        'whisper-server.exe',
+        'whisper.dll',
+        'ggml.dll',
+        'ggml-base.dll',
+        'ggml-blas.dll',
+        'libopenblas.dll',
+      ]
+    : const ['whisper-cli', 'whisper-server'];
 
 Future<void> main(List<String> arguments) async {
   final force = arguments.contains('--force');
@@ -105,13 +113,17 @@ Future<void> main(List<String> arguments) async {
   }
 }
 
-const _sherpaArchiveUrl =
+final _sherpaArchiveName = _isWindows
+    ? 'sherpa-onnx-v1.13.4-win-x64-static-MD-MinSizeRel-no-tts'
+    : 'sherpa-onnx-v1.13.4-linux-x64-static-no-tts';
+final _sherpaArchiveUrl =
     'https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.4/'
-    'sherpa-onnx-v1.13.4-win-x64-static-MD-MinSizeRel-no-tts.tar.bz2';
-const _sherpaArchiveServerPath =
-    'sherpa-onnx-v1.13.4-win-x64-static-MD-MinSizeRel-no-tts/bin/'
-    'sherpa-onnx-offline-websocket-server.exe';
-const _sherpaServerFileName = 'sherpa-onnx-offline-websocket-server.exe';
+    '$_sherpaArchiveName.tar.bz2';
+final _sherpaServerFileName = _isWindows
+    ? 'sherpa-onnx-offline-websocket-server.exe'
+    : 'sherpa-onnx-offline-websocket-server';
+final _sherpaArchiveServerPath =
+    '$_sherpaArchiveName/bin/$_sherpaServerFileName';
 
 Future<void> _fetchSherpaServer(
   HttpClient client, {
@@ -148,9 +160,10 @@ Future<void> _fetchSherpaServer(
     }
 
     await targetFile.parent.create(recursive: true);
-    await File(
+    final installed = await File(
       '${stagingDirectory.path}/$_sherpaArchiveServerPath',
     ).copy(targetFile.path);
+    await _markExecutable(installed);
     stdout.writeln('sherpa_ready=${targetFile.absolute.path}');
   } finally {
     await stagingDirectory.delete(recursive: true);
@@ -198,7 +211,7 @@ Future<void> _fetchModel(
 
 Future<void> _fetchCli(HttpClient client, {required bool force}) async {
   final targetDirectory = Directory('bin/whisper');
-  final cliFile = File('${targetDirectory.path}/whisper-cli.exe');
+  final cliFile = File('${targetDirectory.path}/${whisperCliFiles.first}');
   final missing = whisperCliFiles
       .where((name) => !File('${targetDirectory.path}/$name').existsSync())
       .toList();
@@ -212,13 +225,14 @@ Future<void> _fetchCli(HttpClient client, {required bool force}) async {
     'typemate-whisper-cli',
   );
   try {
-    final zipFile = File('${stagingDirectory.path}/whisper.zip');
-    if (!await _download(client, whisperZipUrl, zipFile)) {
+    final zipFile = File('${stagingDirectory.path}/whisper-archive');
+    if (!await _downloadWithReleaseFallback(client, whisperZipUrl, zipFile)) {
       exitCode = 1;
       return;
     }
 
-    // Windows 10+ ships bsdtar, which extracts zip archives.
+    // Windows 10+ ships bsdtar, which extracts zip archives; on Linux tar
+    // handles the .tar.gz.
     final extract = await Process.run('tar', [
       '-xf',
       zipFile.path,
@@ -232,22 +246,36 @@ Future<void> _fetchCli(HttpClient client, {required bool force}) async {
     }
 
     await targetDirectory.create(recursive: true);
-    final releaseDirectory = Directory('${stagingDirectory.path}/Release');
+    // The Windows zip nests binaries under Release/; the Linux tarball is
+    // flat.
+    final extractedDirectory = _isWindows
+        ? Directory('${stagingDirectory.path}/Release')
+        : stagingDirectory;
     for (final name in whisperCliFiles) {
-      await File(
-        '${releaseDirectory.path}/$name',
+      final installed = await File(
+        '${extractedDirectory.path}/$name',
       ).copy('${targetDirectory.path}/$name');
+      await _markExecutable(installed);
     }
-    await for (final entry in releaseDirectory.list()) {
-      final baseName = entry.uri.pathSegments.last;
-      if (entry is File && baseName.startsWith('ggml-cpu-')) {
-        await entry.copy('${targetDirectory.path}/$baseName');
+    if (_isWindows) {
+      await for (final entry in extractedDirectory.list()) {
+        final baseName = entry.uri.pathSegments.last;
+        if (entry is File && baseName.startsWith('ggml-cpu-')) {
+          await entry.copy('${targetDirectory.path}/$baseName');
+        }
       }
     }
     stdout.writeln('cli_ready=${cliFile.absolute.path}');
   } finally {
     await stagingDirectory.delete(recursive: true);
   }
+}
+
+Future<void> _markExecutable(File file) async {
+  if (_isWindows) {
+    return;
+  }
+  await Process.run('chmod', ['+x', file.path]);
 }
 
 const _repoReleasePrefix =
