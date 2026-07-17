@@ -263,7 +263,7 @@ void main() {
 
     expect(
       find.text(
-        'Unable to scan microphones. Check FFmpeg and microphone permissions, then reopen Settings.',
+        'Unable to scan microphones. Check the microphone and its permissions, then reopen Settings.',
       ),
       findsOneWidget,
     );

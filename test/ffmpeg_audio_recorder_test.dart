@@ -23,7 +23,7 @@ void main() {
       final recording = await recorder.stop();
 
       expect(runner.executable, '/opt/typemate/bin/ffmpeg/ffmpeg');
-      expect(runner.arguments, containsAll(['-f', 'pulse']));
+      expect(runner.arguments, containsAll(['-f', 'alsa']));
       expect(runner.arguments, contains('alsa_input.usb-Brio_100'));
       expect(process.quitRequested, isTrue);
       expect(recording.path, endsWith('typemate-20260710-123005.wav'));

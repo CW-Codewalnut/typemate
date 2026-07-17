@@ -207,7 +207,7 @@ void main() {
     expect(controller.phase, DictationPhase.idle);
     expect(
       controller.statusMessage,
-      'Unable to start recording. Check FFmpeg and microphone permissions, then try again.',
+      'Unable to start recording. Check the microphone and its permissions, then try again.',
     );
     expect(platformBridge.overlayVisible, isFalse);
     expect(sttEngine.lastRecording, isNull);
@@ -229,7 +229,7 @@ void main() {
     expect(controller.phase, DictationPhase.idle);
     expect(
       controller.statusMessage,
-      'Unable to finish recording. Check FFmpeg and microphone permissions, then try again.',
+      'Unable to finish recording. Check the microphone and its permissions, then try again.',
     );
     expect(platformBridge.overlayVisible, isFalse);
     expect(audioRecorder.started, isTrue);

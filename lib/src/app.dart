@@ -7,7 +7,7 @@ import 'components/app_scroll_behavior.dart';
 import 'components/splash_screen.dart';
 import 'core/audio/microphone_discovery.dart';
 import 'core/audio/microphone_audio_recorder_factory.dart';
-import 'core/audio/pulse_microphone_discovery.dart';
+import 'core/audio/system_default_microphone_discovery.dart';
 import 'core/audio/record_package_audio.dart';
 import 'core/dictation_controller.dart';
 import 'core/dictation_history_controller.dart';
@@ -237,7 +237,11 @@ PlatformBridge createDefaultPlatformBridge({bool? isWindows, bool? isLinux}) {
     return WindowsPlatformBridge();
   }
   if (isLinux ?? Platform.isLinux) {
-    return LinuxPlatformBridge();
+    final xdotool = resolveXdotool();
+    return LinuxPlatformBridge(
+      xdotoolExecutable: xdotool.executable,
+      xdotoolLibraryDirectory: xdotool.libraryDirectory,
+    );
   }
 
   return MockPlatformBridge();
@@ -267,7 +271,7 @@ MicrophoneDiscovery createDefaultMicrophoneDiscovery({
     return RecordPackageMicrophoneDiscovery();
   }
   if (isLinux ?? Platform.isLinux) {
-    return const PulseMicrophoneDiscovery();
+    return const SystemDefaultMicrophoneDiscovery();
   }
 
   // macOS and anything else: the record plugin captures natively there too.
@@ -515,38 +519,81 @@ SttEngine createDefaultSttEngine({
   );
 }
 
-/// Resolves the ffmpeg executable: env override, then the copy bundled
-/// next to the app, then plain `ffmpeg` from PATH. Unlike the speech
-/// runtimes this never throws — a missing binary surfaces as the
-/// microphone-scan error with install guidance instead of a crash.
+/// Resolves a helper tool: env override, then the copy bundled next to the
+/// app, then the bare name from PATH. Unlike the speech runtimes this never
+/// throws — a missing tool surfaces as an actionable in-app error instead
+/// of a crash.
+String resolveBundledTool({
+  required String bundledRelativePath,
+  required String fallbackCommand,
+  String? environmentOverrideVariable,
+  Map<String, String>? environment,
+  PathExists? pathExists,
+  String? currentDirectoryPath,
+  String? executableDirectoryPath,
+}) {
+  final values = environment ?? Platform.environment;
+  if (environmentOverrideVariable != null) {
+    final override = values[environmentOverrideVariable]?.trim() ?? '';
+    if (override.isNotEmpty) {
+      return override;
+    }
+  }
+  final exists = pathExists ?? (path) => File(path).existsSync();
+  final searchDirectories = [
+    currentDirectoryPath ?? Directory.current.path,
+    executableDirectoryPath ?? File(Platform.resolvedExecutable).parent.path,
+  ];
+  for (final directory in searchDirectories) {
+    final candidate = '${directory.replaceAll('\\', '/')}/$bundledRelativePath';
+    if (exists(candidate)) {
+      return candidate;
+    }
+  }
+  return fallbackCommand;
+}
+
 String resolveFfmpegExecutable({
   Map<String, String>? environment,
   PathExists? pathExists,
   String? currentDirectoryPath,
   String? executableDirectoryPath,
   bool? isWindows,
-}) {
-  final values = environment ?? Platform.environment;
-  final override = values['TYPEMATE_FFMPEG']?.trim() ?? '';
-  if (override.isNotEmpty) {
-    return override;
-  }
-  final exists = pathExists ?? (path) => File(path).existsSync();
-  final bundledName = platformExecutablePath(
+}) => resolveBundledTool(
+  bundledRelativePath: platformExecutablePath(
     'bin/ffmpeg/ffmpeg',
     isWindows: isWindows,
+  ),
+  fallbackCommand: 'ffmpeg',
+  environmentOverrideVariable: 'TYPEMATE_FFMPEG',
+  environment: environment,
+  pathExists: pathExists,
+  currentDirectoryPath: currentDirectoryPath,
+  executableDirectoryPath: executableDirectoryPath,
+);
+
+/// The bundled xdotool and the directory holding its private libxdo, or a
+/// PATH fallback with no library override.
+({String executable, String? libraryDirectory}) resolveXdotool({
+  Map<String, String>? environment,
+  PathExists? pathExists,
+  String? currentDirectoryPath,
+  String? executableDirectoryPath,
+}) {
+  final executable = resolveBundledTool(
+    bundledRelativePath: 'bin/xdotool/xdotool',
+    fallbackCommand: 'xdotool',
+    environmentOverrideVariable: 'TYPEMATE_XDOTOOL',
+    environment: environment,
+    pathExists: pathExists,
+    currentDirectoryPath: currentDirectoryPath,
+    executableDirectoryPath: executableDirectoryPath,
   );
-  final searchDirectories = [
-    currentDirectoryPath ?? Directory.current.path,
-    executableDirectoryPath ?? File(Platform.resolvedExecutable).parent.path,
-  ];
-  for (final directory in searchDirectories) {
-    final candidate = '${directory.replaceAll('\\', '/')}/$bundledName';
-    if (exists(candidate)) {
-      return candidate;
-    }
+  if (executable == 'xdotool') {
+    return (executable: executable, libraryDirectory: null);
   }
-  return 'ffmpeg';
+  final libraryDirectory = executable.substring(0, executable.lastIndexOf('/'));
+  return (executable: executable, libraryDirectory: libraryDirectory);
 }
 
 String _resolveRuntimeFile({

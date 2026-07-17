@@ -3,7 +3,17 @@ import 'dart:io';
 import '../platform_bridge.dart';
 
 typedef LinuxProcessRunner =
-    Future<ProcessResult> Function(String executable, List<String> arguments);
+    Future<ProcessResult> Function(
+      String executable,
+      List<String> arguments, {
+      Map<String, String>? environment,
+    });
+
+Future<ProcessResult> _runProcess(
+  String executable,
+  List<String> arguments, {
+  Map<String, String>? environment,
+}) => Process.run(executable, arguments, environment: environment);
 
 /// Linux (X11) implementation of the platform bridge.
 ///
@@ -19,13 +29,20 @@ class LinuxPlatformBridge implements PlatformBridge {
     LinuxProcessRunner? processRunner,
     Map<String, String>? environment,
     String? executablePath,
-  }) : _processRunner = processRunner ?? Process.run,
+    this.xdotoolExecutable = 'xdotool',
+    this.xdotoolLibraryDirectory,
+  }) : _processRunner = processRunner ?? _runProcess,
        _environment = environment ?? Platform.environment,
        _executablePath = executablePath ?? Platform.resolvedExecutable;
 
   final LinuxProcessRunner _processRunner;
   final Map<String, String> _environment;
   final String _executablePath;
+
+  /// Bundled xdotool ships with a private libxdo; its directory goes on
+  /// LD_LIBRARY_PATH so no system install is needed.
+  final String xdotoolExecutable;
+  final String? xdotoolLibraryDirectory;
 
   @override
   Future<bool> isGlobalShortcutAvailable() async {
@@ -43,20 +60,26 @@ class LinuxPlatformBridge implements PlatformBridge {
 
   @override
   Future<void> insertTextIntoFocusedField(String text) async {
+    final libraryDirectory = xdotoolLibraryDirectory;
     final ProcessResult result;
     try {
-      result = await _processRunner('xdotool', [
-        'type',
-        '--clearmodifiers',
-        '--delay',
-        '2',
-        '--',
-        text,
-      ]);
+      result = await _processRunner(
+        xdotoolExecutable,
+        ['type', '--clearmodifiers', '--delay', '2', '--', text],
+        environment: libraryDirectory == null
+            ? null
+            : {
+                ..._environment,
+                'LD_LIBRARY_PATH': [
+                  libraryDirectory,
+                  ?_environment['LD_LIBRARY_PATH'],
+                ].join(':'),
+              },
+      );
     } on ProcessException {
       throw const TextInsertionException(
-        'xdotool is required to type into the focused field on Linux. '
-        'Install it (e.g. sudo apt install xdotool) and try again.',
+        'The bundled xdotool could not be launched, so the transcript '
+        'could not be typed. Reinstall TypeMate and try again.',
       );
     }
     if (result.exitCode != 0) {
