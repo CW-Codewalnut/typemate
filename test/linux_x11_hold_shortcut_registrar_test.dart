@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:typemate/src/core/hold_shortcut_controller.dart';
-import 'package:typemate/src/core/platform/linux_x11_hold_shortcut_registrar.dart';
+import 'package:typemate/src/core/platform/linux/linux_x11_hold_shortcut_registrar.dart';
 
 class FakeX11KeyState implements X11KeyState {
   final Set<int> keycodesDown = {};

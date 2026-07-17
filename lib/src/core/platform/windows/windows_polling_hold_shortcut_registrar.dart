@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:ffi';
 
-import '../hold_shortcut_controller.dart';
+import '../../hold_shortcut_controller.dart';
 
 typedef _GetAsyncKeyStateNative = Int16 Function(Int32 virtualKey);
 typedef GetAsyncKeyState = int Function(int virtualKey);
