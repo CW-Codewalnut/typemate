@@ -24,13 +24,16 @@ abstract interface class X11KeyState {
 class LinuxX11HoldShortcutRegistrar implements HoldShortcutRegistrar {
   LinuxX11HoldShortcutRegistrar({
     this._pollInterval = const Duration(milliseconds: 25),
-    X11KeyState? keyState,
+    this._keyState,
     HoldShortcutOption? shortcut,
-  }) : _keyState = keyState ?? FfiX11KeyState(),
-       _shortcut = shortcut ?? holdShortcutOptionById(defaultHoldShortcutId);
+  }) : _shortcut = shortcut ?? holdShortcutOptionById(defaultHoldShortcutId);
 
   final Duration _pollInterval;
-  final X11KeyState _keyState;
+
+  /// Lazily bound on first registration so constructing the registrar is
+  /// safe without an X display (headless CI, Wayland-only sessions); the
+  /// failure then surfaces through the controller's error handling.
+  X11KeyState? _keyState;
 
   Timer? _timer;
   ShortcutCallback? _onPressed;
@@ -47,8 +50,9 @@ class LinuxX11HoldShortcutRegistrar implements HoldShortcutRegistrar {
     required ShortcutCallback onReleased,
   }) async {
     _shortcut = shortcut;
+    final keyState = _keyState ??= FfiX11KeyState();
     _keycodeGroups = _shortcut.virtualKeyCodes
-        .map(_keyState.keycodesForVirtualKey)
+        .map(keyState.keycodesForVirtualKey)
         .toList();
     _onPressed = onPressed;
     _onReleased = onReleased;
@@ -76,7 +80,11 @@ class LinuxX11HoldShortcutRegistrar implements HoldShortcutRegistrar {
       return;
     }
 
-    final keymap = _keyState.readKeymap();
+    final keyState = _keyState;
+    if (keyState == null) {
+      return;
+    }
+    final keymap = keyState.readKeymap();
     bool keycodeDown(int keycode) =>
         keycode > 0 &&
         keycode < 256 &&

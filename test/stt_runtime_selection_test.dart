@@ -6,6 +6,11 @@ import 'package:typemate/src/core/stt/whisper_server_stt_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  // The bundled binary names depend on the host OS the suite runs on
+  // (.exe suffix on Windows, none on Linux), matching production behavior.
+  final sherpaBinary = bundledSherpaServerRelativePath.split('/').last;
+  final whisperServerBinary = bundledWhisperServerRelativePath.split('/').last;
+
   test('routes each language to its own resident server engine', () {
     final engine = createDefaultSttEngine(
       environment: const {},
@@ -22,7 +27,7 @@ void main() {
     final parakeet = routing.routes['en'] as ParakeetServerSttEngine;
     expect(
       parakeet.serverExecutable,
-      'C:/apps/typemate/bin/sherpa/sherpa-onnx-offline-websocket-server.exe',
+      'C:/apps/typemate/bin/sherpa/$sherpaBinary',
     );
     expect(
       parakeet.encoderPath,
@@ -35,7 +40,7 @@ void main() {
       final server = routing.routes[language.code] as WhisperServerSttEngine;
       expect(
         server.serverExecutable,
-        'C:/apps/typemate/bin/whisper/whisper-server.exe',
+        'C:/apps/typemate/bin/whisper/$whisperServerBinary',
       );
       expect(
         server.modelPath,
@@ -103,7 +108,7 @@ void main() {
         isA<SttRuntimeException>().having(
           (error) => error.message,
           'message',
-          contains('sherpa-onnx-offline-websocket-server.exe'),
+          contains(sherpaBinary),
         ),
       ),
     );
@@ -113,7 +118,7 @@ void main() {
     expect(
       () => createDefaultSttEngine(
         environment: const {},
-        pathExists: (path) => !path.contains('whisper-server.exe'),
+        pathExists: (path) => !path.contains(whisperServerBinary),
         currentDirectoryPath: 'C:/apps/typemate',
         executableDirectoryPath: 'C:/apps/typemate/build/runner',
       ),
@@ -121,7 +126,7 @@ void main() {
         isA<SttRuntimeException>().having(
           (error) => error.message,
           'message',
-          contains('whisper-server.exe'),
+          contains(whisperServerBinary),
         ),
       ),
     );
