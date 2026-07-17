@@ -8,6 +8,7 @@ import 'components/splash_screen.dart';
 import 'core/audio/ffmpeg_microphone_discovery.dart';
 import 'core/audio/microphone_audio_recorder_factory.dart';
 import 'core/audio/pulse_microphone_discovery.dart';
+import 'core/audio/record_package_audio.dart';
 import 'core/dictation_controller.dart';
 import 'core/dictation_history_controller.dart';
 import 'core/hold_shortcut_controller.dart';
@@ -260,8 +261,10 @@ MicrophoneDiscovery createDefaultMicrophoneDiscovery({
   bool? isWindows,
   bool? isLinux,
 }) {
+  // Windows uses the record plugin's MediaFoundation backend: built into
+  // Windows 10/11, so microphone discovery needs no external binaries.
   if (isWindows ?? Platform.isWindows) {
-    return const FfmpegMicrophoneDiscovery();
+    return RecordPackageMicrophoneDiscovery();
   }
   if (isLinux ?? Platform.isLinux) {
     return const PulseMicrophoneDiscovery();
@@ -270,16 +273,19 @@ MicrophoneDiscovery createDefaultMicrophoneDiscovery({
   return const FfmpegMicrophoneDiscovery();
 }
 
-MicrophoneAudioRecorderFactory createDefaultAudioRecorderFactory({
+AudioRecorderFactory createDefaultAudioRecorderFactory({
   required Directory outputDirectory,
   bool? isWindows,
 }) {
   if (isWindows ?? Platform.isWindows) {
-    return MicrophoneAudioRecorderFactory.windows(
-      outputDirectory: outputDirectory,
-    );
+    return RecordPackageAudioRecorderFactory(outputDirectory: outputDirectory);
   }
-  return MicrophoneAudioRecorderFactory.linux(outputDirectory: outputDirectory);
+  // Linux records through ffmpeg's Pulse input; the binary comes from the
+  // distro (documented dependency), an env override, or PATH.
+  return MicrophoneAudioRecorderFactory.linux(
+    outputDirectory: outputDirectory,
+    ffmpegExecutable: resolveFfmpegExecutable(),
+  );
 }
 
 HoldShortcutSettingsStore createDefaultHoldShortcutSettingsStore({
@@ -503,6 +509,40 @@ SttEngine createDefaultSttEngine({
     fallback: whisperEnginesByCode['hi']!,
     languageCodeProvider: languageCodeProvider ?? (() => 'en'),
   );
+}
+
+/// Resolves the ffmpeg executable: env override, then the copy bundled
+/// next to the app, then plain `ffmpeg` from PATH. Unlike the speech
+/// runtimes this never throws — a missing binary surfaces as the
+/// microphone-scan error with install guidance instead of a crash.
+String resolveFfmpegExecutable({
+  Map<String, String>? environment,
+  PathExists? pathExists,
+  String? currentDirectoryPath,
+  String? executableDirectoryPath,
+  bool? isWindows,
+}) {
+  final values = environment ?? Platform.environment;
+  final override = values['TYPEMATE_FFMPEG']?.trim() ?? '';
+  if (override.isNotEmpty) {
+    return override;
+  }
+  final exists = pathExists ?? (path) => File(path).existsSync();
+  final bundledName = platformExecutablePath(
+    'bin/ffmpeg/ffmpeg',
+    isWindows: isWindows,
+  );
+  final searchDirectories = [
+    currentDirectoryPath ?? Directory.current.path,
+    executableDirectoryPath ?? File(Platform.resolvedExecutable).parent.path,
+  ];
+  for (final directory in searchDirectories) {
+    final candidate = '${directory.replaceAll('\\', '/')}/$bundledName';
+    if (exists(candidate)) {
+      return candidate;
+    }
+  }
+  return 'ffmpeg';
 }
 
 String _resolveRuntimeFile({

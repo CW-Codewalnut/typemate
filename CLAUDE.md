@@ -8,7 +8,7 @@ TypeMate is a local, desktop-first Flutter dictation app for developers, AI agen
 
 - Flutter and Dart
 - Desktop targets: Windows, macOS, Linux
-- Windows audio uses FFmpeg DirectShow behind adapter contracts
+- Windows audio uses the `record` plugin (MediaFoundation, built into Windows 10/11 — no external binaries) behind adapter contracts; the FFmpeg DirectShow adapter remains only as a non-default fallback
 - Linux (X11) support: FFmpeg PulseAudio capture, `pactl` microphone discovery, libX11 FFI keymap polling for the global shortcut, `xdotool type` insertion, XDG config/autostart. Wayland is unsupported by design (no synthetic input); the bridge reports it via `isGlobalShortcutAvailable`. Linux whisper binaries are our own static v1.9.1 build hosted on the models-v1 release (whisper.cpp publishes no Linux binaries); sherpa uses the upstream linux-x64-static-no-tts archive. WSL2+WSLg on this machine builds and runs the Linux app for local verification (`wsl -e bash`, repo copied to `~/typemate`, Flutter SDK at `~/sdk/flutter`).
 - Local transcription uses whisper.cpp CLI when configured
 - Tests use `flutter_test` and `integration_test`

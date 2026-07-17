@@ -19,11 +19,13 @@ class FfmpegAudioRecorder implements AudioRecorder {
   FfmpegAudioRecorder.windows({
     required String deviceName,
     required Directory outputDirectory,
+    String executable = 'ffmpeg',
     RecorderProcessRunner? processRunner,
     Clock? clock,
   }) : this._(
          inputArguments: ['-f', 'dshow', '-i', 'audio=$deviceName'],
          outputDirectory: outputDirectory,
+         executable: executable,
          processRunner: processRunner ?? const DartRecorderProcessRunner(),
          clock: clock ?? DateTime.now,
        );
@@ -33,11 +35,13 @@ class FfmpegAudioRecorder implements AudioRecorder {
   FfmpegAudioRecorder.linux({
     required String deviceName,
     required Directory outputDirectory,
+    String executable = 'ffmpeg',
     RecorderProcessRunner? processRunner,
     Clock? clock,
   }) : this._(
          inputArguments: ['-f', 'pulse', '-i', deviceName],
          outputDirectory: outputDirectory,
+         executable: executable,
          processRunner: processRunner ?? const DartRecorderProcessRunner(),
          clock: clock ?? DateTime.now,
        );
@@ -45,12 +49,14 @@ class FfmpegAudioRecorder implements AudioRecorder {
   FfmpegAudioRecorder._({
     required this._inputArguments,
     required this._outputDirectory,
+    required this._executable,
     required this._processRunner,
     required this._clock,
   });
 
   final List<String> _inputArguments;
   final Directory _outputDirectory;
+  final String _executable;
   final RecorderProcessRunner _processRunner;
   final Clock _clock;
 
@@ -82,7 +88,7 @@ class FfmpegAudioRecorder implements AudioRecorder {
       _outputFile!.path,
     ];
 
-    _process = await _processRunner.start('ffmpeg', arguments);
+    _process = await _processRunner.start(_executable, arguments);
   }
 
   @override

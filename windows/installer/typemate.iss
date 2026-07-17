@@ -4,7 +4,7 @@
 ; The installer lands in build\windows\installer\.
 
 #define MyAppName "Type Mate"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "com.typemate"
 #define MyAppExeName "typemate.exe"
 #define MyBuildDir "..\..\build\windows\x64\runner\Release"
