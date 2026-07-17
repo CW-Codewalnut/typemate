@@ -35,6 +35,15 @@ Prefer a portable app? Each release also ships `TypeMate-vX.Y.Z-windows-x64.zip`
 
 > **SmartScreen note:** the installer is not yet code-signed, so Windows may show "Windows protected your PC" — click *More info → Run anyway*.
 
+## Install (Linux, X11)
+
+1. Download `TypeMate-linux-x64.tar.gz` from the [latest release](https://github.com/Ranjan-Bhagat/typemate/releases/latest) and extract it anywhere.
+2. Install the two runtime dependencies TypeMate uses to record and type:
+   `sudo apt install ffmpeg xdotool` (pactl/PulseAudio or PipeWire is present on every mainstream desktop).
+3. Run `./TypeMate/typemate`, pick a microphone, hold **Ctrl+Super**, and speak.
+
+Linux support targets **X11 sessions** (or apps running under XWayland). Pure Wayland blocks global shortcuts and synthetic typing by design — support for the Wayland portal APIs is planned.
+
 ## How it works
 
 One dictation, end to end:

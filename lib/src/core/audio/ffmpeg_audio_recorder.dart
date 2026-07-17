@@ -28,6 +28,20 @@ class FfmpegAudioRecorder implements AudioRecorder {
          clock: clock ?? DateTime.now,
        );
 
+  /// Captures from a PulseAudio source (also served by PipeWire's Pulse
+  /// compatibility layer, the default on modern desktops and WSLg).
+  FfmpegAudioRecorder.linux({
+    required String deviceName,
+    required Directory outputDirectory,
+    RecorderProcessRunner? processRunner,
+    Clock? clock,
+  }) : this._(
+         inputArguments: ['-f', 'pulse', '-i', deviceName],
+         outputDirectory: outputDirectory,
+         processRunner: processRunner ?? const DartRecorderProcessRunner(),
+         clock: clock ?? DateTime.now,
+       );
+
   FfmpegAudioRecorder._({
     required this._inputArguments,
     required this._outputDirectory,

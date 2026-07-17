@@ -54,6 +54,34 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 
+# === TypeMate speech runtime provisioning ===
+# Fetch the bundled STT runtimes (models, whisper.cpp, sherpa-onnx) so a
+# fresh clone builds and runs without manual setup — mirrors the Windows
+# build. The fetch script skips anything already present.
+#
+# Reading the generated config inside a function gives its PARENT_SCOPE
+# writes (FLUTTER_VERSION etc.) a parent, which they lack at the top level
+# and would otherwise warn about on every configure.
+set(TYPEMATE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
+function(typemate_resolve_dart_executable out_variable)
+  include("${FLUTTER_MANAGED_DIR}/ephemeral/generated_config.cmake" OPTIONAL)
+  if(DEFINED FLUTTER_ROOT)
+    set(${out_variable} "${FLUTTER_ROOT}/bin/dart" PARENT_SCOPE)
+  else()
+    set(${out_variable} "dart" PARENT_SCOPE)
+  endif()
+endfunction()
+typemate_resolve_dart_executable(TYPEMATE_DART)
+message(STATUS "Fetching TypeMate speech runtime (models + whisper + sherpa)")
+execute_process(
+  COMMAND "${TYPEMATE_DART}" run tool/fetch_whisper_runtime.dart
+  WORKING_DIRECTORY "${TYPEMATE_ROOT}"
+  RESULT_VARIABLE TYPEMATE_FETCH_RESULT
+)
+if(NOT TYPEMATE_FETCH_RESULT EQUAL 0)
+  message(FATAL_ERROR "fetch_whisper_runtime.dart failed (${TYPEMATE_FETCH_RESULT})")
+endif()
+
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
@@ -126,3 +154,15 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
   install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endif()
+
+# Bundle the TypeMate speech runtimes next to the executable, where the app
+# resolves them relative to Platform.resolvedExecutable. Remove stale models
+# first so cut languages disappear from the bundle.
+install(CODE "
+  file(REMOVE_RECURSE \"${CMAKE_INSTALL_PREFIX}/models\")
+  " COMPONENT Runtime)
+install(DIRECTORY "${TYPEMATE_ROOT}/models"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
+install(DIRECTORY "${TYPEMATE_ROOT}/bin"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime
+  USE_SOURCE_PERMISSIONS)
