@@ -5,7 +5,7 @@ import 'package:record/record.dart' as record_pkg;
 
 import 'audio_recorder.dart';
 import 'ffmpeg_audio_recorder.dart' show Clock;
-import 'ffmpeg_microphone_discovery.dart';
+import 'microphone_discovery.dart';
 import 'microphone_audio_recorder_factory.dart' show AudioRecorderFactory;
 
 /// Thin seam over the record plugin so adapters stay unit-testable; the

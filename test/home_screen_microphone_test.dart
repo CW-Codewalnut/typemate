@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:typemate/src/components/content_page_shell.dart';
 import 'package:typemate/src/core/audio/audio_recorder.dart';
-import 'package:typemate/src/core/audio/ffmpeg_microphone_discovery.dart';
+import 'package:typemate/src/core/audio/microphone_discovery.dart';
 import 'package:typemate/src/core/audio/mock_audio_recorder.dart';
 import 'package:typemate/src/core/dictation_controller.dart';
 import 'package:typemate/src/core/dictation_history_controller.dart';

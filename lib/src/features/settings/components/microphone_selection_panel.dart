@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/audio/ffmpeg_microphone_discovery.dart';
+import '../../../core/audio/microphone_discovery.dart';
 import '../../../core/microphone_settings_controller.dart';
 
 class MicrophoneSelectionPanel extends StatelessWidget {

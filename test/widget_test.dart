@@ -1,5 +1,5 @@
 import 'package:typemate/src/app.dart';
-import 'package:typemate/src/core/audio/ffmpeg_microphone_discovery.dart';
+import 'package:typemate/src/core/audio/microphone_discovery.dart';
 import 'package:typemate/src/core/hold_shortcut_controller.dart';
 import 'package:typemate/src/core/stt/mock_stt_engine.dart';
 import 'package:typemate/src/core/stt/stt_engine.dart';

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../core/audio/ffmpeg_microphone_discovery.dart';
+import '../core/audio/microphone_discovery.dart';
 import 'microphone_settings_store.dart';
 
 class MicrophoneSettingsController extends ChangeNotifier {
