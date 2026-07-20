@@ -151,6 +151,29 @@ install(DIRECTORY "${NATIVE_ASSETS_DIR}"
    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
    COMPONENT Runtime)
 
+# Ship the MSVC runtime next to the executable. Fresh Windows installs
+# often lack the VC++ redistributable and the app then exits on launch
+# without a message. Prefer the toolchain's redist folder; fall back to
+# the build machine's System32 copies (same redistributable files).
+set(TYPEMATE_CRT_DLLS "")
+foreach(crt_dll msvcp140.dll vcruntime140.dll vcruntime140_1.dll)
+  # Sysnative reaches the real 64-bit System32 when CMake itself runs as a
+  # 32-bit process (plain System32 would silently redirect to the 32-bit
+  # SysWOW64 copies and ship the wrong architecture).
+  if(DEFINED ENV{VCToolsRedistDir} AND EXISTS "$ENV{VCToolsRedistDir}x64/Microsoft.VC143.CRT/${crt_dll}")
+    list(APPEND TYPEMATE_CRT_DLLS "$ENV{VCToolsRedistDir}x64/Microsoft.VC143.CRT/${crt_dll}")
+  elseif(EXISTS "C:/Windows/Sysnative/${crt_dll}")
+    list(APPEND TYPEMATE_CRT_DLLS "C:/Windows/Sysnative/${crt_dll}")
+  elseif(EXISTS "C:/Windows/System32/${crt_dll}")
+    list(APPEND TYPEMATE_CRT_DLLS "C:/Windows/System32/${crt_dll}")
+  else()
+    message(FATAL_ERROR "MSVC runtime ${crt_dll} not found; users without the VC++ redistributable would crash at launch")
+  endif()
+endforeach()
+install(FILES ${TYPEMATE_CRT_DLLS}
+  DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+
 # Fully re-copy the assets directory on each build to avoid having stale files
 # from a previous install.
 set(FLUTTER_ASSET_DIR_NAME "flutter_assets")
