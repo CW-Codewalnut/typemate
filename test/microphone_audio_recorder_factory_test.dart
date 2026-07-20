@@ -11,6 +11,9 @@ void main() {
     final factory = MicrophoneAudioRecorderFactory.linux(
       outputDirectory: Directory('build/test-recordings'),
       processRunner: runner,
+      // Pass the requested device through unchanged so the test asserts on
+      // it directly instead of a live capture probe.
+      deviceResolver: (requested) async => requested,
       clock: () => DateTime(2026, 7, 10, 18, 15),
     );
 

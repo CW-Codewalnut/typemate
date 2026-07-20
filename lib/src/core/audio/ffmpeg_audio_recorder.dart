@@ -5,6 +5,11 @@ import 'audio_recorder.dart';
 
 typedef Clock = DateTime Function();
 
+/// Resolves the actual ALSA capture spec to record from, given the
+/// requested device. Lets the recorder swap `default` for a spec that
+/// works on this machine (see [resolveAlsaCaptureDevice]).
+typedef AlsaDeviceResolver = Future<String> Function(String requested);
+
 abstract interface class RecorderProcessRunner {
   Future<RecorderProcess> start(String executable, List<String> arguments);
 }
@@ -23,10 +28,12 @@ class FfmpegAudioRecorder implements AudioRecorder {
     required String deviceName,
     required Directory outputDirectory,
     String executable = 'ffmpeg',
+    AlsaDeviceResolver? deviceResolver,
     RecorderProcessRunner? processRunner,
     Clock? clock,
   }) : this._(
-         inputArguments: ['-f', 'alsa', '-i', deviceName],
+         deviceName: deviceName,
+         deviceResolver: deviceResolver,
          outputDirectory: outputDirectory,
          executable: executable,
          processRunner: processRunner ?? const DartRecorderProcessRunner(),
@@ -34,14 +41,16 @@ class FfmpegAudioRecorder implements AudioRecorder {
        );
 
   FfmpegAudioRecorder._({
-    required this._inputArguments,
+    required this._deviceName,
+    required this._deviceResolver,
     required this._outputDirectory,
     required this._executable,
     required this._processRunner,
     required this._clock,
   });
 
-  final List<String> _inputArguments;
+  final String _deviceName;
+  final AlsaDeviceResolver? _deviceResolver;
   final Directory _outputDirectory;
   final String _executable;
   final RecorderProcessRunner _processRunner;
@@ -63,9 +72,15 @@ class FfmpegAudioRecorder implements AudioRecorder {
       '${_outputDirectory.path}/typemate-${_timestamp(_startedAt!)}.wav',
     );
 
+    final resolver = _deviceResolver;
+    final device = resolver == null ? _deviceName : await resolver(_deviceName);
+
     final arguments = [
       '-y',
-      ..._inputArguments,
+      '-f',
+      'alsa',
+      '-i',
+      device,
       '-ac',
       '1',
       '-ar',
