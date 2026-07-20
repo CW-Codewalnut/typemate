@@ -133,6 +133,17 @@ Future<void> main(List<String> arguments) async {
         files: const ['xdotool', 'libxdo.so.3'],
         force: force,
       );
+      if (exitCode != 0) {
+        return;
+      }
+      await _fetchToolArchive(
+        client,
+        url:
+            'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/typemate-overlay-linux-x64.tar.gz',
+        targetDirectory: 'bin/overlay',
+        files: const ['typemate-overlay'],
+        force: force,
+      );
     }
   } finally {
     client.close();

@@ -3,6 +3,19 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:typemate/src/core/platform/linux/linux_platform_bridge.dart';
 
+class _FakeOverlaySink implements OverlaySink {
+  _FakeOverlaySink(this.commands, {this.onClose});
+
+  final List<String> commands;
+  final void Function()? onClose;
+
+  @override
+  void send(String command) => commands.add(command);
+
+  @override
+  Future<void> close() async => onClose?.call();
+}
+
 void main() {
   test('types into the focused field through xdotool', () async {
     String? executable;
@@ -52,6 +65,55 @@ void main() {
       spawnedEnvironment?['LD_LIBRARY_PATH'],
       '/opt/typemate/bin/xdotool:/existing',
     );
+  });
+
+  test('drives the overlay through its lifecycle', () async {
+    final commands = <String>[];
+    var spawnCount = 0;
+    var closed = false;
+    final bridge = LinuxPlatformBridge(
+      processRunner: (_, _, {environment}) async => ProcessResult(1, 0, '', ''),
+      environment: const {'DISPLAY': ':0'},
+      executablePath: '/opt/typemate/typemate',
+      overlayExecutable: '/opt/typemate/bin/overlay/typemate-overlay',
+      overlayStarter: () async {
+        spawnCount++;
+        return _FakeOverlaySink(commands, onClose: () => closed = true);
+      },
+    );
+
+    // Showing spawns the helper (which maps its window on start); the
+    // transcribing update is sent; hiding closes it.
+    await bridge.showListeningOverlay();
+    await bridge.showTranscribingOverlay();
+    await bridge.hideListeningOverlay();
+
+    expect(spawnCount, 1);
+    expect(commands, ['transcribing']);
+    expect(closed, isTrue);
+
+    // The next dictation spawns a fresh helper.
+    await bridge.showListeningOverlay();
+    expect(spawnCount, 2);
+  });
+
+  test('overlay stays silent when no helper is configured', () async {
+    var started = false;
+    final bridge = LinuxPlatformBridge(
+      processRunner: (_, _, {environment}) async => ProcessResult(1, 0, '', ''),
+      environment: const {'DISPLAY': ':0'},
+      executablePath: '/opt/typemate/typemate',
+      overlayStarter: () async {
+        started = true;
+        return null;
+      },
+    );
+
+    await bridge.showListeningOverlay();
+    await bridge.showListeningOverlay();
+
+    // A failed start is remembered so it is not retried on every dictation.
+    expect(started, isTrue);
   });
 
   test('fails clearly when xdotool is missing', () async {
