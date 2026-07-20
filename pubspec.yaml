@@ -37,6 +37,7 @@ dependencies:
   ffi: ^2.2.0
   record: ^7.1.1
   window_manager: ^0.5.2
+  flutter_single_instance: ^1.7.0
 
 dev_dependencies:
   flutter_test:
