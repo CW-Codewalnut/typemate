@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../components/content_page_shell.dart';
 import '../../core/hold_shortcut_controller.dart';
@@ -43,8 +44,33 @@ class SettingsPage extends StatelessWidget {
             const SizedBox(height: 24),
             ShortcutSettingsPanel(controller: shortcutController!),
           ],
+          const SizedBox(height: 24),
+          const _VersionLabel(),
         ],
       ),
+    );
+  }
+}
+
+class _VersionLabel extends StatelessWidget {
+  const _VersionLabel();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return FutureBuilder<PackageInfo>(
+      future: PackageInfo.fromPlatform(),
+      builder: (context, snapshot) {
+        final info = snapshot.data;
+        final label = info == null ? 'Type Mate' : 'Type Mate v${info.version}';
+        return Text(
+          label,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        );
+      },
     );
   }
 }
