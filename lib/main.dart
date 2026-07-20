@@ -15,6 +15,12 @@ Future<void> main() async {
     await FlutterSingleInstance().focus();
     exit(0);
   }
+  // When a second launch pings us, surface the existing window — including
+  // un-hiding it from the tray, which a bare focus() cannot do.
+  FlutterSingleInstance.onFocus = (_) async {
+    await windowManager.show();
+    await windowManager.focus();
+  };
   // The app UI is light; keep the native title bar light too instead of
   // following the system dark theme. Linux is excluded because its title
   // bars are drawn by the desktop's window manager from the system theme.
