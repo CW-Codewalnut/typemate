@@ -96,11 +96,13 @@ class _WindowTitleBarState extends State<WindowTitleBar> with WindowListener {
                       onDoubleTap: _toggleMaximize,
                       child: Row(
                         children: [
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 10),
+                          // The logo asset is tightly cropped (the icon
+                          // master carries padding and reads too small).
                           Image.asset(
-                            'assets/typemate_icon_1024.png',
-                            width: 18,
-                            height: 18,
+                            'assets/typemate_logo.png',
+                            width: 22,
+                            height: 22,
                             filterQuality: FilterQuality.medium,
                           ),
                           const Spacer(),
