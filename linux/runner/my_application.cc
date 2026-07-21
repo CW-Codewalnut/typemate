@@ -19,6 +19,16 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 
+// Closing the window hides it instead of quitting: dictation keeps
+// running in the background (matching the Windows tray behaviour) and
+// Settings has the explicit Quit. Connected before any other delete-event
+// handler so it decides the outcome regardless of engine/plugin handlers.
+static gboolean hide_on_delete_cb(GtkWidget* window, GdkEvent* event,
+                                  gpointer user_data) {
+  gtk_widget_hide(window);
+  return TRUE;  // stop emission: never destroy the window
+}
+
 // Sets the window/taskbar icon from the bundled data/app_icon.png, which
 // lives next to the executable (the bundle is relocatable, so the path is
 // resolved at runtime instead of relying on an installed icon theme).
@@ -39,6 +49,8 @@ static void my_application_activate(GApplication* application) {
   set_default_window_icon();
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
+  g_signal_connect(window, "delete-event", G_CALLBACK(hide_on_delete_cb),
+                   nullptr);
 
   // The native title bar is hidden at runtime (window_manager); the app
   // draws its own cross-platform title bar in Flutter. Keep a plain native

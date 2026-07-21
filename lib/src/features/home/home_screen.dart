@@ -19,6 +19,7 @@ class HomeScreen extends StatefulWidget {
     required this.microphoneController,
     required this.speechSettingsController,
     this.shortcutController,
+    this.onQuitRequested,
   });
 
   final DictationController controller;
@@ -26,6 +27,7 @@ class HomeScreen extends StatefulWidget {
   final MicrophoneSettingsController microphoneController;
   final SpeechSettingsController speechSettingsController;
   final HoldShortcutController? shortcutController;
+  final Future<void> Function()? onQuitRequested;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -64,6 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
             microphoneController: widget.microphoneController,
             speechSettingsController: widget.speechSettingsController,
             shortcutController: widget.shortcutController,
+            onQuitRequested: widget.onQuitRequested,
           ),
         };
 

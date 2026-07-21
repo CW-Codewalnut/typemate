@@ -125,6 +125,9 @@ class _TypeMateAppState extends State<TypeMateApp> {
     // newly selected model is warm before the next dictation, and the old
     // one's RAM is released.
     speechSettingsController.addListener(_onLanguageChanged);
+    // Linux: closing the window hides it instead of quitting (the runner's
+    // delete-event handler owns this), so dictation keeps running in the
+    // background like the Windows tray build. Quit lives in Settings.
   }
 
   void _onLanguageChanged() {
@@ -186,6 +189,7 @@ class _TypeMateAppState extends State<TypeMateApp> {
                       microphoneController: microphoneController,
                       speechSettingsController: speechSettingsController,
                       shortcutController: shortcutController,
+                      onQuitRequested: _shutDownAndExit,
                     ),
             ),
           ),
