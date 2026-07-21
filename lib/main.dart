@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_single_instance/flutter_single_instance.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'src/app.dart';
@@ -9,6 +10,13 @@ import 'src/models/app_identity.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // On macOS the app-scoped temporary directory does not exist until
+  // something creates it, and flutter_single_instance treats the resulting
+  // lock-file error as "another instance is running" — which would exit
+  // every launch on a fresh install.
+  if (Platform.isMacOS) {
+    await (await getTemporaryDirectory()).create(recursive: true);
+  }
   // One TypeMate only: a second launch would fight over the global
   // shortcut and the resident speech servers. Hand focus to the running
   // instance and bow out.

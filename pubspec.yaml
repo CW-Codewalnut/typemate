@@ -38,6 +38,7 @@ dependencies:
   record: ^7.1.1
   window_manager: ^0.5.2
   flutter_single_instance: ^1.7.0
+  path_provider: ^2.1.5
   package_info_plus: ^10.2.1
 
 dev_dependencies:
