@@ -148,3 +148,41 @@ dart run tool/benchmark_stt_corpus.dart --model <path.bin> --language hi
 - `DESIGN.md` — UI principles
 - `models/README.md` — bundled models and why each was chosen
 - `docs/requirements.md`, `docs/architecture.md`
+
+## 🌐 Connect with Us
+
+Stay connected and get support through our community channels:
+
+### 🏢 Official Links
+
+- **🌍 Website:** [codewalnut.com](https://codewalnut.com)
+- **📧 Email:** [nattu@codewalnut.com](mailto:nattu@codewalnut.com)
+- **📖 Blogs:**
+  - **insights:** [codewalnut.com/insights](https://www.codewalnut.com/insights)
+  - **learn:** [codewalnut.com/learn](https://www.codewalnut.com/learn)
+
+### 📱 Social Media
+
+- **💼 LinkedIn:** [CodeWalnut](https://www.linkedin.com/company/codewalnut)
+- **📺 YouTube:** [CodeWalnut Channel](https://www.youtube.com/@CodeWalnut)
+- **🐦 Twitter/X:** [@codewalnut](https://x.com/codewalnut)
+- **📷 Instagram:** [@codewalnut](https://www.instagram.com/codewalnut)
+
+### 💬 Community Support
+
+- **📧 Newsletter:** [Subscribe to CodeWalnut Newsletter](https://codewalnut.com/) (scroll down to find the email subscription option)
+- **🐙 GitHub:** [codewalnut](https://github.com/CW-Codewalnut)
+
+### 🤝 Professional Services
+
+- **Consulting:** Custom desktop apps, local-first AI, and speech-to-text solutions
+- **Training:** Flutter desktop and on-device AI workshops
+- **Support:** Enterprise-grade support and maintenance
+
+📢 **Follow us for updates on new tools, AI integrations, and local-first products!**
+
+## 📜 License
+
+This project is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+
+You can find the full license text in the [`LICENSE`](./LICENSE) file.
