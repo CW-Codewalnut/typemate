@@ -40,7 +40,7 @@ Future<void> main(List<String> arguments) async {
   }
 
   final engine = WhisperCliSttEngine(
-    executable: 'bin/whisper/whisper-cli.exe',
+    executable: 'bin/whisper/whisper-cli${Platform.isWindows ? '.exe' : ''}',
     modelPath: modelPath,
     vadModelPath: 'models/ggml-silero-v5.1.2.bin',
     languageCodeProvider: () => cliLanguage,

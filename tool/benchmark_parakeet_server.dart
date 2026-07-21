@@ -16,7 +16,9 @@ Future<void> main(List<String> arguments) async {
   }
 
   final engine = ParakeetServerSttEngine(
-    serverExecutable: 'bin/sherpa/sherpa-onnx-offline-websocket-server.exe',
+    serverExecutable:
+        'bin/sherpa/sherpa-onnx-offline-websocket-server'
+        '${Platform.isWindows ? '.exe' : ''}',
     encoderPath: 'models/parakeet-tdt-0.6b-v3-int8/encoder.int8.onnx',
     decoderPath: 'models/parakeet-tdt-0.6b-v3-int8/decoder.int8.onnx',
     joinerPath: 'models/parakeet-tdt-0.6b-v3-int8/joiner.int8.onnx',
