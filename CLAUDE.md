@@ -151,8 +151,9 @@ Every release follows this checklist — no partial releases:
    Lubuntu VM (SSH access: key `~/.ssh/typemate_vm`, port 2222 via VBox NAT
    forward). Test the full loop: install, launch from menu, hotkey/overlay,
    close-to-background, relaunch-resurface.
-4. **Release PR**: raise a PR from `dev` to `tip` for every release so it
+4. **Release PR**: raise a PR from `dev` to `main` for every release so it
    gets an external review before merge. Do not merge it yourself.
+   (`tip` is a stale historical branch — not the release target.)
 5. **Publishing needs Ranjan's explicit go-ahead** — for creating a
    release, replacing an asset, or deleting one. Build and show proof
    first, then wait.
