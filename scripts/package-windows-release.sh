@@ -54,3 +54,14 @@ PY
 
 test -f "$ZIP_PATH"
 printf '%s\n' "$ZIP_PATH"
+
+# Also produce the Setup installer when Inno Setup is available
+# (installer/typemate.iss). Version comes from pubspec.yaml.
+VERSION="$(sed -n 's/^version: \([0-9.]*\)+.*/\1/p' pubspec.yaml)"
+ISCC="${ISCC:-$HOME/scoop/apps/inno-setup/current/ISCC.exe}"
+if [ -x "$ISCC" ] && [ -n "$VERSION" ]; then
+  "$ISCC" "/DAppVersion=$VERSION" "installer/typemate.iss"
+  printf '%s\n' "$DIST_DIR/TypeMate-Setup-v$VERSION.exe"
+else
+  echo "NOTE: Inno Setup not found; skipped TypeMate-Setup exe" >&2
+fi
