@@ -1,8 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-// Re-exports window_manager, which the title-bar brightness call uses.
 import 'package:flutter_single_instance/flutter_single_instance.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'src/app.dart';
 
@@ -21,12 +21,10 @@ Future<void> main() async {
     await windowManager.show();
     await windowManager.focus();
   };
-  // The app UI is light; keep the native title bar light too instead of
-  // following the system dark theme. Linux is excluded because its title
-  // bars are drawn by the desktop's window manager from the system theme.
-  if (!Platform.isLinux) {
-    await windowManager.ensureInitialized();
-    await windowManager.setBrightness(Brightness.light);
-  }
+  // Hide the native title bar on every desktop: WindowTitleBar draws one
+  // Flutter bar (white, Windows-style) so the chrome is identical on all
+  // OSes instead of following each window manager's theme.
+  await windowManager.ensureInitialized();
+  await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
   runApp(const DictationFlowApp());
 }

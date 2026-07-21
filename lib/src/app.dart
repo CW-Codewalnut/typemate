@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'components/app_scroll_behavior.dart';
 import 'components/splash_screen.dart';
+import 'components/window_title_bar.dart';
 import 'core/audio/microphone_discovery.dart';
 import 'core/audio/microphone_audio_recorder_factory.dart';
 import 'core/audio/system_default_microphone_discovery.dart';
@@ -197,17 +199,28 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
         ],
         useMaterial3: true,
       ),
-      home: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 300),
-        child: _showSplash
-            ? const SplashScreen()
-            : HomeScreen(
-                controller: controller,
-                historyController: historyController,
-                microphoneController: microphoneController,
-                speechSettingsController: speechSettingsController,
-                shortcutController: shortcutController,
-              ),
+      // On Linux the native frame is hidden (undecorated), so the frame
+      // widget restores edge resizing; Windows keeps its native edges.
+      builder: (context, child) =>
+          Platform.isLinux ? VirtualWindowFrame(child: child!) : child!,
+      home: Column(
+        children: [
+          const WindowTitleBar(),
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: _showSplash
+                  ? const SplashScreen()
+                  : HomeScreen(
+                      controller: controller,
+                      historyController: historyController,
+                      microphoneController: microphoneController,
+                      speechSettingsController: speechSettingsController,
+                      shortcutController: shortcutController,
+                    ),
+            ),
+          ),
+        ],
       ),
     );
   }
