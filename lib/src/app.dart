@@ -29,9 +29,11 @@ import 'core/stt/stt_engine.dart';
 import 'core/stt/whisper_cli_stt_engine.dart';
 import 'core/stt/whisper_server_stt_engine.dart';
 import 'features/home/home_screen.dart';
+import 'models/app_identity.dart';
+import 'theme/app_theme.dart';
 
-class DictationFlowApp extends StatefulWidget {
-  const DictationFlowApp({
+class TypeMateApp extends StatefulWidget {
+  const TypeMateApp({
     super.key,
     this.microphoneDiscovery,
     this.holdShortcutRegistrar,
@@ -45,10 +47,10 @@ class DictationFlowApp extends StatefulWidget {
   final Duration splashDuration;
 
   @override
-  State<DictationFlowApp> createState() => _DictationFlowAppState();
+  State<TypeMateApp> createState() => _TypeMateAppState();
 }
 
-class _DictationFlowAppState extends State<DictationFlowApp> {
+class _TypeMateAppState extends State<TypeMateApp> {
   late final DictationController controller;
   late final DictationHistoryController historyController;
   late final MicrophoneSettingsController microphoneController;
@@ -162,43 +164,10 @@ class _DictationFlowAppState extends State<DictationFlowApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Type Mate',
+      title: appDisplayName,
       debugShowCheckedModeBanner: false,
       scrollBehavior: const AppScrollBehavior(),
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5B6CFF)),
-        fontFamilyFallback: const [
-          'Nirmala UI',
-          'Nirmala Text',
-          'Segoe UI',
-          'Segoe UI Historic',
-          'Segoe UI Symbol',
-          'Arial Unicode MS',
-          'Mangal',
-          'Utsaah',
-          'Aparajita',
-          'Kokila',
-          'Nirmala UI Semilight',
-          'Vrinda',
-          'Raavi',
-          'Ebrima',
-          'Gadugi',
-          'Leelawadee UI',
-          'Javanese Text',
-          'Myanmar Text',
-          'Mongolian Baiti',
-          'Microsoft Himalaya',
-          'Microsoft Yi Baiti',
-          'Sylfaen',
-          'Microsoft YaHei',
-          'Microsoft JhengHei',
-          'SimSun',
-          'NSimSun',
-          'Meiryo',
-          'Malgun Gothic',
-        ],
-        useMaterial3: true,
-      ),
+      theme: buildAppTheme(),
       // On Linux the native frame is hidden (undecorated), so the frame
       // widget restores edge resizing; Windows keeps its native edges.
       builder: (context, child) =>

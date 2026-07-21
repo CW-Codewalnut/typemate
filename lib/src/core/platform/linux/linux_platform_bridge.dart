@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../../../models/app_identity.dart';
 import '../platform_bridge.dart';
 
 typedef LinuxProcessRunner =
@@ -174,7 +175,7 @@ class LinuxPlatformBridge implements PlatformBridge {
     await entry.writeAsString('''
 [Desktop Entry]
 Type=Application
-Name=Type Mate
+Name=$appDisplayName
 Comment=Local hold-to-dictate speech typing
 Exec=$_executablePath
 Icon=$bundleDirectory/data/app_icon.png

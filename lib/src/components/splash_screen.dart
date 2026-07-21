@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../models/app_identity.dart';
+
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
 
@@ -19,7 +21,7 @@ class SplashScreen extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             Text(
-              'Type Mate',
+              appDisplayName,
               style: theme.textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.w800,
               ),

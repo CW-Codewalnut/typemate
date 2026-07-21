@@ -11,7 +11,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      DictationFlowApp(
+      TypeMateApp(
         microphoneDiscovery: FakeMicrophoneDiscovery(),
         holdShortcutRegistrar: const NoopHoldShortcutRegistrar(),
         sttEngine: MockSttEngine(),
@@ -35,7 +35,7 @@ void main() {
   ) async {
     final engine = ShutdownTrackingSttEngine();
     await tester.pumpWidget(
-      DictationFlowApp(
+      TypeMateApp(
         microphoneDiscovery: FakeMicrophoneDiscovery(),
         holdShortcutRegistrar: const NoopHoldShortcutRegistrar(),
         sttEngine: engine,
@@ -51,7 +51,7 @@ void main() {
 
   testWidgets('renders the desktop dictation shell', (tester) async {
     await tester.pumpWidget(
-      DictationFlowApp(
+      TypeMateApp(
         microphoneDiscovery: FakeMicrophoneDiscovery(),
         holdShortcutRegistrar: const NoopHoldShortcutRegistrar(),
         sttEngine: MockSttEngine(),

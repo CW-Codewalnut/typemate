@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:window_manager/window_manager.dart' hide WindowCaptionButton;
+
+import '../models/app_identity.dart';
+import 'window_caption_button.dart';
 
 /// The app's title bar, drawn by Flutter so every desktop OS shows the same
 /// light bar: logo on the left, centred title, minimize/maximize/close on
 /// the right. The native title bar is hidden at startup (see main.dart);
 /// this widget replaces it identically on Windows and Linux instead of
-/// per-OS native styling that can drift.
+/// per-OS native styling that can drift. All colours derive from the theme.
 class WindowTitleBar extends StatefulWidget {
   const WindowTitleBar({super.key});
 
@@ -60,24 +63,25 @@ class _WindowTitleBarState extends State<WindowTitleBar> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Material(
-      color: Colors.white,
+      color: colorScheme.surface,
       child: Container(
         height: WindowTitleBar.height,
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: Color(0xFFE5E5EA))),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
         ),
         child: Stack(
           children: [
             // The title centres on the full bar width — independent of the
             // logo and window buttons — exactly like a native title bar.
-            const Center(
+            Center(
               child: Text(
-                'Type Mate',
-                style: TextStyle(
-                  fontSize: 13,
+                appDisplayName,
+                style: theme.textTheme.labelLarge?.copyWith(
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF1F2230),
+                  color: colorScheme.onSurface,
                 ),
               ),
             ),
@@ -105,7 +109,7 @@ class _WindowTitleBarState extends State<WindowTitleBar> with WindowListener {
                     ),
                   ),
                 ),
-                _WindowButton(
+                WindowCaptionButton(
                   tooltip: 'Minimize',
                   icon: Icons.horizontal_rule,
                   onPressed: () async {
@@ -114,7 +118,7 @@ class _WindowTitleBarState extends State<WindowTitleBar> with WindowListener {
                     } catch (_) {}
                   },
                 ),
-                _WindowButton(
+                WindowCaptionButton(
                   tooltip: _isMaximized ? 'Restore' : 'Maximize',
                   icon: _isMaximized
                       ? Icons.filter_none_outlined
@@ -122,11 +126,11 @@ class _WindowTitleBarState extends State<WindowTitleBar> with WindowListener {
                   iconSize: _isMaximized ? 12 : 14,
                   onPressed: _toggleMaximize,
                 ),
-                _WindowButton(
+                WindowCaptionButton(
                   tooltip: 'Close',
                   icon: Icons.close,
-                  hoverColor: const Color(0xFFE81123),
-                  hoverIconColor: Colors.white,
+                  hoverColor: colorScheme.error,
+                  hoverIconColor: colorScheme.onError,
                   onPressed: () async {
                     try {
                       await windowManager.close();
@@ -136,59 +140,6 @@ class _WindowTitleBarState extends State<WindowTitleBar> with WindowListener {
               ],
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// A Windows-style caption button: quiet by default, tinted on hover.
-class _WindowButton extends StatefulWidget {
-  const _WindowButton({
-    required this.tooltip,
-    required this.icon,
-    required this.onPressed,
-    this.iconSize = 14,
-    this.hoverColor = const Color(0xFFF0F0F4),
-    this.hoverIconColor = const Color(0xFF1F2230),
-  });
-
-  final String tooltip;
-  final IconData icon;
-  final double iconSize;
-  final Color hoverColor;
-  final Color hoverIconColor;
-  final VoidCallback onPressed;
-
-  @override
-  State<_WindowButton> createState() => _WindowButtonState();
-}
-
-class _WindowButtonState extends State<_WindowButton> {
-  bool _hovering = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: widget.tooltip,
-      waitDuration: const Duration(milliseconds: 600),
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _hovering = true),
-        onExit: (_) => setState(() => _hovering = false),
-        child: GestureDetector(
-          onTap: widget.onPressed,
-          child: Container(
-            width: 46,
-            height: WindowTitleBar.height,
-            color: _hovering ? widget.hoverColor : Colors.transparent,
-            child: Icon(
-              widget.icon,
-              size: widget.iconSize,
-              color: _hovering
-                  ? widget.hoverIconColor
-                  : const Color(0xFF1F2230),
-            ),
-          ),
         ),
       ),
     );
