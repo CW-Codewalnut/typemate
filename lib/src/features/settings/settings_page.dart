@@ -3,6 +3,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../components/content_page_shell.dart';
 import '../../core/hold_shortcut_controller.dart';
+import '../../models/app_identity.dart';
 import '../../core/microphone_settings_controller.dart';
 import '../../core/speech_settings_controller.dart';
 import 'components/microphone_selection_panel.dart';
@@ -62,7 +63,9 @@ class _VersionLabel extends StatelessWidget {
       future: PackageInfo.fromPlatform(),
       builder: (context, snapshot) {
         final info = snapshot.data;
-        final label = info == null ? 'Type Mate' : 'Type Mate v${info.version}';
+        final label = info == null
+            ? appDisplayName
+            : '$appDisplayName v${info.version}';
         return Text(
           label,
           textAlign: TextAlign.center,

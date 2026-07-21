@@ -5,6 +5,7 @@ import 'package:flutter_single_instance/flutter_single_instance.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'src/app.dart';
+import 'src/models/app_identity.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,5 +27,8 @@ Future<void> main() async {
   // OSes instead of following each window manager's theme.
   await windowManager.ensureInitialized();
   await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
-  runApp(const DictationFlowApp());
+  // The OS-visible window title (taskbar, alt-tab) derives from the same
+  // constant as every in-app surface.
+  await windowManager.setTitle(appDisplayName);
+  runApp(const TypeMateApp());
 }

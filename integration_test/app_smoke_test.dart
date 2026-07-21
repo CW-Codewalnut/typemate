@@ -8,7 +8,7 @@ void main() {
 
   testWidgets('app shell loads with history and settings', (tester) async {
     await tester.pumpWidget(
-      DictationFlowApp(
+      TypeMateApp(
         sttEngine: MockSttEngine(),
         // The splash is time-based and integration tests run on a real
         // clock, so it is covered by widget tests instead.
