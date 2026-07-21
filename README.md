@@ -32,7 +32,11 @@ TypeMate is a desktop dictation app for Windows that runs **100% locally** — e
 
 ![Speech history](docs/media/history.png)
 
-*Every dictation lands in a local-only history alongside a usage dashboard.*
+*Every dictation lands in a local-only history you can copy from or clear.*
+
+![Insights dashboard](docs/media/insights.png)
+
+*A usage dashboard — words per minute, streaks, activity — computed entirely from your local history.*
 
 ## Install
 
