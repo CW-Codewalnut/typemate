@@ -92,3 +92,47 @@ jobs:
           name: TypeMate-linux-x64
           path: build/linux/x64/release/TypeMate-linux-x64.tar.gz
           retention-days: 14
+
+  macos-build:
+    name: macOS build and bundle
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Tests on macOS
+        run: flutter test
+
+      - name: Cache speech runtimes
+        uses: actions/cache@v4
+        with:
+          path: |
+            models
+            bin
+          key: speech-runtime-macos-${{ hashFiles('tool/fetch_whisper_runtime.dart') }}
+
+      # The macOS build has no CMake fetch hook (Windows/Linux fetch during
+      # the build), so provision the models and speech binaries explicitly.
+      - name: Fetch speech runtimes
+        run: dart run tool/fetch_whisper_runtime.dart
+
+      - name: Build and package macOS app
+        run: ./scripts/package-macos-release.sh
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TypeMate-macos-arm64
+          path: dist/TypeMate-macos-arm64.tar.gz
+          retention-days: 14

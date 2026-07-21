@@ -2,7 +2,7 @@
 
 **Hold a key. Speak. Your words are typed into whatever app you're using.**
 
-TypeMate is a desktop dictation app for Windows that runs **100% locally** — every word you speak is transcribed by AI models running on your own machine. No cloud, no account, no subscription, and no audio ever leaves your computer.
+TypeMate is a desktop dictation app for Windows, macOS, and Linux that runs **100% locally** — every word you speak is transcribed by AI models running on your own machine. No cloud, no account, no subscription, and no audio ever leaves your computer.
 
 ![TypeMate dictating into a browser](docs/media/demo.gif)
 
@@ -57,6 +57,16 @@ Everything is bundled — models, speech engines, audio capture, and typing tool
 
 Linux support targets **X11 sessions** (or apps running under XWayland). Pure Wayland blocks global shortcuts and synthetic typing by design — support for the Wayland portal APIs is planned.
 
+## Install (macOS)
+
+1. Download `TypeMate-macos-arm64.tar.gz` from the [latest release](https://github.com/Ranjan-Bhagat/typemate/releases/latest), extract it, and drag **Type Mate.app** into Applications.
+2. Launch it and enable **Type Mate** under System Settings > Privacy & Security > **Accessibility** when prompted. TypeMate types into other apps, and macOS gates that behind this permission.
+3. Focus any text field, hold **Ctrl+Cmd**, and speak. Allow **Microphone** access on first use.
+
+Everything is bundled here too: models, speech engines, and typing all live inside the app. Apple Silicon only for now.
+
+> **Gatekeeper note:** the app is not notarized yet, so the first open may be blocked. Right-click **Type Mate.app**, choose *Open*, then *Open* again.
+
 ## How it works
 
 ![TypeMate architecture: the dictation pipeline and the app's three layers — Flutter app, native platform adapters, bundled speech runtimes](docs/media/architecture.svg)
@@ -70,8 +80,9 @@ you release
    └─ Silero VAD trims the silence around your speech
    └─ the resident speech server for your language transcribes it
         (the model is already loaded in RAM, so there is no model-load wait)
-   └─ the transcript is typed into the focused field via the Windows
-        SendInput API — exactly as if you had typed it
+   └─ the transcript is typed into the focused field with synthetic
+        keystrokes (SendInput on Windows, CGEventPost on macOS, xdotool
+        on Linux) — exactly as if you had typed it
    └─ the WAV is deleted; the text is saved to your local history
 ```
 
@@ -90,7 +101,7 @@ To keep memory honest, **only the selected language's server stays loaded** — 
 
 ## How it's made
 
-- **App shell:** [Flutter](https://flutter.dev) for the desktop UI, with the Windows-specific pieces (global hold-shortcut polling, system tray, focused-field text insertion via `SendInput`, listening overlay) written natively in the Win32 runner and hidden behind small Dart interfaces so everything is testable with fakes.
+- **App shell:** [Flutter](https://flutter.dev) for the desktop UI, with the OS-specific pieces (global hold-shortcut polling, system tray, focused-field text insertion, listening overlay) implemented per platform - `SendInput` in the Win32 runner, `CGEventPost` and an `NSPanel` overlay on macOS, `xdotool` and an X11 helper on Linux - and hidden behind small Dart interfaces so everything is testable with fakes.
 - **English + European speech:** [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) serving NVIDIA's Parakeet TDT 0.6B v3 — the most accurate model we benchmarked at any size for Indian-accented English, with automatic language detection across its 25 languages and native punctuation.
 - **Indian-language speech:** [whisper.cpp](https://github.com/ggml-org/whisper.cpp) HTTP servers running community fine-tunes of OpenAI's Whisper, one dedicated model per language. Audio is pre-trimmed with Silero voice-activity detection (without it, Whisper hallucinates and repeats sentences while decoding silence).
 - **Model curation:** every language in the picker earned its place on a persistent benchmark corpus (`test_assets/stt_benchmark/` — identical audio clips with expected transcripts, replayed against every candidate model). Models that hallucinated, corrupted output, or decoded non-deterministically were **rejected** — which is why some Indian languages aren't in the list yet: Telugu, Kannada, and Gujarati checkpoints all failed repeat-request stability testing (the same audio flips between a correct transcript and fabricated text), and Marathi passed but was cut because its only checkpoint adds ~514 MB. The bar is simple: *if a language is visible, it must work.*
