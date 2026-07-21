@@ -67,6 +67,7 @@ flutter:
 
   assets:
     - assets/typemate_logo.png
+    - assets/typemate_icon_1024.png
 
 # Launcher icons for all desktop targets are generated from the white
 # background master with: dart run icons_launcher:create
