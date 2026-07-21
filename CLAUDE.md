@@ -131,6 +131,32 @@ npm run gitnexus:status
 
 The analyzer may warn that LadybugDB FTS/BM25 search is unavailable. That warning does not mean indexing failed; basic graph indexing still works.
 
+## Release process
+
+Every release follows this checklist — no partial releases:
+
+1. **Version** comes only from `pubspec.yaml` (`version:`). It flows to the
+   Settings label (package_info), the Windows exe metadata (Runner.rc via
+   FLUTTER_VERSION), the installer filename, and the .deb/.rpm metadata.
+   Never hardcode a version anywhere else (README included).
+2. **All platforms ship together.** A release is not done until it carries:
+   - `TypeMate-Setup-vX.Y.Z.exe` (Inno Setup, `installer/typemate.iss`)
+   - `TypeMate-vX.Y.Z-windows-x64.zip`
+   - `TypeMate-vX.Y.Z-linux-x64.tar.gz` (portable)
+   - `typemate_X.Y.Z_amd64.deb` (`scripts/package-linux-deb.sh`)
+   - `typemate-X.Y.Z-1.x86_64.rpm` (`scripts/package-linux-rpm.sh`)
+   Windows packaging: `scripts/package-windows-release.sh` (zip + Setup exe).
+3. **Verify on real systems before uploading**: Windows build runs on this
+   machine (screenshot proof); Linux artifacts install and run in the
+   Lubuntu VM (SSH access: key `~/.ssh/typemate_vm`, port 2222 via VBox NAT
+   forward). Test the full loop: install, launch from menu, hotkey/overlay,
+   close-to-background, relaunch-resurface.
+4. **Release PR**: raise a PR from `dev` to `tip` for every release so it
+   gets an external review before merge. Do not merge it yourself.
+5. **Publishing needs Ranjan's explicit go-ahead** — for creating a
+   release, replacing an asset, or deleting one. Build and show proof
+   first, then wait.
+
 ## Git workflow
 
 - Conventional commits only:
