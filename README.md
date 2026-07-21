@@ -18,26 +18,35 @@ TypeMate is a desktop dictation app for Windows that runs **100% locally** — e
 
 ## See it
 
-| | |
-|---|---|
-| ![Dictating into a browser with the listening overlay](docs/media/dictate-anywhere.png) | ![Settings page](docs/media/settings.png) |
-| *Works in any app — the pill at the bottom shows TypeMate listening while the shortcut is held.* | *One page of settings: language, microphone, shortcut. No accounts, no cloud toggles.* |
-| ![Language picker](docs/media/languages.png) | ![Speech history](docs/media/history.png) |
-| *29 languages, every one backed by a locally validated model.* | *Every dictation lands in a local-only history alongside a usage dashboard.* |
+![Dictating into a browser with the listening overlay](docs/media/dictate-anywhere.png)
+
+*Works in any app — the pill at the bottom shows TypeMate listening while the shortcut is held.*
+
+![Settings page](docs/media/settings.png)
+
+*One page of settings: language, microphone, shortcut. No accounts, no cloud toggles.*
+
+![Language picker](docs/media/languages.png)
+
+*29 languages, every one backed by a locally validated model.*
+
+![Speech history](docs/media/history.png)
+
+*Every dictation lands in a local-only history alongside a usage dashboard.*
 
 ## Install
 
-1. Download **`TypeMate-Setup-v1.0.0.exe`** from the [latest release](https://github.com/Ranjan-Bhagat/typemate/releases/latest) and run it.
+1. Download the **`TypeMate-Setup-*.exe`** installer from the [latest release](https://github.com/Ranjan-Bhagat/typemate/releases/latest) and run it.
 2. Launch **Type Mate** from the Start menu.
 3. Pick your microphone in Settings, focus any text field, hold **Ctrl+Win**, and speak.
 
-Prefer a portable app? Each release also ships `TypeMate-vX.Y.Z-windows-x64.zip` — extract anywhere and run `typemate.exe`. All models and runtimes are bundled in both (~1.3 GB installed).
+Prefer a portable app? Each release also ships a `TypeMate-*-windows-x64.zip` — extract anywhere and run `typemate.exe`. All models and runtimes are bundled in both (~1.3 GB installed).
 
 > **SmartScreen note:** the installer is not yet code-signed, so Windows may show "Windows protected your PC" — click *More info → Run anyway*.
 
 ## Install (Linux, X11)
 
-1. Download `TypeMate-linux-x64.tar.gz` from the [latest release](https://github.com/Ranjan-Bhagat/typemate/releases/latest) and extract it anywhere.
+1. Download the `TypeMate-*-linux-x64.tar.gz` archive from the [latest release](https://github.com/Ranjan-Bhagat/typemate/releases/latest) and extract it anywhere.
 2. Run `./TypeMate/typemate`, hold **Ctrl+Super**, and speak.
 
 Everything is bundled — models, speech engines, audio capture, and typing tools. No packages to install. Recording uses the system-default microphone (change it in your desktop's sound settings).
@@ -45,6 +54,8 @@ Everything is bundled — models, speech engines, audio capture, and typing tool
 Linux support targets **X11 sessions** (or apps running under XWayland). Pure Wayland blocks global shortcuts and synthetic typing by design — support for the Wayland portal APIs is planned.
 
 ## How it works
+
+![TypeMate architecture: the dictation pipeline and the app's three layers — Flutter app, native platform adapters, bundled speech runtimes](docs/media/architecture.svg)
 
 One dictation, end to end:
 
@@ -108,10 +119,11 @@ bash scripts/install-git-hooks.sh
 
 The hooks run formatting, analyzer, tests, and conventional-commit checks before code reaches GitHub.
 
-Build the installer (after `flutter build windows --release`):
+Package a Windows release (zip + Setup installer, version taken from
+`pubspec.yaml`):
 
-```powershell
-ISCC.exe windows\installer\typemate.iss
+```bash
+bash scripts/package-windows-release.sh
 ```
 
 ### Speech runtime notes
