@@ -19,9 +19,24 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 
+// Sets the window/taskbar icon from the bundled data/app_icon.png, which
+// lives next to the executable (the bundle is relocatable, so the path is
+// resolved at runtime instead of relying on an installed icon theme).
+static void set_default_window_icon() {
+  g_autofree gchar* exe_path = g_file_read_link("/proc/self/exe", nullptr);
+  if (exe_path == nullptr) {
+    return;
+  }
+  g_autofree gchar* exe_dir = g_path_get_dirname(exe_path);
+  g_autofree gchar* icon_path =
+      g_build_filename(exe_dir, "data", "app_icon.png", nullptr);
+  gtk_window_set_default_icon_from_file(icon_path, nullptr);
+}
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
+  set_default_window_icon();
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
