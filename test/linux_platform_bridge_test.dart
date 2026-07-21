@@ -158,7 +158,9 @@ void main() {
     await installed.ensureLaunchAtStartup();
     final entry = File('${configHome.path}/autostart/typemate.desktop');
     expect(entry.existsSync(), isTrue);
-    expect(entry.readAsStringSync(), contains('Exec=/opt/typemate/typemate'));
+    final content = entry.readAsStringSync();
+    expect(content, contains('Exec=/opt/typemate/typemate'));
+    expect(content, contains('Icon=/opt/typemate/data/app_icon.png'));
 
     entry.deleteSync();
     final tester = LinuxPlatformBridge(

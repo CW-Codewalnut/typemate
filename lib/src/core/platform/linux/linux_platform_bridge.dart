@@ -166,12 +166,18 @@ class LinuxPlatformBridge implements PlatformBridge {
     }
     final entry = File('$configHome/autostart/typemate.desktop');
     await entry.parent.create(recursive: true);
+    // The bundle ships the app icon at data/app_icon.png next to the binary.
+    final bundleDirectory = _executablePath.substring(
+      0,
+      _executablePath.lastIndexOf('/'),
+    );
     await entry.writeAsString('''
 [Desktop Entry]
 Type=Application
 Name=Type Mate
 Comment=Local hold-to-dictate speech typing
 Exec=$_executablePath
+Icon=$bundleDirectory/data/app_icon.png
 X-GNOME-Autostart-enabled=true
 ''');
   }
