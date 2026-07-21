@@ -30,7 +30,11 @@ void main() {
       expect(await sttEngine.isReady(), isTrue);
       expect(find.text('Speech history'), findsOneWidget);
       expect(
-        find.text('Press and hold Ctrl+Win and start speaking.'),
+        find.text(
+          'Press and hold '
+          '${holdShortcutOptionById(defaultHoldShortcutId).label} '
+          'and start speaking.',
+        ),
         findsOneWidget,
       );
       expect(find.text('Ready. Hold the shortcut and speak.'), findsNothing);

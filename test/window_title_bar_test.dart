@@ -8,7 +8,7 @@ void main() {
       const MaterialApp(
         home: Column(
           children: [
-            WindowTitleBar(),
+            WindowTitleBar(showsCaptionButtons: true),
             Expanded(child: SizedBox()),
           ],
         ),

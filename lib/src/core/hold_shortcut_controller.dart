@@ -24,26 +24,29 @@ class HoldShortcutOption {
 
 const defaultHoldShortcutId = 'ctrl-win';
 
-const holdShortcutOptions = [
+// Labels are computed so each OS names the keys its own way (Win/Alt on
+// Windows and Linux, Cmd/Option on macOS); ids and key codes stay
+// identical everywhere.
+final holdShortcutOptions = [
   HoldShortcutOption(
     id: defaultHoldShortcutId,
-    label: 'Ctrl+Win',
-    virtualKeyCodes: [0x11, 0x5B],
+    label: labelForVirtualKeyCodes(const [0x11, 0x5B]),
+    virtualKeyCodes: const [0x11, 0x5B],
   ),
   HoldShortcutOption(
     id: 'win-alt',
-    label: 'Win+Alt',
-    virtualKeyCodes: [0x5B, 0x12],
+    label: labelForVirtualKeyCodes(const [0x5B, 0x12]),
+    virtualKeyCodes: const [0x5B, 0x12],
   ),
   HoldShortcutOption(
     id: 'ctrl-shift-f9',
-    label: 'Ctrl+Shift+F9',
-    virtualKeyCodes: [0x11, 0x10, 0x78],
+    label: labelForVirtualKeyCodes(const [0x11, 0x10, 0x78]),
+    virtualKeyCodes: const [0x11, 0x10, 0x78],
   ),
   HoldShortcutOption(
     id: 'alt-shift-f9',
-    label: 'Alt+Shift+F9',
-    virtualKeyCodes: [0x12, 0x10, 0x78],
+    label: labelForVirtualKeyCodes(const [0x12, 0x10, 0x78]),
+    virtualKeyCodes: const [0x12, 0x10, 0x78],
   ),
 ];
 
@@ -81,10 +84,10 @@ HoldShortcutOption customHoldShortcutOption(List<int> virtualKeyCodes) {
   );
 }
 
-String labelForVirtualKeyCodes(List<int> virtualKeyCodes) {
+String labelForVirtualKeyCodes(List<int> virtualKeyCodes, {bool? isMacOS}) {
   return _normalizedVirtualKeyCodes(
     virtualKeyCodes,
-  ).map(_labelForVirtualKeyCode).join('+');
+  ).map((code) => _labelForVirtualKeyCode(code, isMacOS: isMacOS)).join('+');
 }
 
 HoldShortcutOption _customShortcutFromId(String id) {
@@ -116,14 +119,15 @@ List<int> _normalizedVirtualKeyCodes(List<int> virtualKeyCodes) {
   return deduped;
 }
 
-String _labelForVirtualKeyCode(int virtualKeyCode) {
+String _labelForVirtualKeyCode(int virtualKeyCode, {bool? isMacOS}) {
+  final useMacNames = isMacOS ?? Platform.isMacOS;
   return switch (virtualKeyCode) {
     0x08 => 'Backspace',
     0x09 => 'Tab',
     0x0D => 'Enter',
     0x10 => 'Shift',
     0x11 => 'Ctrl',
-    0x12 => 'Alt',
+    0x12 => useMacNames ? 'Option' : 'Alt',
     0x1B => 'Esc',
     0x20 => 'Space',
     0x25 => 'Left',
@@ -131,7 +135,7 @@ String _labelForVirtualKeyCode(int virtualKeyCode) {
     0x27 => 'Right',
     0x28 => 'Down',
     0x2E => 'Delete',
-    0x5B || 0x5C => 'Win',
+    0x5B || 0x5C => useMacNames ? 'Cmd' : 'Win',
     >= 0x30 && <= 0x39 => String.fromCharCode(virtualKeyCode),
     >= 0x41 && <= 0x5A => String.fromCharCode(virtualKeyCode),
     >= 0x70 && <= 0x87 => 'F${virtualKeyCode - 0x6F}',

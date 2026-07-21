@@ -71,12 +71,16 @@ const _models = [
 ];
 
 final _isWindows = Platform.isWindows;
+final _isMacOS = Platform.isMacOS;
 
-/// Windows: the official whisper.cpp OpenBLAS build. Linux: static
-/// binaries built from the same v1.9.1 tag by this repo (whisper.cpp does
-/// not publish Linux binaries), hosted on the models-v1 release.
+/// Windows: the official whisper.cpp OpenBLAS build. Linux and macOS:
+/// static binaries built from the same v1.9.1 tag by this repo (whisper.cpp
+/// does not publish binaries for them), hosted on the models-v1 release.
+/// scripts/build-whisper-macos.sh produces the macOS archive.
 final whisperZipUrl = _isWindows
     ? 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-blas-bin-x64.zip'
+    : _isMacOS
+    ? 'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/whisper-v1.9.1-macos-arm64.tar.gz'
     : 'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/whisper-v1.9.1-linux-x64.tar.gz';
 final whisperCliFiles = _isWindows
     ? const [
@@ -113,7 +117,9 @@ Future<void> main(List<String> arguments) async {
     }
     // Linux ships its helper tools too, so users install nothing: a static
     // ffmpeg for ALSA capture and xdotool (with its libxdo) for typing.
-    if (!_isWindows) {
+    // macOS needs neither: the record plugin captures natively and typing
+    // goes through CGEventPost in-process.
+    if (Platform.isLinux) {
       await _fetchToolArchive(
         client,
         url:
@@ -204,6 +210,8 @@ Future<void> _fetchToolArchive(
 
 final _sherpaArchiveName = _isWindows
     ? 'sherpa-onnx-v1.13.4-win-x64-static-MD-MinSizeRel-no-tts'
+    : _isMacOS
+    ? 'sherpa-onnx-v1.13.4-osx-arm64-static-no-tts'
     : 'sherpa-onnx-v1.13.4-linux-x64-static-no-tts';
 final _sherpaArchiveUrl =
     'https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.4/'

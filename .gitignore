@@ -48,6 +48,13 @@ node_modules/
 /bin/whisper/*.exe
 /bin/whisper/*.dll
 /bin/sherpa/*.exe
+# macOS and Linux binaries have no extension
+/bin/whisper/whisper-cli
+/bin/whisper/whisper-server
+/bin/sherpa/sherpa-onnx-offline-websocket-server
+/bin/ffmpeg/
+/bin/xdotool/
+/bin/overlay/
 
 # Symbolication related
 app.*.symbols
@@ -62,3 +69,6 @@ app.*.map.json
 
 # sherpa-onnx websocket server log when run manually from the repo root
 log.txt
+
+# FVM Version Cache
+.fvm/

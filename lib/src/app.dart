@@ -19,6 +19,8 @@ import 'core/microphone_settings_store.dart';
 import 'core/speech_settings_controller.dart';
 import 'core/platform/linux/linux_platform_bridge.dart';
 import 'core/platform/linux/linux_x11_hold_shortcut_registrar.dart';
+import 'core/platform/macos/macos_platform_bridge.dart';
+import 'core/platform/macos/macos_polling_hold_shortcut_registrar.dart';
 import 'core/platform/mock_platform_bridge.dart';
 import 'core/platform/platform_bridge.dart';
 import 'core/platform/windows/windows_platform_bridge.dart';
@@ -71,7 +73,13 @@ class _TypeMateAppState extends State<TypeMateApp> {
         }
       });
     }
-    final recordingsDirectory = Directory('build/recordings');
+    // Windows and Linux run with the bundle directory as working directory,
+    // so a relative path lands next to the executable. A macOS .app launches
+    // with `/` as working directory, so recordings go to the (writable)
+    // TypeMate data directory instead.
+    final recordingsDirectory = Platform.isMacOS
+        ? Directory('${_typeMateDataDirectory().path}/recordings')
+        : Directory('build/recordings');
     // Dictation audio is transcribe-and-delete; sweep anything a crash or
     // an older build left behind so no speech sits on disk.
     unawaited(purgeStaleRecordings(recordingsDirectory));
@@ -214,7 +222,11 @@ Future<void> purgeStaleRecordings(Directory directory) async {
   }
 }
 
-PlatformBridge createDefaultPlatformBridge({bool? isWindows, bool? isLinux}) {
+PlatformBridge createDefaultPlatformBridge({
+  bool? isWindows,
+  bool? isLinux,
+  bool? isMacOS,
+}) {
   if (isWindows ?? Platform.isWindows) {
     return WindowsPlatformBridge();
   }
@@ -230,6 +242,9 @@ PlatformBridge createDefaultPlatformBridge({bool? isWindows, bool? isLinux}) {
       ),
     );
   }
+  if (isMacOS ?? Platform.isMacOS) {
+    return MacOSPlatformBridge();
+  }
 
   return MockPlatformBridge();
 }
@@ -237,12 +252,16 @@ PlatformBridge createDefaultPlatformBridge({bool? isWindows, bool? isLinux}) {
 HoldShortcutRegistrar createDefaultHoldShortcutRegistrar({
   bool? isWindows,
   bool? isLinux,
+  bool? isMacOS,
 }) {
   if (isWindows ?? Platform.isWindows) {
     return WindowsPollingHoldShortcutRegistrar();
   }
   if (isLinux ?? Platform.isLinux) {
     return LinuxX11HoldShortcutRegistrar();
+  }
+  if (isMacOS ?? Platform.isMacOS) {
+    return MacOSPollingHoldShortcutRegistrar();
   }
 
   return const NoopHoldShortcutRegistrar();
@@ -443,9 +462,14 @@ SttEngine createDefaultSttEngine({
 }) {
   final values = environment ?? Platform.environment;
   final exists = pathExists ?? (path) => File(path).existsSync();
+  final executableDirectory =
+      executableDirectoryPath ?? File(Platform.resolvedExecutable).parent.path;
   final searchDirectories = [
     currentDirectoryPath ?? Directory.current.path,
-    executableDirectoryPath ?? File(Platform.resolvedExecutable).parent.path,
+    executableDirectory,
+    // The macOS bundle keeps the runtimes in Contents/Resources: data files
+    // inside Contents/MacOS would break the bundle's code signature.
+    if (Platform.isMacOS) '$executableDirectory/../Resources',
   ];
 
   String resolve(String relativePath, {String? environmentValue}) =>

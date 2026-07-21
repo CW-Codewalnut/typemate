@@ -17,7 +17,11 @@ void main() {
 
     expect(registrar.isRegistered, isTrue);
     expect(controller.isRegistered, isTrue);
-    expect(controller.statusMessage, 'Global shortcut ready: hold Ctrl+Win.');
+    expect(
+      controller.statusMessage,
+      'Global shortcut ready: '
+      'hold ${holdShortcutOptionById(defaultHoldShortcutId).label}.',
+    );
     expect(registrar.shortcut?.id, defaultHoldShortcutId);
     expect(registrar.shortcut?.virtualKeyCodes, [0x11, 0x5B]);
   });

@@ -26,6 +26,8 @@
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>TypeMate records the microphone only while you hold the dictation shortcut. Audio is transcribed on this Mac and deleted immediately; nothing leaves your computer.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

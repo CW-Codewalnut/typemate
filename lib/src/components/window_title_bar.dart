@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart' hide WindowCaptionButton;
 
@@ -9,8 +11,17 @@ import 'window_caption_button.dart';
 /// the right. The native title bar is hidden at startup (see main.dart);
 /// this widget replaces it identically on Windows and Linux instead of
 /// per-OS native styling that can drift. All colours derive from the theme.
+///
+/// macOS keeps its native traffic lights (hiding the title bar does not
+/// remove them), so there the bar shows no Flutter-drawn window buttons and
+/// shifts the logo right of the traffic lights.
 class WindowTitleBar extends StatefulWidget {
-  const WindowTitleBar({super.key});
+  const WindowTitleBar({super.key, this.showsCaptionButtons});
+
+  /// Whether to draw minimize/maximize/close. Defaults to every OS except
+  /// macOS; tests pass an explicit value so they render the same on any
+  /// host.
+  final bool? showsCaptionButtons;
 
   static const double height = 36;
 
@@ -65,6 +76,7 @@ class _WindowTitleBarState extends State<WindowTitleBar> with WindowListener {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final showsCaptionButtons = widget.showsCaptionButtons ?? !Platform.isMacOS;
     return Material(
       color: colorScheme.surface,
       child: Container(
@@ -96,7 +108,9 @@ class _WindowTitleBarState extends State<WindowTitleBar> with WindowListener {
                       onDoubleTap: _toggleMaximize,
                       child: Row(
                         children: [
-                          const SizedBox(width: 10),
+                          // On macOS the native traffic lights occupy the
+                          // top-left corner; the logo moves out of their way.
+                          SizedBox(width: showsCaptionButtons ? 10 : 78),
                           // The logo asset is tightly cropped (the icon
                           // master carries padding and reads too small).
                           Image.asset(
@@ -111,34 +125,36 @@ class _WindowTitleBarState extends State<WindowTitleBar> with WindowListener {
                     ),
                   ),
                 ),
-                WindowCaptionButton(
-                  tooltip: 'Minimize',
-                  icon: Icons.horizontal_rule,
-                  onPressed: () async {
-                    try {
-                      await windowManager.minimize();
-                    } catch (_) {}
-                  },
-                ),
-                WindowCaptionButton(
-                  tooltip: _isMaximized ? 'Restore' : 'Maximize',
-                  icon: _isMaximized
-                      ? Icons.filter_none_outlined
-                      : Icons.crop_square,
-                  iconSize: _isMaximized ? 12 : 14,
-                  onPressed: _toggleMaximize,
-                ),
-                WindowCaptionButton(
-                  tooltip: 'Close',
-                  icon: Icons.close,
-                  hoverColor: colorScheme.error,
-                  hoverIconColor: colorScheme.onError,
-                  onPressed: () async {
-                    try {
-                      await windowManager.close();
-                    } catch (_) {}
-                  },
-                ),
+                if (showsCaptionButtons) ...[
+                  WindowCaptionButton(
+                    tooltip: 'Minimize',
+                    icon: Icons.horizontal_rule,
+                    onPressed: () async {
+                      try {
+                        await windowManager.minimize();
+                      } catch (_) {}
+                    },
+                  ),
+                  WindowCaptionButton(
+                    tooltip: _isMaximized ? 'Restore' : 'Maximize',
+                    icon: _isMaximized
+                        ? Icons.filter_none_outlined
+                        : Icons.crop_square,
+                    iconSize: _isMaximized ? 12 : 14,
+                    onPressed: _toggleMaximize,
+                  ),
+                  WindowCaptionButton(
+                    tooltip: 'Close',
+                    icon: Icons.close,
+                    hoverColor: colorScheme.error,
+                    hoverIconColor: colorScheme.onError,
+                    onPressed: () async {
+                      try {
+                        await windowManager.close();
+                      } catch (_) {}
+                    },
+                  ),
+                ],
               ],
             ),
           ],
