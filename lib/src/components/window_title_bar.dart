@@ -67,70 +67,73 @@ class _WindowTitleBarState extends State<WindowTitleBar> with WindowListener {
         decoration: const BoxDecoration(
           border: Border(bottom: BorderSide(color: Color(0xFFE5E5EA))),
         ),
-        child: Row(
+        child: Stack(
           children: [
-            Expanded(
-              // The whole non-button area drags the window; double-click
-              // toggles maximize, matching native title bars.
-              child: DragToMoveArea(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onDoubleTap: _toggleMaximize,
-                  child: Row(
-                    children: [
-                      const SizedBox(width: 12),
-                      Image.asset(
-                        'assets/typemate_icon_1024.png',
-                        width: 18,
-                        height: 18,
-                        filterQuality: FilterQuality.medium,
-                      ),
-                      const Expanded(
-                        child: Center(
-                          child: Text(
-                            'Type Mate',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF1F2230),
-                            ),
-                          ),
-                        ),
-                      ),
-                      // Balances the logo so the title stays centred.
-                      const SizedBox(width: 30),
-                    ],
-                  ),
+            // The title centres on the full bar width — independent of the
+            // logo and window buttons — exactly like a native title bar.
+            const Center(
+              child: Text(
+                'Type Mate',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1F2230),
                 ),
               ),
             ),
-            _WindowButton(
-              tooltip: 'Minimize',
-              icon: Icons.horizontal_rule,
-              onPressed: () async {
-                try {
-                  await windowManager.minimize();
-                } catch (_) {}
-              },
-            ),
-            _WindowButton(
-              tooltip: _isMaximized ? 'Restore' : 'Maximize',
-              icon: _isMaximized
-                  ? Icons.filter_none_outlined
-                  : Icons.crop_square,
-              iconSize: _isMaximized ? 12 : 14,
-              onPressed: _toggleMaximize,
-            ),
-            _WindowButton(
-              tooltip: 'Close',
-              icon: Icons.close,
-              hoverColor: const Color(0xFFE81123),
-              hoverIconColor: Colors.white,
-              onPressed: () async {
-                try {
-                  await windowManager.close();
-                } catch (_) {}
-              },
+            Row(
+              children: [
+                Expanded(
+                  // The whole non-button area drags the window; double-click
+                  // toggles maximize, matching native title bars.
+                  child: DragToMoveArea(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onDoubleTap: _toggleMaximize,
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 12),
+                          Image.asset(
+                            'assets/typemate_icon_1024.png',
+                            width: 18,
+                            height: 18,
+                            filterQuality: FilterQuality.medium,
+                          ),
+                          const Spacer(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                _WindowButton(
+                  tooltip: 'Minimize',
+                  icon: Icons.horizontal_rule,
+                  onPressed: () async {
+                    try {
+                      await windowManager.minimize();
+                    } catch (_) {}
+                  },
+                ),
+                _WindowButton(
+                  tooltip: _isMaximized ? 'Restore' : 'Maximize',
+                  icon: _isMaximized
+                      ? Icons.filter_none_outlined
+                      : Icons.crop_square,
+                  iconSize: _isMaximized ? 12 : 14,
+                  onPressed: _toggleMaximize,
+                ),
+                _WindowButton(
+                  tooltip: 'Close',
+                  icon: Icons.close,
+                  hoverColor: const Color(0xFFE81123),
+                  hoverIconColor: Colors.white,
+                  onPressed: () async {
+                    try {
+                      await windowManager.close();
+                    } catch (_) {}
+                  },
+                ),
+              ],
             ),
           ],
         ),
