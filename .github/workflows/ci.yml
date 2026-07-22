@@ -1,7 +1,9 @@
 name: TypeMate CI
 
+# Push-only: PR checks reuse the branch's push run (GitHub attaches
+# check runs to the head commit), so a pull_request trigger would only
+# duplicate work — or, skipped, render as a confusing ghost run.
 on:
-  pull_request:
   push:
     branches:
       - main
@@ -10,9 +12,6 @@ on:
 jobs:
   quality:
     name: Format and analyze
-    # Same-repo branches are already tested by the push trigger; only PRs
-    # from forks need the pull_request run, so one commit runs CI once.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
 
     steps:
@@ -41,7 +40,6 @@ jobs:
   # headless CI runners.
   test:
     name: Tests and e2e (${{ matrix.name }})
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     strategy:
       fail-fast: false
       matrix:

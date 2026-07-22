@@ -8,12 +8,12 @@
 # stops the release builders before anything is packaged.
 name: TypeMate Security
 
+# Push-only (PR checks reuse the branch's push run, matching ci.yml).
 on:
   push:
     branches:
       - main
       - dev
-  pull_request:
   schedule:
     # Mondays 05:30 UTC: flags newly disclosed CVEs without waiting
     # for the next push.
