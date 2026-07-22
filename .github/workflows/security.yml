@@ -1,0 +1,39 @@
+# Dependency vulnerability gate: scans the Dart/Flutter lockfile
+# (pubspec.lock) and the npm dev-tool lockfile (package-lock.json)
+# against the OSV vulnerability database.
+#
+# Runs on every push and PR, on a weekly schedule (new CVEs are
+# disclosed against unchanged code), and as a called gate inside the
+# release pipeline — a vulnerable dependency fails this workflow and
+# stops the release builders before anything is packaged.
+name: TypeMate Security
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+  schedule:
+    # Mondays 05:30 UTC: flags newly disclosed CVEs without waiting
+    # for the next push.
+    - cron: '30 5 * * 1'
+  workflow_call:
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  osv-scan:
+    name: Dependency vulnerability scan (OSV)
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.3.8
+    with:
+      scan-args: |-
+        --lockfile=pubspec.lock
+        --lockfile=package-lock.json
+      fail-on-vuln: true
+      # SARIF upload needs GitHub code scanning; the gate here is the
+      # failing job itself, which blocks the release pipeline.
+      upload-sarif: false
