@@ -2,18 +2,14 @@
 # (pubspec.lock) and the npm dev-tool lockfile (package-lock.json)
 # against the OSV vulnerability database.
 #
-# Runs on every push and PR, on a weekly schedule (new CVEs are
-# disclosed against unchanged code), and as a called gate inside the
+# Runs as stage two of the PR checks (called from ci.yml), on a
+# weekly schedule (new CVEs are disclosed against unchanged code, so
+# quiet weeks still get flagged), and as a called gate inside the
 # release pipeline — a vulnerable dependency fails this workflow and
 # stops the release builders before anything is packaged.
 name: TypeMate Security
 
-# Push-only (PR checks reuse the branch's push run, matching ci.yml).
 on:
-  push:
-    branches:
-      - main
-      - dev
   schedule:
     # Mondays 05:30 UTC: flags newly disclosed CVEs without waiting
     # for the next push.

@@ -1,12 +1,15 @@
-# Three builders — Windows, Linux, macOS — that each verify (unit + e2e
-# tests on the real desktop embedder) before building and packaging their
-# release artifacts. They run only when a release PR merges into main
-# (never for dev pushes); the artifacts are collected into a DRAFT
-# GitHub release named after the pubspec version. Publishing the draft —
-# which is what creates the v* tag — stays a manual, human-approved step
-# after the artifacts are verified on real systems (see CLAUDE.md).
-# workflow_dispatch builds the artifacts for download without drafting
-# a release (dry run from any branch).
+# Three builders — Windows, Linux, macOS — that build and package the
+# release artifacts when a release PR merges into main (never for dev
+# pushes). Tests are NOT re-run here: formatting, security, and the
+# full test suite already gated the PR merge (required status checks
+# from ci.yml), so a commit can only reach main after passing them.
+# The security scan runs once more as a hard gate so a CVE disclosed
+# between PR-green and merge still blocks the release. Artifacts are
+# collected into a DRAFT GitHub release named after the pubspec
+# version. Publishing the draft — which is what creates the v* tag —
+# stays a manual, human-approved step after the artifacts are
+# verified on real systems (see CLAUDE.md). workflow_dispatch builds
+# the artifacts for download without drafting a release (dry run).
 name: TypeMate Release
 
 on:
@@ -56,19 +59,6 @@ jobs:
             bin
           key: speech-runtime-Windows-${{ hashFiles('tool/fetch_whisper_runtime.dart') }}
 
-      - name: Unit and widget tests
-        run: flutter test
-
-      # One invocation per file: multi-file e2e runs flake on Windows
-      # desktop (second app launch dies waiting for the log reader).
-      - name: End-to-end tests on Windows
-        shell: bash
-        run: |
-          set -e
-          for test_file in integration_test/*_test.dart; do
-            flutter test "$test_file" -d windows
-          done
-
       # Builds the release exe, the portable zip, and the Inno Setup
       # installer (preinstalled on windows-latest runners).
       - name: Package Windows release
@@ -108,7 +98,7 @@ jobs:
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq clang cmake ninja-build pkg-config libgtk-3-dev xvfb rpm
+          sudo apt-get install -y -qq clang cmake ninja-build pkg-config libgtk-3-dev rpm
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -126,16 +116,6 @@ jobs:
             models
             bin
           key: speech-runtime-Linux-${{ hashFiles('tool/fetch_whisper_runtime.dart') }}
-
-      - name: Unit and widget tests
-        run: flutter test
-
-      - name: End-to-end tests on Linux
-        run: |
-          set -e
-          for test_file in integration_test/*_test.dart; do
-            xvfb-run -a flutter test "$test_file" -d linux
-          done
 
       - name: Build Linux release bundle
         run: flutter build linux --release
@@ -183,21 +163,6 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
-
-      - name: Unit and widget tests
-        run: flutter test
-
-      # flutter-tester device: the native embedder cannot be launched
-      # under test on current Flutter
-      # (https://github.com/flutter/flutter/issues/176850). Switch to
-      # "-d macos" when fixed; the release build below still compiles
-      # the real app.
-      - name: End-to-end tests on macOS
-        run: |
-          set -e
-          for test_file in integration_test/*_test.dart; do
-            flutter test "$test_file" -d flutter-tester
-          done
 
       - name: Build macOS release app
         run: flutter build macos --release

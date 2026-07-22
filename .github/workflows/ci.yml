@@ -1,13 +1,22 @@
+# PR checks, in strict order: formatting and linting first, then the
+# dependency security scan, then the full test suite (unit + e2e) on
+# every desktop OS. A stage only starts when the previous one passed.
+#
+# These checks gate the merge (required status checks on main), which
+# is why the release pipeline does not re-run them: a commit can only
+# reach main through a PR that passed all of this.
 name: TypeMate CI
 
-# Push-only: PR checks reuse the branch's push run (GitHub attaches
-# check runs to the head commit), so a pull_request trigger would only
-# duplicate work — or, skipped, render as a confusing ghost run.
 on:
-  push:
+  pull_request:
     branches:
       - main
       - dev
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
 
 jobs:
   quality:
@@ -33,13 +42,18 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
-  # Unit, widget, and end-to-end tests on every desktop OS TypeMate targets.
-  # The e2e suites run on the real desktop embedder of each OS (Windows
-  # runner window, Xvfb-backed GTK window on Linux, native macOS window)
-  # with the OS-native adapters faked, so they are deterministic on
-  # headless CI runners.
+  security:
+    name: Dependency security
+    needs: quality
+    uses: ./.github/workflows/security.yml
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
   test:
     name: Tests and e2e (${{ matrix.name }})
+    needs: security
     strategy:
       fail-fast: false
       matrix:
