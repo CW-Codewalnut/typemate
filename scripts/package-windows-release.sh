@@ -60,7 +60,11 @@ printf '%s\n' "$ZIP_PATH"
 VERSION="$(sed -n 's/^version: \([0-9.]*\)+.*/\1/p' pubspec.yaml)"
 ISCC="${ISCC:-$HOME/scoop/apps/inno-setup/current/ISCC.exe}"
 if [ -x "$ISCC" ] && [ -n "$VERSION" ]; then
-  "$ISCC" "/DAppVersion=$VERSION" "installer/typemate.iss"
+  # MSYS bash (Git Bash, GitHub runners) path-converts /D... into a
+  # Windows path, so ISCC sees a second "script filename" and aborts;
+  # exclude the define flag from argument conversion.
+  MSYS2_ARG_CONV_EXCL='/DAppVersion' \
+    "$ISCC" "/DAppVersion=$VERSION" "installer/typemate.iss"
   printf '%s\n' "$DIST_DIR/TypeMate-Setup-v$VERSION.exe"
 else
   echo "NOTE: Inno Setup not found; skipped TypeMate-Setup exe" >&2
