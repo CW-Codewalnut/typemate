@@ -6,5 +6,11 @@
   },
   "devDependencies": {
     "gitnexus": "^1.6.9"
+  },
+  "overrides": {
+    "@hono/node-server": "2.0.10",
+    "adm-zip": "0.6.0",
+    "fast-uri": "3.1.4",
+    "sharp": "0.35.0"
   }
 }
