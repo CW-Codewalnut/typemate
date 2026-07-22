@@ -38,12 +38,21 @@ class TypeMateApp extends StatefulWidget {
     this.microphoneDiscovery,
     this.holdShortcutRegistrar,
     this.sttEngine,
+    this.platformBridge,
+    this.audioRecorderFactory,
+    this.dataDirectory,
     this.splashDuration = const Duration(milliseconds: 900),
   });
 
   final MicrophoneDiscovery? microphoneDiscovery;
   final HoldShortcutRegistrar? holdShortcutRegistrar;
   final SttEngine? sttEngine;
+  final PlatformBridge? platformBridge;
+  final AudioRecorderFactory? audioRecorderFactory;
+
+  /// Overrides where settings and history files live. Tests point this at a
+  /// temp directory so end-to-end runs never touch real user data.
+  final Directory? dataDirectory;
   final Duration splashDuration;
 
   @override
@@ -75,21 +84,25 @@ class _TypeMateAppState extends State<TypeMateApp> {
     // Dictation audio is transcribe-and-delete; sweep anything a crash or
     // an older build left behind so no speech sits on disk.
     unawaited(purgeStaleRecordings(recordingsDirectory));
-    final recorderFactory = createDefaultAudioRecorderFactory(
-      outputDirectory: recordingsDirectory,
-    );
+    final recorderFactory =
+        widget.audioRecorderFactory ??
+        createDefaultAudioRecorderFactory(outputDirectory: recordingsDirectory);
     microphoneController = MicrophoneSettingsController(
       discovery:
           widget.microphoneDiscovery ?? createDefaultMicrophoneDiscovery(),
-      store: createDefaultMicrophoneSettingsStore(),
+      store: createDefaultMicrophoneSettingsStore(
+        directory: widget.dataDirectory,
+      ),
     );
     historyController = DictationHistoryController(
-      store: createDefaultDictationHistoryStore(),
+      store: createDefaultDictationHistoryStore(
+        directory: widget.dataDirectory,
+      ),
     );
     speechSettingsController = SpeechSettingsController(
-      store: createDefaultSpeechSettingsStore(),
+      store: createDefaultSpeechSettingsStore(directory: widget.dataDirectory),
     );
-    platformBridge = createDefaultPlatformBridge();
+    platformBridge = widget.platformBridge ?? createDefaultPlatformBridge();
     _sttEngine =
         widget.sttEngine ??
         createDefaultSttEngine(
@@ -115,7 +128,9 @@ class _TypeMateAppState extends State<TypeMateApp> {
       dictationController: controller,
       registrar:
           widget.holdShortcutRegistrar ?? createDefaultHoldShortcutRegistrar(),
-      store: createDefaultHoldShortcutSettingsStore(),
+      store: createDefaultHoldShortcutSettingsStore(
+        directory: widget.dataDirectory,
+      ),
     );
     shortcutController.register();
     unawaited(platformBridge.ensureLaunchAtStartup());
@@ -289,41 +304,37 @@ AudioRecorderFactory createDefaultAudioRecorderFactory({
 
 HoldShortcutSettingsStore createDefaultHoldShortcutSettingsStore({
   Map<String, String>? environment,
+  Directory? directory,
 }) {
+  final base = directory ?? _typeMateDataDirectory(environment: environment);
   return FileHoldShortcutSettingsStore(
-    file: File(
-      '${_typeMateDataDirectory(environment: environment).path}/shortcut-settings.json',
-    ),
+    file: File('${base.path}/shortcut-settings.json'),
   );
 }
 
 MicrophoneSettingsStore createDefaultMicrophoneSettingsStore({
   Map<String, String>? environment,
+  Directory? directory,
 }) {
-  return FileMicrophoneSettingsStore(
-    file: File(
-      '${_typeMateDataDirectory(environment: environment).path}/settings.json',
-    ),
-  );
+  final base = directory ?? _typeMateDataDirectory(environment: environment);
+  return FileMicrophoneSettingsStore(file: File('${base.path}/settings.json'));
 }
 
 DictationHistoryStore createDefaultDictationHistoryStore({
   Map<String, String>? environment,
+  Directory? directory,
 }) {
-  return FileDictationHistoryStore(
-    file: File(
-      '${_typeMateDataDirectory(environment: environment).path}/history.json',
-    ),
-  );
+  final base = directory ?? _typeMateDataDirectory(environment: environment);
+  return FileDictationHistoryStore(file: File('${base.path}/history.json'));
 }
 
 SpeechSettingsStore createDefaultSpeechSettingsStore({
   Map<String, String>? environment,
+  Directory? directory,
 }) {
+  final base = directory ?? _typeMateDataDirectory(environment: environment);
   return FileSpeechSettingsStore(
-    file: File(
-      '${_typeMateDataDirectory(environment: environment).path}/speech-settings.json',
-    ),
+    file: File('${base.path}/speech-settings.json'),
   );
 }
 
