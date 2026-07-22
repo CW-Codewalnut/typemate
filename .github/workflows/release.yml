@@ -216,9 +216,25 @@ jobs:
       - name: List collected assets
         run: ls -la artifacts
 
-      # Draft only: publishing requires the release checklist — install
-      # verification on real Windows and the Linux VMs, then explicit
-      # approval (CLAUDE.md, Release process).
+      # The release notes are the merged PR's description. A direct
+      # push to main has no PR, so it falls back to a stub.
+      - name: Release notes from the merged PR
+        id: notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_BODY="$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" --jq '.[0].body // empty')"
+          if [ -z "$PR_BODY" ]; then
+            PR_BODY="Assembled from a direct push to main (no associated PR)."
+          fi
+          {
+            echo 'body<<NOTES_EOF'
+            printf '%s\n' "$PR_BODY"
+            echo 'NOTES_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      # Draft only: publishing requires verification on real systems
+      # and explicit approval (CLAUDE.md, Release process).
       - name: Create draft release
         uses: softprops/action-gh-release@v2
         with:
@@ -227,11 +243,4 @@ jobs:
           name: TypeMate v${{ steps.version.outputs.version }}
           target_commitish: ${{ github.sha }}
           files: artifacts/*
-          body: |
-            Draft release assembled by CI. Before publishing:
-
-            - [ ] Windows: install and run the Setup exe on a real machine (full dictation loop).
-            - [ ] Linux: install the .deb in the Lubuntu VM and the .rpm in the Fedora VM; verify hotkey, overlay, close-to-background, relaunch.
-            - [ ] macOS zip is an UNSIGNED developer preview without bundled speech runtimes — exclude it or mark it experimental unless it has been verified on a real Mac.
-
-            Publishing requires explicit approval.
+          body: ${{ steps.notes.outputs.body }}
