@@ -48,15 +48,22 @@ jobs:
         include:
           - name: Windows
             runner: windows-latest
-            device: windows
+            device-flags: -d windows
             launcher: ''
           - name: Linux
             runner: ubuntu-latest
-            device: linux
+            device-flags: -d linux
             launcher: xvfb-run -a
+          # macOS runs the e2e suites on flutter-tester: the native
+          # embedder cannot be launched under test on current Flutter
+          # (https://github.com/flutter/flutter/issues/176850, "Failed
+          # to foreground app; open returned 1"). Switch to "-d macos"
+          # when that issue is fixed. A separate build step below still
+          # compiles the real macOS app so Xcode-level breakage is
+          # caught.
           - name: macOS
             runner: macos-latest
-            device: macos
+            device-flags: -d flutter-tester
             launcher: ''
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
@@ -95,6 +102,10 @@ jobs:
             bin
           key: speech-runtime-${{ runner.os }}-${{ hashFiles('tool/fetch_whisper_runtime.dart') }}
 
+      - name: Build macOS app
+        if: runner.os == 'macOS'
+        run: flutter build macos --debug
+
       # One `flutter test` invocation per file: launching several e2e files
       # from a single invocation flakes on Windows desktop (the second
       # app launch dies with "log reader stopped unexpectedly").
@@ -103,5 +114,5 @@ jobs:
         run: |
           set -e
           for test_file in integration_test/*_test.dart; do
-            ${{ matrix.launcher }} flutter test "$test_file" -d ${{ matrix.device }}
+            ${{ matrix.launcher }} flutter test "$test_file" ${{ matrix.device-flags }}
           done
