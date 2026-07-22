@@ -19,8 +19,19 @@ permissions:
   contents: write
 
 jobs:
+  # Hard gate: a known-vulnerable dependency stops all three builders
+  # before anything is packaged or drafted.
+  security:
+    name: Dependency vulnerability gate
+    uses: ./.github/workflows/security.yml
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
   windows:
     name: Windows build
+    needs: security
     runs-on: windows-latest
     timeout-minutes: 120
 
@@ -86,6 +97,7 @@ jobs:
 
   linux:
     name: Linux build
+    needs: security
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
@@ -155,6 +167,7 @@ jobs:
 
   macos:
     name: macOS build
+    needs: security
     runs-on: macos-latest
     timeout-minutes: 90
 
