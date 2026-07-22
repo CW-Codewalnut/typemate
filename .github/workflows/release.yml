@@ -204,10 +204,13 @@ jobs:
           test -n "$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      # Only the builders' artifacts: the security scan also uploads a
+      # SARIF report artifact, which must not become a release asset.
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+          pattern: '*-release'
           merge-multiple: true
 
       - name: List collected assets
