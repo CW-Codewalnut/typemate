@@ -1,0 +1,251 @@
+# Three builders — Windows, Linux, macOS — that each verify (unit + e2e
+# tests on the real desktop embedder) before building and packaging their
+# release artifacts. They run only when a release PR merges into main
+# (never for dev pushes); the artifacts are collected into a DRAFT
+# GitHub release named after the pubspec version. Publishing the draft —
+# which is what creates the v* tag — stays a manual, human-approved step
+# after the artifacts are verified on real systems (see CLAUDE.md).
+# workflow_dispatch builds the artifacts for download without drafting
+# a release (dry run from any branch).
+name: TypeMate Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Windows build
+    runs-on: windows-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Cache speech runtimes
+        uses: actions/cache@v4
+        with:
+          path: |
+            models
+            bin
+          key: speech-runtime-Windows-${{ hashFiles('tool/fetch_whisper_runtime.dart') }}
+
+      - name: Unit and widget tests
+        run: flutter test
+
+      # One invocation per file: multi-file e2e runs flake on Windows
+      # desktop (second app launch dies waiting for the log reader).
+      - name: End-to-end tests on Windows
+        shell: bash
+        run: |
+          set -e
+          for test_file in integration_test/*_test.dart; do
+            flutter test "$test_file" -d windows
+          done
+
+      # Builds the release exe, the portable zip, and the Inno Setup
+      # installer (preinstalled on windows-latest runners).
+      - name: Package Windows release
+        shell: bash
+        env:
+          FLUTTER_BIN: flutter
+          ISCC: 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+        run: bash scripts/package-windows-release.sh
+
+      - name: Rename zip to versioned release asset
+        shell: bash
+        run: |
+          VERSION="$(sed -n 's/^version: \([0-9.]*\)+.*/\1/p' pubspec.yaml)"
+          mv dist/typemate-windows-x64.zip "dist/TypeMate-v$VERSION-windows-x64.zip"
+          ls -la dist
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: |
+            dist/TypeMate-Setup-v*.exe
+            dist/TypeMate-v*-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  linux:
+    name: Linux build
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang cmake ninja-build pkg-config libgtk-3-dev xvfb rpm
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Cache speech runtimes
+        uses: actions/cache@v4
+        with:
+          path: |
+            models
+            bin
+          key: speech-runtime-Linux-${{ hashFiles('tool/fetch_whisper_runtime.dart') }}
+
+      - name: Unit and widget tests
+        run: flutter test
+
+      - name: End-to-end tests on Linux
+        run: |
+          set -e
+          for test_file in integration_test/*_test.dart; do
+            xvfb-run -a flutter test "$test_file" -d linux
+          done
+
+      - name: Build Linux release bundle
+        run: flutter build linux --release
+
+      - name: Package portable tarball
+        run: |
+          VERSION="$(sed -n 's/^version: \([0-9.]*\)+.*/\1/p' pubspec.yaml)"
+          mkdir -p build/package/tar dist
+          cp -r build/linux/x64/release/bundle build/package/tar/TypeMate
+          tar -C build/package/tar -czf "dist/TypeMate-v$VERSION-linux-x64.tar.gz" TypeMate
+          ls -la dist
+
+      - name: Package .deb
+        run: bash scripts/package-linux-deb.sh
+
+      - name: Package .rpm
+        run: bash scripts/package-linux-rpm.sh
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: |
+            dist/TypeMate-v*-linux-x64.tar.gz
+            dist/typemate_*_amd64.deb
+            dist/typemate-*.x86_64.rpm
+          if-no-files-found: error
+          retention-days: 14
+
+  macos:
+    name: macOS build
+    runs-on: macos-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Unit and widget tests
+        run: flutter test
+
+      - name: End-to-end tests on macOS
+        run: |
+          set -e
+          for test_file in integration_test/*_test.dart; do
+            flutter test "$test_file" -d macos
+          done
+
+      - name: Build macOS release app
+        run: flutter build macos --release
+
+      # Developer preview: unsigned, and the bundled speech runtimes are
+      # not fetched for macOS yet, so this proves the shell builds and
+      # runs — it is not a dictation-ready install.
+      - name: Package macOS zip
+        run: |
+          VERSION="$(sed -n 's/^version: \([0-9.]*\)+.*/\1/p' pubspec.yaml)"
+          mkdir -p dist
+          ditto -c -k --keepParent \
+            "build/macos/Build/Products/Release/Type Mate.app" \
+            "dist/TypeMate-v$VERSION-macos-preview.zip"
+          ls -la dist
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: dist/TypeMate-v*-macos-preview.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  draft-release:
+    name: Draft GitHub release
+    needs: [windows, linux, macos]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version from pubspec
+        id: version
+        run: |
+          VERSION="$(sed -n 's/^version: \([0-9.]*\)+.*/\1/p' pubspec.yaml)"
+          test -n "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List collected assets
+        run: ls -la artifacts
+
+      # Draft only: publishing requires the release checklist — install
+      # verification on real Windows and the Linux VMs, then explicit
+      # approval (CLAUDE.md, Release process).
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          tag_name: v${{ steps.version.outputs.version }}
+          name: TypeMate v${{ steps.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          files: artifacts/*
+          body: |
+            Draft release assembled by CI. Before publishing:
+
+            - [ ] Windows: install and run the Setup exe on a real machine (full dictation loop).
+            - [ ] Linux: install the .deb in the Lubuntu VM and the .rpm in the Fedora VM; verify hotkey, overlay, close-to-background, relaunch.
+            - [ ] macOS zip is an UNSIGNED developer preview without bundled speech runtimes — exclude it or mark it experimental unless it has been verified on a real Mac.
+
+            Publishing requires explicit approval.
