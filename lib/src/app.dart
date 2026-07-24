@@ -80,10 +80,21 @@ class _TypeMateAppState extends State<TypeMateApp> {
         }
       });
     }
-    final recordingsDirectory = Directory('build/recordings');
+    final recordingsDirectory = createDefaultRecordingsDirectory(
+      directory: widget.dataDirectory,
+    );
     // Dictation audio is transcribe-and-delete; sweep anything a crash or
-    // an older build left behind so no speech sits on disk.
+    // an older build left behind so no speech sits on disk. Older builds
+    // recorded into a CWD-relative build/recordings, so sweep the copy
+    // next to the executable too.
     unawaited(purgeStaleRecordings(recordingsDirectory));
+    unawaited(
+      purgeStaleRecordings(
+        Directory(
+          '${File(Platform.resolvedExecutable).parent.path}/build/recordings',
+        ),
+      ),
+    );
     final recorderFactory =
         widget.audioRecorderFactory ??
         createDefaultAudioRecorderFactory(outputDirectory: recordingsDirectory);
@@ -336,6 +347,19 @@ SpeechSettingsStore createDefaultSpeechSettingsStore({
   return FileSpeechSettingsStore(
     file: File('${base.path}/speech-settings.json'),
   );
+}
+
+/// Where dictation WAVs live between capture and transcription. Anchored to
+/// the per-user data directory because the process CWD is unreliable: an
+/// autostart launch via the HKCU Run key inherited C:\Windows\System32,
+/// where the old CWD-relative build/recordings could not be created and
+/// every dictation aborted the moment the shortcut was pressed.
+Directory createDefaultRecordingsDirectory({
+  Map<String, String>? environment,
+  Directory? directory,
+}) {
+  final base = directory ?? _typeMateDataDirectory(environment: environment);
+  return Directory('${base.path}/recordings');
 }
 
 Directory _typeMateDataDirectory({Map<String, String>? environment}) {

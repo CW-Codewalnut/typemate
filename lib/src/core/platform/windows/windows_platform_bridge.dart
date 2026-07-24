@@ -178,11 +178,16 @@ class WindowsPlatformBridge implements PlatformBridge, QuitRequestSource {
       return;
     }
     final escapedPath = executablePath.replaceAll("'", "''");
+    // Startup registration uses only the Startup-folder shortcut, which
+    // pins WorkingDirectory to the exe folder. A Run-key launch inherits
+    // C:\Windows\System32 as its working directory, which broke dictation
+    // after login; older builds wrote that value, so remove it here.
     final script =
         """
 \$runPath = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run'
-\$value = '"$escapedPath"'
-Set-ItemProperty -Path \$runPath -Name 'TypeMate' -Value \$value
+\$approvedRunPath = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run'
+Remove-ItemProperty -Path \$runPath -Name 'TypeMate' -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path \$approvedRunPath -Name 'TypeMate' -ErrorAction SilentlyContinue
 \$shell = New-Object -ComObject WScript.Shell
 \$startup = \$shell.SpecialFolders.Item('Startup')
 \$shortcut = \$shell.CreateShortcut((Join-Path \$startup 'TypeMate.lnk'))
@@ -193,11 +198,8 @@ Set-ItemProperty -Path \$runPath -Name 'TypeMate' -Value \$value
 \$shortcut.WindowStyle = 7
 \$shortcut.Save()
 \$enabled = [byte[]](0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
-\$approvedRunPath = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run'
 \$approvedStartupPath = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\StartupFolder'
-New-Item -Path \$approvedRunPath -Force | Out-Null
 New-Item -Path \$approvedStartupPath -Force | Out-Null
-New-ItemProperty -Path \$approvedRunPath -Name 'TypeMate' -PropertyType Binary -Value \$enabled -Force | Out-Null
 New-ItemProperty -Path \$approvedStartupPath -Name 'TypeMate.lnk' -PropertyType Binary -Value \$enabled -Force | Out-Null
 """;
     final result = await processRunner('powershell.exe', [

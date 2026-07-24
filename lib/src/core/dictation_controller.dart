@@ -88,9 +88,10 @@ class DictationController extends ChangeNotifier {
     try {
       await _platformBridge.showListeningOverlay();
       await recorder.start();
-    } catch (_) {
+    } catch (error) {
       _activeRecorder = null;
       await _platformBridge.hideListeningOverlay();
+      debugPrint('TypeMate: unable to start recording: $error');
       _setPhase(
         DictationPhase.idle,
         'Unable to start recording. Check the microphone and its permissions, then try again.',
