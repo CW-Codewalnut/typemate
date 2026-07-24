@@ -19,6 +19,7 @@ import 'core/microphone_settings_store.dart';
 import 'core/speech_settings_controller.dart';
 import 'core/platform/linux/linux_platform_bridge.dart';
 import 'core/platform/linux/linux_x11_hold_shortcut_registrar.dart';
+import 'core/platform/macos/macos_platform_bridge.dart';
 import 'core/platform/mock_platform_bridge.dart';
 import 'core/platform/platform_bridge.dart';
 import 'core/platform/windows/windows_platform_bridge.dart';
@@ -244,9 +245,16 @@ Future<void> purgeStaleRecordings(Directory directory) async {
   }
 }
 
-PlatformBridge createDefaultPlatformBridge({bool? isWindows, bool? isLinux}) {
+PlatformBridge createDefaultPlatformBridge({
+  bool? isWindows,
+  bool? isLinux,
+  bool? isMacOS,
+}) {
   if (isWindows ?? Platform.isWindows) {
     return WindowsPlatformBridge();
+  }
+  if (isMacOS ?? Platform.isMacOS) {
+    return MacosPlatformBridge();
   }
   if (isLinux ?? Platform.isLinux) {
     final xdotool = resolveXdotool();
