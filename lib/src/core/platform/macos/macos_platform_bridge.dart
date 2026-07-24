@@ -16,11 +16,9 @@ typedef MacosNativeMethodInvoker =
 /// `typemate/macos` method channel; text lands in the focused field via
 /// clipboard + a synthesized Cmd+V (System Events, which requires the
 /// user to grant Accessibility permission); launch-at-login registers a
-/// System Events login item for the installed .app bundle.
-///
-/// The global hold shortcut has no macOS registrar yet, so
-/// [isGlobalShortcutAvailable] reports false and the settings UI shows
-/// the same unavailable state it shows on Wayland.
+/// System Events login item for the installed .app bundle. The global
+/// hold shortcut is served by MacosPollingHoldShortcutRegistrar (Input
+/// Monitoring permission, prompted at registration).
 class MacosPlatformBridge implements PlatformBridge {
   MacosPlatformBridge({
     MacosNativeMethodInvoker? nativeMethodInvoker,
@@ -36,7 +34,7 @@ class MacosPlatformBridge implements PlatformBridge {
   String? _overlayState;
 
   @override
-  Future<bool> isGlobalShortcutAvailable() async => false;
+  Future<bool> isGlobalShortcutAvailable() async => true;
 
   @override
   Future<void> showListeningOverlay() => _showOverlay('listening');
