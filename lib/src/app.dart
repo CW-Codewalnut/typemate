@@ -254,9 +254,6 @@ PlatformBridge createDefaultPlatformBridge({
   if (isWindows ?? Platform.isWindows) {
     return WindowsPlatformBridge();
   }
-  if (isMacOS ?? Platform.isMacOS) {
-    return MacosPlatformBridge();
-  }
   if (isLinux ?? Platform.isLinux) {
     final xdotool = resolveXdotool();
     return LinuxPlatformBridge(
@@ -268,6 +265,9 @@ PlatformBridge createDefaultPlatformBridge({
         environmentOverrideVariable: 'TYPEMATE_OVERLAY',
       ),
     );
+  }
+  if (isMacOS ?? Platform.isMacOS) {
+    return MacosPlatformBridge();
   }
 
   return MockPlatformBridge();
