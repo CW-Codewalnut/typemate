@@ -6,17 +6,21 @@
 // The app drives it over stdin with single-word lines: "listening",
 // "transcribing", or "hide". EOF exits.
 //
-// Build: gcc typemate_overlay.c -o typemate-overlay -lX11 -lXext -lm
+// Build: gcc typemate_overlay.c -o typemate-overlay -lX11 -lXext -lm -ldl
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 #include <X11/extensions/shape.h>
+#include <dlfcn.h>
 #include <math.h>
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
 #include <sys/select.h>
 #include <sys/time.h>
+
+#include "overlay_chime_wav.h"
 
 // Geometry and colours mirror windows/runner/type_mate_overlay.cpp.
 enum {
@@ -64,7 +68,43 @@ static void apply_pill_shape(Display *d, Window w) {
   XFreePixmap(d, mask);
 }
 
+// Play the appearance chime, matching the Windows overlay's PlaySound cue.
+// libasound is loaded at runtime in a forked child, so systems without it
+// (or without audio) keep the overlay working and just stay silent. ALSA's
+// "default" device is the same route the mic capture already relies on.
+static void play_chime(void) {
+  pid_t pid = fork();
+  if (pid != 0) return;  // parent, or fork failure: silent, never fatal
+
+  typedef struct snd_pcm snd_pcm_t;
+  typedef int (*open_fn)(snd_pcm_t **, const char *, int, int);
+  typedef int (*set_params_fn)(snd_pcm_t *, int, int, unsigned int,
+                               unsigned int, int, unsigned int);
+  typedef long (*writei_fn)(snd_pcm_t *, const void *, unsigned long);
+  typedef int (*drain_fn)(snd_pcm_t *);
+
+  void *alsa = dlopen("libasound.so.2", RTLD_NOW);
+  if (!alsa) _exit(0);
+  open_fn pcm_open = (open_fn)dlsym(alsa, "snd_pcm_open");
+  set_params_fn pcm_set_params = (set_params_fn)dlsym(alsa, "snd_pcm_set_params");
+  writei_fn pcm_writei = (writei_fn)dlsym(alsa, "snd_pcm_writei");
+  drain_fn pcm_drain = (drain_fn)dlsym(alsa, "snd_pcm_drain");
+  if (!pcm_open || !pcm_set_params || !pcm_writei || !pcm_drain) _exit(0);
+
+  snd_pcm_t *pcm = NULL;
+  if (pcm_open(&pcm, "default", 0 /* playback */, 0) < 0) _exit(0);
+  // 2 = SND_PCM_FORMAT_S16_LE, 3 = SND_PCM_ACCESS_RW_INTERLEAVED, mono,
+  // soft resample allowed, 100 ms max latency.
+  if (pcm_set_params(pcm, 2, 3, 1, kOverlayChimeRate, 1, 100000) < 0) _exit(0);
+  const short *frames = (const short *)(kOverlayChimeWav + 44);  // skip header
+  pcm_writei(pcm, frames, (kOverlayChimeWavLen - 44) / 2);
+  pcm_drain(pcm);
+  _exit(0);
+}
+
 int main(void) {
+  // Chime children exit on their own; never leave them as zombies.
+  signal(SIGCHLD, SIG_IGN);
   Display *d = XOpenDisplay(NULL);
   if (!d) return 1;
   int screen = DefaultScreen(d);
@@ -115,6 +155,7 @@ int main(void) {
   // which sidesteps any buffering on the parent's write of the first
   // command.
   XMapRaised(d, win);
+  play_chime();
   int visible = 1;
   long tick = 0;
 
@@ -173,7 +214,16 @@ int main(void) {
                 (int)(((sin(phase) + 1.0) / 2.0) * (kBarMaxH - kBarMinH));
         int bx = startx + i * (kBarWidth + kBarGap);
         int by = kBarCenterY - h / 2;
-        XFillRectangle(d, buffer, gc, bx, by, kBarWidth, h);
+        // Capsule bars, like the Windows RoundRect(bar_width, bar_width)
+        // corners: full-circle caps (half arcs rasterize with gaps at this
+        // size) plus an overlapping straight body between them.
+        XFillArc(d, buffer, gc, bx, by, kBarWidth, kBarWidth, 0, 360 * 64);
+        XFillArc(d, buffer, gc, bx, by + h - kBarWidth, kBarWidth, kBarWidth,
+                 0, 360 * 64);
+        if (h > kBarWidth) {
+          XFillRectangle(d, buffer, gc, bx, by + kBarWidth / 2, kBarWidth,
+                         h - kBarWidth + 1);
+        }
       }
       XCopyArea(d, buffer, win, gc, 0, 0, kWidth, kHeight, 0, 0);
       XFlush(d);

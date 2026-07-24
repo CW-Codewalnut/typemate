@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -221,6 +221,26 @@ void main() {
     expect(started.last.arguments.last, 'transcribing');
     expect(listeningProcess.killCount, 1);
     expect(transcribingProcess.killCount, 0);
+  });
+
+  test('native overlay plays the chime once per appearance', () {
+    final source = File(
+      'windows/runner/type_mate_overlay.cpp',
+    ).readAsStringSync();
+
+    expect(source, contains('#include "overlay_chime_wav.h"'));
+    expect(source, contains('const bool appearing = hwnd_ == nullptr;'));
+    expect(source, contains('PlaySound'));
+    expect(source, contains('SND_MEMORY | SND_ASYNC | SND_NODEFAULT'));
+
+    final cmake = File('windows/runner/CMakeLists.txt').readAsStringSync();
+    expect(cmake, contains('winmm.lib'));
+
+    final header = File(
+      'windows/runner/overlay_chime_wav.h',
+    ).readAsStringSync();
+    expect(header, contains('kOverlayChimeWav[]'));
+    expect(header, contains('kOverlayChimeRate'));
   });
 
   test('native Windows overlay is bottom anchored, compact, and rounded', () {
