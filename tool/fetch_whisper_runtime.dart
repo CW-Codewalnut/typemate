@@ -11,6 +11,11 @@ import 'dart:io';
 /// All are gitignored because they exceed practical git limits, so a fresh
 /// clone runs this once. Release bundles copy both folders next to the
 /// executable.
+///
+/// Runtime revision 2026-07-24 — CI caches models/ and bin/ keyed on this
+/// file's hash, so bump this line whenever a hosted binary is replaced
+/// under the same asset name (this revision: capsule-bar + chime Linux
+/// overlay; first macOS whisper universal2 build).
 
 class _ModelSpec {
   const _ModelSpec(this.fileName, this.url, this.expectedSizeBytes);
