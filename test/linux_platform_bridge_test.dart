@@ -17,6 +17,36 @@ class _FakeOverlaySink implements OverlaySink {
 }
 
 void main() {
+  test('X11 overlay draws capsule bars and plays the appearance chime', () {
+    final source = File('linux/overlay/typemate_overlay.c').readAsStringSync();
+
+    // Bars must have rounded capsule ends like the Windows RoundRect bars,
+    // not sharp XFillRectangle corners.
+    expect(
+      source,
+      contains('XFillArc(d, buffer, gc, bx, by, kBarWidth, kBarWidth'),
+    );
+    expect(
+      source,
+      isNot(contains('XFillRectangle(d, buffer, gc, bx, by, kBarWidth, h)')),
+    );
+
+    // The appearance chime: same generated WAV as Windows, ALSA loaded at
+    // runtime so missing libasound degrades to silence, never a crash.
+    expect(source, contains('#include "overlay_chime_wav.h"'));
+    expect(source, contains('libasound.so.2'));
+    expect(source, contains('play_chime();'));
+
+    // Both platforms must embed the identical sound.
+    final linuxHeader = File(
+      'linux/overlay/overlay_chime_wav.h',
+    ).readAsStringSync();
+    final windowsHeader = File(
+      'windows/runner/overlay_chime_wav.h',
+    ).readAsStringSync();
+    expect(linuxHeader, windowsHeader);
+  });
+
   test('types into the focused field through xdotool', () async {
     String? executable;
     List<String>? arguments;
