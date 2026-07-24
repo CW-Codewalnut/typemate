@@ -24,9 +24,15 @@ void main() {
     );
   });
 
+  // isMacOS is pinned false so the expectation holds on macOS CI runners
+  // too, where the unset flag would fall back to Platform.isMacOS.
   test('uses the mock bridge on unsupported platforms', () {
     expect(
-      createDefaultPlatformBridge(isWindows: false, isLinux: false),
+      createDefaultPlatformBridge(
+        isWindows: false,
+        isLinux: false,
+        isMacOS: false,
+      ),
       isA<MockPlatformBridge>(),
     );
   });
@@ -47,7 +53,11 @@ void main() {
 
   test('uses the noop shortcut registrar on unsupported platforms', () {
     expect(
-      createDefaultHoldShortcutRegistrar(isWindows: false, isLinux: false),
+      createDefaultHoldShortcutRegistrar(
+        isWindows: false,
+        isLinux: false,
+        isMacOS: false,
+      ),
       isA<NoopHoldShortcutRegistrar>(),
     );
   });
