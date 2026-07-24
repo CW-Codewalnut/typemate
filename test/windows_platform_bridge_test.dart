@@ -239,8 +239,13 @@ void main() {
   });
 
   test(
-    'registers TypeMate in the Run key and Startup folder shortcut',
+    'registers only the Startup shortcut and removes the legacy Run key value',
     () async {
+      // Regression: a Run-key launch inherits C:\Windows\System32 as its
+      // working directory, which broke dictation after login. Only the
+      // Startup shortcut (which pins WorkingDirectory to the exe folder)
+      // may register the app, and the Run value older builds wrote must
+      // be cleaned up.
       final processCalls = <({String executable, List<String> arguments})>[];
       final bridge = WindowsPlatformBridge(
         processRunner: (executable, arguments) async {
@@ -259,14 +264,16 @@ void main() {
         command,
         contains(r'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'),
       );
+      expect(command, contains('Remove-ItemProperty'));
+      expect(command, isNot(contains('Set-ItemProperty')));
       expect(command, contains(r'C:\Apps\TypeMate\typemate.exe'));
-      expect(command, contains('TypeMate'));
-      expect(command, contains('Set-ItemProperty'));
       expect(command, contains('WScript.Shell'));
       expect(command, contains('SpecialFolders.Item(\'Startup\')'));
       expect(command, contains('TypeMate.lnk'));
+      expect(command, contains(r"WorkingDirectory = Split-Path"));
       expect(command, contains('IconLocation'));
-      expect(command, contains('StartupApproved'));
+      expect(command, contains(r'StartupApproved\StartupFolder'));
+      expect(command, contains(r'StartupApproved\Run'));
       expect(command, contains('New-ItemProperty'));
       expect(command, contains('PropertyType Binary'));
       expect(command, contains('Save()'));
