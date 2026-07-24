@@ -1,0 +1,60 @@
+# Builds the whisper.cpp v1.9.1 CLI + server for macOS as a universal2
+# (arm64 + x86_64) tarball, matching the Linux binaries this repo hosts on
+# the models-v1 release. Run manually, then upload the artifact as
+# `whisper-v1.9.1-macos-universal.tar.gz` to models-v1 (with approval) so
+# tool/fetch_whisper_runtime.dart can fetch it on macOS.
+#
+# Portability notes (mirrors the Linux AVX2-baseline lesson): GGML_NATIVE
+# stays OFF so the x86_64 slice never bakes in the build machine's ISA;
+# the Metal shader library is embedded so the binaries stay two files.
+name: Build macOS whisper binaries
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: whisper.cpp v1.9.1 universal2
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout whisper.cpp v1.9.1
+        uses: actions/checkout@v4
+        with:
+          repository: ggml-org/whisper.cpp
+          ref: v1.9.1
+
+      - name: Configure
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DGGML_NATIVE=OFF \
+            -DGGML_METAL_EMBED_LIBRARY=ON
+
+      - name: Build whisper-cli and whisper-server
+        run: cmake --build build --config Release -j 3 --target whisper-cli whisper-server
+
+      - name: Verify universal binaries
+        run: |
+          lipo -info build/bin/whisper-cli build/bin/whisper-server
+          lipo -info build/bin/whisper-cli | grep -q arm64
+          lipo -info build/bin/whisper-cli | grep -q x86_64
+
+      - name: Package tarball
+        run: |
+          mkdir -p dist
+          tar -C build/bin -czf dist/whisper-v1.9.1-macos-universal.tar.gz \
+            whisper-cli whisper-server
+          shasum -a 256 dist/whisper-v1.9.1-macos-universal.tar.gz
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-v1.9.1-macos-universal
+          path: dist/whisper-v1.9.1-macos-universal.tar.gz
+          if-no-files-found: error
+          retention-days: 30

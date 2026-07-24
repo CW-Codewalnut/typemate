@@ -164,12 +164,37 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Cache speech runtimes
+        uses: actions/cache@v4
+        with:
+          path: |
+            models
+            bin
+          key: speech-runtime-macOS-${{ hashFiles('tool/fetch_whisper_runtime.dart') }}
+
+      # Requires whisper-v1.9.1-macos-universal.tar.gz on the models-v1
+      # release (built by build-macos-whisper.yml); sherpa comes from the
+      # upstream osx-universal2 archive.
+      - name: Fetch speech runtimes
+        run: dart tool/fetch_whisper_runtime.dart
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: Build macOS release app
         run: flutter build macos --release
 
-      # Developer preview: unsigned, and the bundled speech runtimes are
-      # not fetched for macOS yet, so this proves the shell builds and
-      # runs — it is not a dictation-ready install.
+      # The Xcode build has no fetch hook (unlike the Windows/Linux CMake
+      # builds), so the runtimes are copied next to the executable, where
+      # the app's resolution order already looks.
+      - name: Bundle speech runtimes into the app
+        run: |
+          APP="build/macos/Build/Products/Release/Type Mate.app"
+          cp -R models "$APP/Contents/MacOS/models"
+          cp -R bin "$APP/Contents/MacOS/bin"
+
+      # Developer preview: unsigned, so Gatekeeper needs a right-click
+      # open; dictation-ready once the Mac grants the Input Monitoring
+      # and Accessibility permissions.
       - name: Package macOS zip
         run: |
           VERSION="$(sed -n 's/^version: \([0-9.]*\)+.*/\1/p' pubspec.yaml)"

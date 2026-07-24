@@ -26,6 +26,10 @@
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>TypeMate records your voice while you hold the dictation shortcut and transcribes it locally on this Mac.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>TypeMate uses System Events to type the transcript into the focused field and to start at login.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:typemate/src/app.dart';
 import 'package:typemate/src/core/platform/macos/macos_platform_bridge.dart';
+import 'package:typemate/src/core/platform/macos/macos_polling_hold_shortcut_registrar.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -34,12 +35,12 @@ void main() {
     expect(bridge, isA<MacosPlatformBridge>());
   });
 
-  test('reports the global shortcut as unavailable (no registrar yet)', () {
+  test('reports the global shortcut as available (polling registrar)', () {
     final bridge = MacosPlatformBridge(
       nativeMethodInvoker: <T>(method, [arguments]) async => null,
     );
 
-    expect(bridge.isGlobalShortcutAvailable(), completion(isFalse));
+    expect(bridge.isGlobalShortcutAvailable(), completion(isTrue));
   });
 
   test('drives the native overlay panel through the macOS channel', () async {
@@ -143,6 +144,48 @@ void main() {
     await bridge.ensureLaunchAtStartup();
 
     expect(processCalls, isEmpty);
+  });
+
+  test('createDefaultHoldShortcutRegistrar polls keys on macOS', () {
+    final registrar = createDefaultHoldShortcutRegistrar(
+      isWindows: false,
+      isLinux: false,
+      isMacOS: true,
+    );
+
+    expect(registrar, isA<MacosPollingHoldShortcutRegistrar>());
+  });
+
+  test('macOS app config permits dictation (no sandbox, usage strings)', () {
+    // The sandbox would block spawning the bundled STT servers, key
+    // polling, and System Events; TypeMate is a direct download on every
+    // platform.
+    for (final entitlements in [
+      'macos/Runner/DebugProfile.entitlements',
+      'macos/Runner/Release.entitlements',
+    ]) {
+      final content = File(entitlements).readAsStringSync();
+      expect(
+        RegExp(
+          r'<key>com\.apple\.security\.app-sandbox</key>\s*<false/>',
+        ).hasMatch(content),
+        isTrue,
+        reason: '$entitlements must disable the sandbox',
+      );
+    }
+
+    final infoPlist = File('macos/Runner/Info.plist').readAsStringSync();
+    expect(infoPlist, contains('NSMicrophoneUsageDescription'));
+    expect(infoPlist, contains('NSAppleEventsUsageDescription'));
+
+    // The fetch script must serve macOS its own runtime, never the Linux
+    // binaries or Linux-only helper tools.
+    final fetchScript = File(
+      'tool/fetch_whisper_runtime.dart',
+    ).readAsStringSync();
+    expect(fetchScript, contains('whisper-v1.9.1-macos-universal.tar.gz'));
+    expect(fetchScript, contains('sherpa-onnx-v1.13.4-osx-universal2-static'));
+    expect(fetchScript, contains('if (Platform.isLinux) {'));
   });
 
   test('native macOS overlay matches the Windows pill and plays the chime', () {
