@@ -10,16 +10,31 @@ class DictationHistoryEntry {
     required this.text,
     required this.createdAt,
     this.duration = Duration.zero,
+    this.failureReason,
+    this.recordingPath,
   });
 
   final String text;
   final DateTime createdAt;
   final Duration duration;
 
+  /// Why transcription failed, for entries that hold a recording instead
+  /// of text. Null for successful dictations.
+  final String? failureReason;
+
+  /// The kept WAV a failed dictation can be retried from. Failed audio is
+  /// the one case where a recording outlives its dictation; it is deleted
+  /// the moment the entry resolves, is evicted, or history is cleared.
+  final String? recordingPath;
+
+  bool get isFailed => failureReason != null;
+
   Map<String, Object?> toJson() => {
     'text': text,
     'createdAt': createdAt.toIso8601String(),
     'durationMs': duration.inMilliseconds,
+    if (failureReason != null) 'failureReason': failureReason,
+    if (recordingPath != null) 'recordingPath': recordingPath,
   };
 
   static DictationHistoryEntry? fromJson(Object? value) {
@@ -29,19 +44,30 @@ class DictationHistoryEntry {
     }) {
       final trimmedText = text.trim();
       final createdAt = DateTime.tryParse(rawDate);
-      if (trimmedText.isEmpty ||
-          isSilentAudioTranscript(trimmedText) ||
-          createdAt == null) {
+      final failureReason = switch (value['failureReason']) {
+        final String reason when reason.trim().isNotEmpty => reason.trim(),
+        _ => null,
+      };
+      if (createdAt == null) {
+        return null;
+      }
+      if (failureReason == null &&
+          (trimmedText.isEmpty || isSilentAudioTranscript(trimmedText))) {
         return null;
       }
 
       final durationMs = value['durationMs'];
+      final recordingPath = value['recordingPath'];
       return DictationHistoryEntry(
         text: trimmedText,
         createdAt: createdAt,
         duration: durationMs is int
             ? Duration(milliseconds: durationMs)
             : Duration.zero,
+        failureReason: failureReason,
+        recordingPath: recordingPath is String && recordingPath.isNotEmpty
+            ? recordingPath
+            : null,
       );
     }
 
@@ -99,21 +125,39 @@ class DictationHistoryController extends ChangeNotifier {
   DictationHistoryController({
     this.store = const NoopDictationHistoryStore(),
     this.maxEntries = 100,
-  });
+    this.failedEntryMaxAge = const Duration(days: 30),
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
 
   final DictationHistoryStore store;
   final int maxEntries;
+
+  /// A failed dictation the user never retried is not kept forever: past
+  /// this age its recording and entry are deleted on load.
+  final Duration failedEntryMaxAge;
+
+  final DateTime Function() _clock;
 
   List<DictationHistoryEntry> _entries = const [];
   bool _isLoading = false;
 
   List<DictationHistoryEntry> get entries => _entries;
-  bool get isLoading => _isLoading;
-  int get totalWords =>
-      _entries.fold(0, (total, entry) => total + wordCount(entry.text));
 
-  Duration get totalDuration =>
-      _entries.fold(Duration.zero, (total, entry) => total + entry.duration);
+  /// Failed entries hold recordings, not words; stats count only real
+  /// transcripts.
+  List<DictationHistoryEntry> get successfulEntries =>
+      _entries.where((entry) => !entry.isFailed).toList(growable: false);
+
+  bool get isLoading => _isLoading;
+  int get totalWords => successfulEntries.fold(
+    0,
+    (total, entry) => total + wordCount(entry.text),
+  );
+
+  Duration get totalDuration => successfulEntries.fold(
+    Duration.zero,
+    (total, entry) => total + entry.duration,
+  );
 
   int get averageWordsPerMinute =>
       calculateAverageWordsPerMinute(totalWords, totalDuration);
@@ -121,9 +165,26 @@ class DictationHistoryController extends ChangeNotifier {
   Future<void> load() async {
     _isLoading = true;
     notifyListeners();
-    _entries = await store.loadEntries();
+    final loaded = await store.loadEntries();
+    // Expire failed dictations the user never retried: past the age limit
+    // both the entry and its kept recording go away.
+    final cutoff = _clock().subtract(failedEntryMaxAge);
+    final kept = <DictationHistoryEntry>[];
+    var expiredAny = false;
+    for (final entry in loaded) {
+      if (entry.isFailed && entry.createdAt.isBefore(cutoff)) {
+        _deleteRecordingQuietly(entry);
+        expiredAny = true;
+      } else {
+        kept.add(entry);
+      }
+    }
+    _entries = kept.toList(growable: false);
     _isLoading = false;
     notifyListeners();
+    if (expiredAny) {
+      await store.saveEntries(_entries);
+    }
   }
 
   Future<void> addTranscript(
@@ -135,21 +196,114 @@ class DictationHistoryController extends ChangeNotifier {
       return;
     }
 
-    _entries = [
+    await _prepend(
       DictationHistoryEntry(
         text: trimmedText,
-        createdAt: DateTime.now(),
+        createdAt: _clock(),
         duration: duration,
       ),
-      ..._entries,
-    ].take(maxEntries).toList(growable: false);
+    );
+  }
+
+  /// Records a failed dictation, optionally holding on to its recording so
+  /// the user can retry the transcription later.
+  Future<void> addFailure(
+    String reason, {
+    String? recordingPath,
+    Duration duration = Duration.zero,
+  }) async {
+    await _prepend(
+      DictationHistoryEntry(
+        text: '',
+        createdAt: _clock(),
+        duration: duration,
+        failureReason: reason,
+        recordingPath: recordingPath,
+      ),
+    );
+  }
+
+  /// A successful retry: the failed entry becomes a normal transcript in
+  /// place (keeping its original time) and its recording is deleted.
+  Future<void> resolveFailedEntry(
+    DictationHistoryEntry entry,
+    String transcript,
+  ) async {
+    final trimmed = transcript.trim();
+    _deleteRecordingQuietly(entry);
+    _entries = [
+      for (final existing in _entries)
+        if (!identical(existing, entry))
+          existing
+        // Silence on retry means there is nothing worth keeping.
+        else if (trimmed.isNotEmpty && !isSilentAudioTranscript(trimmed))
+          DictationHistoryEntry(
+            text: trimmed,
+            createdAt: entry.createdAt,
+            duration: entry.duration,
+          ),
+    ];
+    notifyListeners();
+    await store.saveEntries(_entries);
+  }
+
+  /// A retry that failed again: the entry keeps its recording but shows
+  /// the fresh reason.
+  Future<void> updateFailureReason(
+    DictationHistoryEntry entry,
+    String reason,
+  ) async {
+    _entries = [
+      for (final existing in _entries)
+        if (identical(existing, entry))
+          DictationHistoryEntry(
+            text: '',
+            createdAt: entry.createdAt,
+            duration: entry.duration,
+            failureReason: reason,
+            recordingPath: entry.recordingPath,
+          )
+        else
+          existing,
+    ];
     notifyListeners();
     await store.saveEntries(_entries);
   }
 
   Future<void> clear() async {
+    for (final entry in _entries) {
+      _deleteRecordingQuietly(entry);
+    }
     _entries = const [];
     notifyListeners();
     await store.saveEntries(_entries);
+  }
+
+  Future<void> _prepend(DictationHistoryEntry entry) async {
+    final capped = [entry, ..._entries];
+    // Evicted failed entries take their kept recordings with them.
+    for (final evicted in capped.skip(maxEntries)) {
+      _deleteRecordingQuietly(evicted);
+    }
+    _entries = capped.take(maxEntries).toList(growable: false);
+    notifyListeners();
+    await store.saveEntries(_entries);
+  }
+
+  void _deleteRecordingQuietly(DictationHistoryEntry entry) {
+    final path = entry.recordingPath;
+    if (path == null || path.isEmpty) {
+      return;
+    }
+    try {
+      // Synchronous on purpose: async file IO never completes inside the
+      // widget-test fake-async zone.
+      final file = File(path);
+      if (file.existsSync()) {
+        file.deleteSync();
+      }
+    } catch (_) {
+      // Best effort; an undeletable file is retried on the next sweep.
+    }
   }
 }

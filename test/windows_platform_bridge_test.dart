@@ -132,6 +132,23 @@ void main() {
     expect(source, contains('SW_HIDE'));
   });
 
+  test('failure notification goes through the desktop notifier', () async {
+    final sent = <({String title, String body})>[];
+    final bridge = WindowsPlatformBridge(
+      nativeMethodInvoker: <T>(method, [arguments]) async => null,
+      notificationSender: (title, body) async {
+        sent.add((title: title, body: body));
+      },
+    );
+
+    await bridge.showDictationFailureNotification(
+      'Transcription took too long and was stopped.',
+    );
+
+    expect(sent.single.title, 'Dictation failed');
+    expect(sent.single.body, 'Transcription took too long and was stopped.');
+  });
+
   test('shows native overlay through Windows method channel', () async {
     final calls = <({String method, Object? arguments})>[];
     final bridge = WindowsPlatformBridge(

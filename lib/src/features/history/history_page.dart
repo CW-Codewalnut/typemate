@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../components/content_page_shell.dart';
+import '../../core/dictation_controller.dart';
 import '../../core/dictation_history_controller.dart';
 import '../../core/hold_shortcut_controller.dart';
 import 'components/history_content.dart';
@@ -9,10 +10,12 @@ class HistoryPage extends StatelessWidget {
   const HistoryPage({
     super.key,
     required this.historyController,
+    this.dictationController,
     this.shortcutController,
   });
 
   final DictationHistoryController historyController;
+  final DictationController? dictationController;
   final HoldShortcutController? shortcutController;
 
   @override
@@ -21,6 +24,7 @@ class HistoryPage extends StatelessWidget {
       scrollKey: const Key('history-scrollbar-hidden'),
       child: HistoryContent(
         historyController: historyController,
+        dictationController: dictationController,
         shortcutController: shortcutController,
       ),
     );

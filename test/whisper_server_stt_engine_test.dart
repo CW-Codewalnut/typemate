@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -117,6 +118,47 @@ void main() {
     await engine.shutdown();
 
     expect(transport.startedProcesses.single.killed, isTrue);
+  });
+
+  test('times out when the server sends headers but the body stalls', () async {
+    // A real server that answers with headers and then never finishes the
+    // body — the exact shape of a wedged whisper-server mid-decode.
+    final stallingServer = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
+    addTearDown(() async => stallingServer.close(force: true));
+    stallingServer.listen((request) async {
+      await request.drain<void>();
+      request.response.headers.contentType = ContentType.json;
+      request.response.headers.contentLength = 1024;
+      request.response.write('{');
+      await request.response.flush();
+      // Never close: the body stays incomplete forever.
+    });
+
+    final temp = await Directory.systemTemp.createTemp('whisper-server-test');
+    addTearDown(() async => temp.delete(recursive: true));
+    final clip = File('${temp.path}/clip.wav');
+    await clip.writeAsBytes(const [1, 2, 3]);
+
+    final engine = WhisperServerSttEngine(
+      serverExecutable: 'unused',
+      modelPath: 'unused',
+      vadModelPath: 'unused',
+      cliLanguage: 'hi',
+      port: stallingServer.port,
+      bodyReadTimeout: const Duration(milliseconds: 200),
+      processStarter: (_, _) async => throw StateError('must not start'),
+      connectionProbe: (_) async => true,
+    );
+
+    await expectLater(
+      engine.transcribe(
+        AudioRecording(path: clip.path, duration: const Duration(seconds: 1)),
+      ),
+      throwsA(isA<TimeoutException>()),
+    );
   });
 }
 

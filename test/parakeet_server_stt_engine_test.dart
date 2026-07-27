@@ -136,6 +136,26 @@ void main() {
       },
     );
 
+    test('transcribes even when the socket close handshake hangs', () async {
+      final transport = FakeTransport(
+        response: '{"text": "closed late"}',
+        closeHangs: true,
+      );
+      final engine = buildEngine(
+        transport,
+        socketCloseTimeout: const Duration(milliseconds: 50),
+      );
+
+      final transcript = await engine.transcribe(
+        AudioRecording(
+          path: await writeWav(),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+
+      expect(transcript, 'closed late');
+    });
+
     test('shutdown kills the server process', () async {
       final transport = FakeTransport(response: '{"text": "x"}');
       final engine = buildEngine(transport);
@@ -151,6 +171,7 @@ void main() {
 ParakeetServerSttEngine buildEngine(
   FakeTransport transport, {
   Duration startupTimeout = const Duration(seconds: 5),
+  Duration socketCloseTimeout = const Duration(seconds: 5),
 }) {
   return ParakeetServerSttEngine(
     serverExecutable: 'sherpa-server.exe',
@@ -159,6 +180,7 @@ ParakeetServerSttEngine buildEngine(
     joinerPath: 'joiner.onnx',
     tokensPath: 'tokens.txt',
     startupTimeout: startupTimeout,
+    socketCloseTimeout: socketCloseTimeout,
     processStarter: transport.startProcess,
     webSocketConnector: transport.connect,
   );
@@ -169,6 +191,7 @@ class FakeTransport {
     required this.response,
     this.alreadyRunning = false,
     this.serverEverStarts = true,
+    this.closeHangs = false,
   });
 
   final String response;
@@ -177,6 +200,9 @@ class FakeTransport {
   /// reachable before this engine starts anything.
   final bool alreadyRunning;
   final bool serverEverStarts;
+
+  /// Simulates a wedged server whose close handshake never completes.
+  final bool closeHangs;
 
   final startedProcesses = <FakeProcess>[];
   final startedArguments = <List<String>>[];
@@ -197,14 +223,15 @@ class FakeTransport {
     if (!reachable) {
       throw const SocketException('connection refused');
     }
-    return FakeSocket(response);
+    return FakeSocket(response, closeHangs: closeHangs);
   }
 }
 
 class FakeSocket implements SttServerSocket {
-  FakeSocket(this.response);
+  FakeSocket(this.response, {this.closeHangs = false});
 
   final String response;
+  final bool closeHangs;
   // Single-subscription so the response emitted by add() is buffered until
   // the engine subscribes, like a real socket's OS-level buffering.
   final _controller = StreamController<dynamic>();
@@ -219,6 +246,9 @@ class FakeSocket implements SttServerSocket {
 
   @override
   Future<void> close() async {
+    if (closeHangs) {
+      return Completer<void>().future;
+    }
     // Not awaited: a single-subscription controller's close() only completes
     // once a listener drains it, and probe sockets are never listened to.
     unawaited(_controller.close());

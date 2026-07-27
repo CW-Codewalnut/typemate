@@ -128,6 +128,7 @@ class _TypeMateAppState extends State<TypeMateApp> {
       platformBridge: platformBridge,
       sttEngine: _sttEngine,
       onTranscriptGenerated: historyController.addTranscript,
+      onTranscriptionFailed: historyController.addFailure,
       audioRecorderProvider: () {
         final selectedMicrophone = microphoneController.selectedMicrophone;
         if (selectedMicrophone == null) {

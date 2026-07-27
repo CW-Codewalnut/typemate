@@ -37,6 +37,95 @@ void main() {
     },
   );
 
+  testWidgets(
+    'a failed dictation appears in history with its reason and a retry',
+    (tester) async {
+      final historyController = DictationHistoryController();
+      final dictationController = DictationController(
+        platformBridge: MockPlatformBridge(),
+        sttEngine: FailingSttEngine(),
+        audioRecorder: ImmediateAudioRecorder(),
+        onTranscriptionFailed: historyController.addFailure,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomeScreen(
+            controller: dictationController,
+            historyController: historyController,
+            microphoneController: MicrophoneSettingsController(
+              discovery: FakeMicrophoneDiscovery(const []),
+            ),
+            speechSettingsController: SpeechSettingsController(),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pump(const Duration(milliseconds: 250));
+
+      await dictationController.startListening();
+      await dictationController.stopListening();
+      await tester.pump();
+
+      expect(find.textContaining('turn your speech into text'), findsWidgets);
+      // No kept recording (the fake recorder leaves no file), so the entry
+      // shows a disabled retry.
+      expect(find.byKey(const Key('history-retry-button')), findsOneWidget);
+    },
+  );
+
+  testWidgets('other retries disable while one retry is transcribing', (
+    tester,
+  ) async {
+    final historyController = DictationHistoryController();
+    final holdingEngine = HoldingSttEngine();
+    final dictationController = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: holdingEngine,
+      audioRecorder: ImmediateAudioRecorder(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          controller: dictationController,
+          historyController: historyController,
+          microphoneController: MicrophoneSettingsController(
+            discovery: FakeMicrophoneDiscovery(const []),
+          ),
+          speechSettingsController: SpeechSettingsController(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 250));
+    // After the shell's history load; loading earlier would be wiped.
+    await historyController.addFailure('failed one', recordingPath: 'one.wav');
+    await historyController.addFailure('failed two', recordingPath: 'two.wav');
+    await tester.pump();
+
+    final retryButtons = find.byKey(const Key('history-retry-button'));
+    expect(retryButtons, findsNWidgets(2));
+
+    await tester.tap(retryButtons.first);
+    await tester.pump();
+
+    // The tapped retry shows progress; every other retry is disabled
+    // because only one transcription can run at a time.
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    final innerButtons = find.descendant(
+      of: retryButtons,
+      matching: find.byWidgetPredicate((widget) => widget is TextButton),
+    );
+    expect(tester.widget<TextButton>(innerButtons).onPressed, isNull);
+
+    holdingEngine.complete('recovered');
+    await tester.pump();
+    await tester.pump();
+
+    // The finished retry resolved its entry; the other retry re-enables.
+    expect(retryButtons, findsOneWidget);
+    expect(tester.widget<TextButton>(innerButtons).onPressed, isNotNull);
+  });
+
   testWidgets('insights page shows real local usage metrics and streak grid', (
     tester,
   ) async {
@@ -565,6 +654,19 @@ class ImmediateAudioRecorder implements AudioRecorder {
       path: 'immediate.wav',
       duration: Duration(milliseconds: 500),
     );
+  }
+}
+
+class FailingSttEngine implements SttEngine {
+  @override
+  Future<bool> isReady() async => true;
+
+  @override
+  Future<void> prepare() async {}
+
+  @override
+  Future<String> transcribe(AudioRecording recording) async {
+    throw StateError('engine down');
   }
 }
 

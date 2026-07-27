@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/dictation_controller.dart';
 import '../../../core/dictation_history_controller.dart';
 import '../../../core/hold_shortcut_controller.dart';
 import 'empty_history_card.dart';
@@ -10,10 +11,12 @@ class HistoryContent extends StatelessWidget {
   const HistoryContent({
     super.key,
     required this.historyController,
+    this.dictationController,
     this.shortcutController,
   });
 
   final DictationHistoryController historyController;
+  final DictationController? dictationController;
   final HoldShortcutController? shortcutController;
 
   @override
@@ -45,9 +48,43 @@ class HistoryContent extends StatelessWidget {
           const EmptyHistoryCard()
         else
           for (final entry in historyController.entries)
-            HistoryEntryCard(entry: entry),
+            HistoryEntryCard(
+              entry: entry,
+              // One transcription at a time: while any dictation or retry
+              // is running, every retry renders disabled (the page
+              // rebuilds on controller changes, so they re-enable).
+              onRetry:
+                  dictationController == null ||
+                      entry.recordingPath == null ||
+                      dictationController!.isBusy
+                  ? null
+                  : () => _retryEntry(entry),
+            ),
       ],
     );
+  }
+
+  /// Retry glue: re-transcribe the kept recording, then either resolve the
+  /// failed entry into a transcript or refresh its failure reason.
+  Future<void> _retryEntry(DictationHistoryEntry entry) async {
+    final controller = dictationController;
+    final recordingPath = entry.recordingPath;
+    if (controller == null || recordingPath == null || controller.isBusy) {
+      return;
+    }
+    final transcript = await controller.retryTranscription(
+      recordingPath,
+      duration: entry.duration,
+    );
+    if (transcript == null) {
+      await historyController.updateFailureReason(
+        entry,
+        controller.errorMessage ??
+            DictationController.transcriptionFailedMessage,
+      );
+      return;
+    }
+    await historyController.resolveFailedEntry(entry, transcript);
   }
 }
 

@@ -29,6 +29,13 @@ class MockPlatformBridge implements PlatformBridge {
     overlayMessage = '';
   }
 
+  String lastFailureNotification = '';
+
+  @override
+  Future<void> showDictationFailureNotification(String message) async {
+    lastFailureNotification = message;
+  }
+
   @override
   Future<void> insertTextIntoFocusedField(String text) async {
     lastInsertedText = text;

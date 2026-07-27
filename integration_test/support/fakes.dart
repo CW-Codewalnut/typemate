@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:typemate/src/core/audio/audio_recorder.dart';
 import 'package:typemate/src/core/audio/microphone_audio_recorder_factory.dart';
 import 'package:typemate/src/core/audio/microphone_discovery.dart';
@@ -45,6 +48,78 @@ class FakeAudioRecorderFactory implements AudioRecorderFactory {
     createdRecorders.add(recorder);
     return recorder;
   }
+}
+
+/// Recorder that leaves a real 16-bit PCM WAV on disk, for tests that run a
+/// real STT engine (which parses the recording) instead of a fake one.
+class WavWritingAudioRecorder implements AudioRecorder {
+  WavWritingAudioRecorder({required this.outputDirectory});
+
+  final Directory outputDirectory;
+  bool isRecording = false;
+  int _counter = 0;
+
+  @override
+  Future<void> start() async {
+    isRecording = true;
+  }
+
+  @override
+  Future<AudioRecording> stop() async {
+    isRecording = false;
+    _counter += 1;
+    final file = File('${outputDirectory.path}/e2e-recording-$_counter.wav');
+    await file.writeAsBytes(
+      buildPcm16Wav(sampleRate: 16000, samples: [100, -100, 200, -200]),
+    );
+    return AudioRecording(
+      path: file.path,
+      duration: const Duration(milliseconds: 1200),
+    );
+  }
+}
+
+class WavWritingAudioRecorderFactory implements AudioRecorderFactory {
+  WavWritingAudioRecorderFactory({required this.outputDirectory});
+
+  final Directory outputDirectory;
+  final List<WavWritingAudioRecorder> createdRecorders = [];
+
+  @override
+  AudioRecorder create(MicrophoneDevice microphone) {
+    final recorder = WavWritingAudioRecorder(outputDirectory: outputDirectory);
+    createdRecorders.add(recorder);
+    return recorder;
+  }
+}
+
+/// Minimal valid RIFF/WAVE file: 44-byte header plus 16-bit PCM samples.
+Uint8List buildPcm16Wav({required int sampleRate, required List<int> samples}) {
+  final dataSize = samples.length * 2;
+  final bytes = ByteData(44 + dataSize);
+  void writeAscii(int offset, String text) {
+    for (var i = 0; i < text.length; i++) {
+      bytes.setUint8(offset + i, text.codeUnitAt(i));
+    }
+  }
+
+  writeAscii(0, 'RIFF');
+  bytes.setUint32(4, 36 + dataSize, Endian.little);
+  writeAscii(8, 'WAVE');
+  writeAscii(12, 'fmt ');
+  bytes.setUint32(16, 16, Endian.little);
+  bytes.setUint16(20, 1, Endian.little);
+  bytes.setUint16(22, 1, Endian.little);
+  bytes.setUint32(24, sampleRate, Endian.little);
+  bytes.setUint32(28, sampleRate * 2, Endian.little);
+  bytes.setUint16(32, 2, Endian.little);
+  bytes.setUint16(34, 16, Endian.little);
+  writeAscii(36, 'data');
+  bytes.setUint32(40, dataSize, Endian.little);
+  for (var i = 0; i < samples.length; i++) {
+    bytes.setInt16(44 + i * 2, samples[i], Endian.little);
+  }
+  return bytes.buffer.asUint8List();
 }
 
 /// Registrar the test drives directly, standing in for the OS-global

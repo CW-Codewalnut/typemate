@@ -98,9 +98,27 @@ set_target_properties(${BINARY_NAME}
 )
 
 
+# Plugins resolve shared-library dependencies (e.g. the bundled libnotify
+# below) from their own directory first, not just system paths.
+set(CMAKE_BUILD_RPATH_USE_ORIGIN TRUE)
+set(CMAKE_BUILD_RPATH "\$ORIGIN")
+
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
+
+# local_notifier links against the system libnotify. Bundle the runtime .so
+# next to the plugin so the portable tarball keeps the "users install
+# nothing" promise (its own deps all come with GTK3, already required).
+find_file(TYPEMATE_LIBNOTIFY_RUNTIME
+  NAMES libnotify.so.4
+  PATHS /usr/lib/x86_64-linux-gnu /lib/x86_64-linux-gnu /usr/lib64 /usr/lib
+)
+if(TYPEMATE_LIBNOTIFY_RUNTIME)
+  list(APPEND PLUGIN_BUNDLED_LIBRARIES "${TYPEMATE_LIBNOTIFY_RUNTIME}")
+else()
+  message(WARNING "libnotify.so.4 not found; failure notifications will need the system library at runtime")
+endif()
 
 
 # === Installation ===
