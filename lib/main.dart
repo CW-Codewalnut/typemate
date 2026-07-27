@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_single_instance/flutter_single_instance.dart';
+import 'package:local_notifier/local_notifier.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'src/app.dart';
@@ -26,6 +27,13 @@ Future<void> main() async {
   // Flutter bar (white, Windows-style) so the chrome is identical on all
   // OSes instead of following each window manager's theme.
   await windowManager.ensureInitialized();
+  // OS notifications for dictation failures: they must reach the user even
+  // while the app sits in the tray. Windows toasts require a Start Menu
+  // shortcut with the app's identity, which setup ensures.
+  await localNotifier.setup(
+    appName: appDisplayName,
+    shortcutPolicy: ShortcutPolicy.requireCreate,
+  );
   await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
   // The OS-visible window title (taskbar, alt-tab) derives from the same
   // constant as every in-app surface.

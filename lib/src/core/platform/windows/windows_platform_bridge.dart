@@ -2,6 +2,7 @@
 
 import 'package:flutter/services.dart';
 
+import '../desktop_notification_sender.dart';
 import '../platform_bridge.dart';
 
 const _nativeChannel = MethodChannel('typemate/windows');
@@ -74,8 +75,10 @@ class WindowsPlatformBridge implements PlatformBridge, QuitRequestSource {
     this.processRunner = runPlatformProcess,
     this.overlayProcessStarter = startOverlayProcess,
     NativeMethodInvoker? nativeMethodInvoker,
+    DesktopNotificationSender? notificationSender,
     String? executablePath,
   }) : nativeMethodInvoker = nativeMethodInvoker ?? _nativeChannel.invokeMethod,
+       notificationSender = notificationSender ?? showDesktopNotification,
        _executablePath = executablePath ?? Platform.resolvedExecutable {
     _nativeChannel.setMethodCallHandler(_handleNativeCall);
   }
@@ -83,6 +86,7 @@ class WindowsPlatformBridge implements PlatformBridge, QuitRequestSource {
   final PlatformProcessRunner processRunner;
   final OverlayProcessStarter overlayProcessStarter;
   final NativeMethodInvoker nativeMethodInvoker;
+  final DesktopNotificationSender notificationSender;
   final String _executablePath;
 
   Future<void> Function()? _onQuitRequested;
@@ -154,6 +158,16 @@ class WindowsPlatformBridge implements PlatformBridge, QuitRequestSource {
       state,
     ]);
     _overlayState = state;
+  }
+
+  @override
+  Future<void> showDictationFailureNotification(String message) async {
+    try {
+      await notificationSender('Dictation failed', message);
+    } on MissingPluginException {
+      // Runners without the notification plugin skip the toast; the
+      // failed History entry still carries the reason.
+    }
   }
 
   @override

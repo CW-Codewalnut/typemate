@@ -5,9 +5,13 @@ import '../../../core/dictation_history_controller.dart';
 import '../../../utils/text_metrics.dart';
 
 class HistoryEntryCard extends StatelessWidget {
-  const HistoryEntryCard({super.key, required this.entry});
+  const HistoryEntryCard({super.key, required this.entry, this.onRetry});
 
   final DictationHistoryEntry entry;
+
+  /// Retries a failed entry's kept recording; null while a retry cannot
+  /// run (another dictation in flight, or no recording kept).
+  final Future<void> Function()? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -30,15 +34,36 @@ class HistoryEntryCard extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             );
-            final transcript = SelectableText(
-              entry.text,
-              style: theme.textTheme.bodyLarge,
-            );
-            final copyButton = IconButton(
-              tooltip: 'Copy transcription',
-              onPressed: () => _copyToClipboard(context),
-              icon: const Icon(Icons.copy),
-            );
+            final transcript = entry.isFailed
+                ? Row(
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 18,
+                        color: theme.colorScheme.error,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          entry.failureReason ?? 'Dictation failed.',
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: theme.colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : SelectableText(entry.text, style: theme.textTheme.bodyLarge);
+            final copyButton = entry.isFailed
+                ? _RetryButton(
+                    key: const Key('history-retry-button'),
+                    onRetry: entry.recordingPath == null ? null : onRetry,
+                  )
+                : IconButton(
+                    tooltip: 'Copy transcription',
+                    onPressed: () => _copyToClipboard(context),
+                    icon: const Icon(Icons.copy),
+                  );
 
             // On narrow layouts the fixed time column eats too much width,
             // so the time moves above the transcript instead.
@@ -77,5 +102,50 @@ class HistoryEntryCard extends StatelessWidget {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Transcription copied')));
+  }
+}
+
+/// Retry with an in-place progress spinner while transcription runs.
+class _RetryButton extends StatefulWidget {
+  const _RetryButton({super.key, required this.onRetry});
+
+  final Future<void> Function()? onRetry;
+
+  @override
+  State<_RetryButton> createState() => _RetryButtonState();
+}
+
+class _RetryButtonState extends State<_RetryButton> {
+  bool _retrying = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_retrying) {
+      return const Padding(
+        padding: EdgeInsets.all(8),
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2.4),
+        ),
+      );
+    }
+    final onRetry = widget.onRetry;
+    return TextButton.icon(
+      onPressed: onRetry == null
+          ? null
+          : () async {
+              setState(() => _retrying = true);
+              try {
+                await onRetry();
+              } finally {
+                if (mounted) {
+                  setState(() => _retrying = false);
+                }
+              }
+            },
+      icon: const Icon(Icons.refresh, size: 18),
+      label: const Text('Retry'),
+    );
   }
 }

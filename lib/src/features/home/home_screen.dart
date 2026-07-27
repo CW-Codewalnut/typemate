@@ -59,6 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final page = switch (_selectedIndex) {
           0 => HistoryPage(
             historyController: widget.historyController,
+            dictationController: widget.controller,
             shortcutController: widget.shortcutController,
           ),
           1 => InsightsPage(historyController: widget.historyController),

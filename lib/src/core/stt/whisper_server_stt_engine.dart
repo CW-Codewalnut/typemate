@@ -41,8 +41,10 @@ Future<bool> _probeTcpPort(int port) async {
 Future<String> _postMultipartInference(
   Uri url,
   String audioFilePath,
-  Map<String, String> fields,
-) async {
+  Map<String, String> fields, {
+  Duration responseTimeout = const Duration(seconds: 60),
+  Duration bodyReadTimeout = const Duration(seconds: 30),
+}) async {
   final client = HttpClient();
   try {
     const boundary = 'typemate-inference-boundary';
@@ -77,8 +79,13 @@ Future<String> _postMultipartInference(
     body.add(utf8.encode('\r\n--$boundary--\r\n'));
 
     request.add(body.takeBytes());
-    final response = await request.close().timeout(const Duration(seconds: 60));
-    final responseBody = await response.transform(utf8.decoder).join();
+    final response = await request.close().timeout(responseTimeout);
+    // The headers arriving does not guarantee the body ever finishes; a
+    // stalled server must not strand dictation in "Transcribing" forever.
+    final responseBody = await response
+        .transform(utf8.decoder)
+        .join()
+        .timeout(bodyReadTimeout);
     if (response.statusCode != HttpStatus.ok) {
       throw SttRuntimeException(
         'The local speech server rejected the request '
@@ -104,12 +111,14 @@ class WhisperServerSttEngine implements DisposableSttEngine {
     required this.port,
     this.prompt,
     this.startupTimeout = const Duration(seconds: 30),
+    this.responseTimeout = const Duration(seconds: 60),
+    this.bodyReadTimeout = const Duration(seconds: 30),
     ServerProcessStarter? processStarter,
     ServerConnectionProbe? connectionProbe,
     WhisperInferenceClient? inferenceClient,
   }) : processStarter = processStarter ?? _startServerProcess,
        connectionProbe = connectionProbe ?? _probeTcpPort,
-       inferenceClient = inferenceClient ?? _postMultipartInference;
+       _injectedInferenceClient = inferenceClient;
 
   final String serverExecutable;
   final String modelPath;
@@ -125,9 +134,26 @@ class WhisperServerSttEngine implements DisposableSttEngine {
 
   final int port;
   final Duration startupTimeout;
+
+  /// How long the server may decode before the request is abandoned.
+  final Duration responseTimeout;
+
+  /// How long the response body may take after the headers arrived.
+  final Duration bodyReadTimeout;
+
   final ServerProcessStarter processStarter;
   final ServerConnectionProbe connectionProbe;
-  final WhisperInferenceClient inferenceClient;
+  final WhisperInferenceClient? _injectedInferenceClient;
+
+  WhisperInferenceClient get inferenceClient =>
+      _injectedInferenceClient ??
+      ((url, audioFilePath, fields) => _postMultipartInference(
+        url,
+        audioFilePath,
+        fields,
+        responseTimeout: responseTimeout,
+        bodyReadTimeout: bodyReadTimeout,
+      ));
 
   Process? _serverProcess;
 

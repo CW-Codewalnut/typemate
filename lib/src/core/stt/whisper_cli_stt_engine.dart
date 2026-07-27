@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -223,23 +224,39 @@ class SttRuntimeException implements Exception {
 }
 
 class DartSttProcessRunner implements SttProcessRunner {
-  const DartSttProcessRunner();
+  const DartSttProcessRunner({this.timeout = const Duration(minutes: 2)});
+
+  /// A whisper-cli run that outlives this is hung (or decoding something far
+  /// beyond a dictation clip); it is killed so the app never sits on a
+  /// silent, forever-"Transcribing" overlay.
+  final Duration timeout;
 
   @override
   Future<SttProcessResult> run(
     String executable,
     List<String> arguments,
   ) async {
-    final result = await Process.run(
-      executable,
-      arguments,
-      stdoutEncoding: utf8,
-      stderrEncoding: utf8,
-    );
+    final process = await Process.start(executable, arguments);
+    final stdoutFuture = process.stdout.transform(utf8.decoder).join();
+    final stderrFuture = process.stderr.transform(utf8.decoder).join();
+
+    final int exitCode;
+    try {
+      exitCode = await process.exitCode.timeout(timeout);
+    } on TimeoutException {
+      process.kill(ProcessSignal.sigkill);
+      // Killing the process closes its pipes, so these complete promptly.
+      await stdoutFuture.catchError((_) => '');
+      await stderrFuture.catchError((_) => '');
+      throw const SttRuntimeException(
+        'Local transcription took too long and was stopped.',
+      );
+    }
+
     return SttProcessResult(
-      exitCode: result.exitCode,
-      output: '${result.stdout}',
-      diagnostics: '${result.stderr}',
+      exitCode: exitCode,
+      output: await stdoutFuture,
+      diagnostics: await stderrFuture,
     );
   }
 }

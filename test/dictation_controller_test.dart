@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:typemate/src/core/audio/audio_recorder.dart';
@@ -61,13 +62,17 @@ void main() {
     expect(wavFile.existsSync(), isFalse);
   });
 
-  test('deletes the recording file when transcription fails', () async {
+  test('keeps the recording for retry when transcription fails', () async {
     final directory = Directory.systemTemp.createTempSync('typemate-rec');
     addTearDown(() => directory.deleteSync(recursive: true));
     final wavFile = File('${directory.path}/voice.wav')
       ..writeAsBytesSync([1, 2, 3]);
+    String? failedReason;
+    String? keptPath;
+    Duration? failedDuration;
+    final platformBridge = MockPlatformBridge();
     final controller = DictationController(
-      platformBridge: MockPlatformBridge(),
+      platformBridge: platformBridge,
       sttEngine: ThrowingSttEngine(),
       audioRecorder: FakeAudioRecorder(
         recording: AudioRecording(
@@ -75,12 +80,108 @@ void main() {
           duration: const Duration(seconds: 2),
         ),
       ),
+      onTranscriptionFailed:
+          (reason, {recordingPath, duration = Duration.zero}) async {
+            failedReason = reason;
+            keptPath = recordingPath;
+            failedDuration = duration;
+          },
     );
 
     await controller.startListening();
     await controller.stopListening();
 
+    // The WAV moved into the failed/ folder, out of the startup purge's
+    // reach, and the failure callback points at the kept copy.
     expect(wavFile.existsSync(), isFalse);
+    expect(failedReason, DictationController.transcriptionFailedMessage);
+    expect(failedDuration, const Duration(seconds: 2));
+    expect(keptPath, isNotNull);
+    expect(keptPath, contains('failed'));
+    expect(File(keptPath!).existsSync(), isTrue);
+    // Only the OS toast (read outside the app) points at History.
+    expect(
+      platformBridge.lastFailureNotification,
+      DictationController.transcriptionFailedMessage +
+          DictationController.retryFromHistoryHint,
+    );
+  });
+
+  test('transcription timeout scales with the recording length', () {
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: FakeSttEngine(),
+      audioRecorder: FakeAudioRecorder(),
+    );
+
+    expect(
+      controller.transcribeTimeoutFor(const Duration(seconds: 5)),
+      const Duration(seconds: 20),
+    );
+    expect(
+      controller.transcribeTimeoutFor(Duration.zero),
+      DictationController.defaultTranscribeTimeout,
+    );
+    expect(
+      controller.transcribeTimeoutFor(const Duration(minutes: 10)),
+      DictationController.maxTranscribeTimeout,
+    );
+  });
+
+  test('retryTranscription resolves a kept recording into text', () async {
+    final directory = Directory.systemTemp.createTempSync('typemate-rec');
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final keptFile = File('${directory.path}/kept.wav')
+      ..writeAsBytesSync([1, 2, 3]);
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: FakeSttEngine(transcript: '  Second time lucky.  '),
+      audioRecorder: FakeAudioRecorder(),
+    );
+
+    final transcript = await controller.retryTranscription(
+      keptFile.path,
+      duration: const Duration(seconds: 2),
+    );
+
+    expect(transcript, 'Second time lucky.');
+    expect(controller.phase, DictationPhase.idle);
+    expect(controller.errorMessage, isNull);
+  });
+
+  test('retryTranscription reports a repeat failure', () async {
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: ThrowingSttEngine(),
+      audioRecorder: FakeAudioRecorder(),
+    );
+
+    final transcript = await controller.retryTranscription('kept.wav');
+
+    expect(transcript, isNull);
+    expect(controller.phase, DictationPhase.idle);
+    expect(
+      controller.errorMessage,
+      DictationController.transcriptionFailedMessage,
+    );
+  });
+
+  test('retryTranscription times out like a live dictation', () async {
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: HangingSttEngine(),
+      audioRecorder: FakeAudioRecorder(),
+      transcribeTimeout: const Duration(milliseconds: 50),
+    );
+
+    final transcript = await controller.retryTranscription('kept.wav');
+
+    expect(transcript, isNull);
+    expect(controller.phase, DictationPhase.idle);
+    expect(
+      controller.errorMessage,
+      DictationController.transcriptionTimeoutMessage,
+    );
   });
 
   test('startListening starts recording and shows overlay', () async {
@@ -207,7 +308,7 @@ void main() {
     expect(controller.phase, DictationPhase.idle);
     expect(
       controller.statusMessage,
-      'Unable to start recording. Check the microphone and its permissions, then try again.',
+      DictationController.failedToStartRecordingMessage,
     );
     expect(platformBridge.overlayVisible, isFalse);
     expect(sttEngine.lastRecording, isNull);
@@ -229,7 +330,7 @@ void main() {
     expect(controller.phase, DictationPhase.idle);
     expect(
       controller.statusMessage,
-      'Unable to finish recording. Check the microphone and its permissions, then try again.',
+      DictationController.failedToFinishRecordingMessage,
     );
     expect(platformBridge.overlayVisible, isFalse);
     expect(audioRecorder.started, isTrue);
@@ -258,7 +359,7 @@ void main() {
     expect(controller.phase, DictationPhase.idle);
     expect(
       controller.statusMessage,
-      'Unable to transcribe locally. Check the speech runtime and model file, then try again.',
+      DictationController.transcriptionFailedMessage,
     );
     expect(platformBridge.overlayVisible, isFalse);
     expect(platformBridge.lastInsertedText, isEmpty);
@@ -359,6 +460,289 @@ void main() {
     );
   });
 
+  test('inserts the transcript even when storing history fails', () async {
+    final platformBridge = MockPlatformBridge();
+    final controller = DictationController(
+      platformBridge: platformBridge,
+      sttEngine: FakeSttEngine(transcript: 'Saved anyway.'),
+      audioRecorder: FakeAudioRecorder(),
+      onTranscriptGenerated: (transcript, {duration = Duration.zero}) async {
+        throw const FileSystemException('history.json is locked');
+      },
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(controller.phase, DictationPhase.idle);
+    expect(platformBridge.lastInsertedText, 'Saved anyway.');
+    expect(platformBridge.overlayVisible, isFalse);
+    expect(
+      controller.statusMessage,
+      'Inserted transcript. Ready for the next dictation.',
+    );
+  });
+
+  test('times out with an error when transcription hangs forever', () async {
+    final platformBridge = MockPlatformBridge();
+    final controller = DictationController(
+      platformBridge: platformBridge,
+      sttEngine: HangingSttEngine(),
+      audioRecorder: FakeAudioRecorder(),
+      transcribeTimeout: const Duration(milliseconds: 50),
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(controller.phase, DictationPhase.idle);
+    expect(
+      controller.statusMessage,
+      DictationController.transcriptionTimeoutMessage,
+    );
+    expect(
+      platformBridge.lastFailureNotification,
+      DictationController.transcriptionTimeoutMessage,
+    );
+    expect(platformBridge.overlayVisible, isFalse);
+  });
+
+  test('accepts the next dictation after a transcription timeout', () async {
+    final platformBridge = MockPlatformBridge();
+    var hangs = true;
+    final controller = DictationController(
+      platformBridge: platformBridge,
+      sttEngine: SwitchableSttEngine(
+        (recording) =>
+            hangs ? Completer<String>().future : Future.value('Second try.'),
+      ),
+      audioRecorder: FakeAudioRecorder(),
+      transcribeTimeout: const Duration(milliseconds: 50),
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+    expect(controller.phase, DictationPhase.idle);
+
+    hangs = false;
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(controller.latestTranscript, 'Second try.');
+    expect(platformBridge.lastInsertedText, 'Second try.');
+  });
+
+  test('times out with an error when the recorder never stops', () async {
+    final platformBridge = MockPlatformBridge();
+    final controller = DictationController(
+      platformBridge: platformBridge,
+      sttEngine: FakeSttEngine(),
+      audioRecorder: HangingStopAudioRecorder(),
+      recorderStopTimeout: const Duration(milliseconds: 50),
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(controller.phase, DictationPhase.idle);
+    expect(
+      controller.statusMessage,
+      DictationController.failedToFinishRecordingMessage,
+    );
+    expect(platformBridge.overlayVisible, isFalse);
+  });
+
+  test(
+    'reaches idle with an error even when the overlay bridge fails',
+    () async {
+      final platformBridge = FailingOverlayPlatformBridge();
+      final controller = DictationController(
+        platformBridge: platformBridge,
+        sttEngine: ThrowingSttEngine(),
+        audioRecorder: FakeAudioRecorder(),
+      );
+
+      await controller.startListening();
+      await controller.stopListening();
+
+      expect(controller.phase, DictationPhase.idle);
+      expect(
+        controller.statusMessage,
+        DictationController.transcriptionFailedMessage,
+      );
+    },
+  );
+
+  test(
+    'still dictates when the transcribing overlay cannot be shown',
+    () async {
+      final platformBridge = FailingOverlayPlatformBridge(
+        failTranscribingOnly: true,
+      );
+      final controller = DictationController(
+        platformBridge: platformBridge,
+        sttEngine: FakeSttEngine(transcript: 'Overlay is optional.'),
+        audioRecorder: FakeAudioRecorder(),
+      );
+
+      await controller.startListening();
+      await controller.stopListening();
+
+      expect(controller.phase, DictationPhase.idle);
+      expect(platformBridge.lastInsertedText, 'Overlay is optional.');
+      expect(
+        controller.statusMessage,
+        'Inserted transcript. Ready for the next dictation.',
+      );
+    },
+  );
+
+  test('hides the overlay when transcription fails', () async {
+    final platformBridge = MockPlatformBridge();
+    final controller = DictationController(
+      platformBridge: platformBridge,
+      sttEngine: ThrowingSttEngine(),
+      audioRecorder: FakeAudioRecorder(),
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(platformBridge.overlayVisible, isFalse);
+  });
+
+  test('posts an OS notification with the failure reason', () async {
+    final platformBridge = MockPlatformBridge();
+    final controller = DictationController(
+      platformBridge: platformBridge,
+      sttEngine: ThrowingSttEngine(),
+      audioRecorder: FakeAudioRecorder(),
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(
+      platformBridge.lastFailureNotification,
+      DictationController.transcriptionFailedMessage,
+    );
+  });
+
+  test('plays the failure tone on failure and never on success', () async {
+    var failurePlays = 0;
+    Future<void> countingPlayer() async => failurePlays += 1;
+
+    final failing = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: ThrowingSttEngine(),
+      audioRecorder: FakeAudioRecorder(),
+      failureSoundPlayer: countingPlayer,
+    );
+    await failing.startListening();
+    await failing.stopListening();
+    expect(failurePlays, 1);
+
+    final succeeding = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: FakeSttEngine(transcript: 'All good.'),
+      audioRecorder: FakeAudioRecorder(),
+      failureSoundPlayer: countingPlayer,
+    );
+    await succeeding.startListening();
+    await succeeding.stopListening();
+    expect(failurePlays, 1);
+  });
+
+  test('a broken failure-sound player never blocks the failure flow', () async {
+    final platformBridge = MockPlatformBridge();
+    final controller = DictationController(
+      platformBridge: platformBridge,
+      sttEngine: ThrowingSttEngine(),
+      audioRecorder: FakeAudioRecorder(),
+      failureSoundPlayer: () async => throw StateError('no audio device'),
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(controller.phase, DictationPhase.idle);
+    expect(
+      platformBridge.lastFailureNotification,
+      DictationController.transcriptionFailedMessage,
+    );
+  });
+
+  test('successful dictation posts no failure notification', () async {
+    final platformBridge = MockPlatformBridge();
+    final controller = DictationController(
+      platformBridge: platformBridge,
+      sttEngine: FakeSttEngine(transcript: 'All good.'),
+      audioRecorder: FakeAudioRecorder(),
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(platformBridge.lastFailureNotification, isEmpty);
+  });
+
+  test('keeps the failure reason until the next dictation starts', () async {
+    var failing = true;
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: SwitchableSttEngine(
+        (recording) => failing
+            ? Future<String>.error(StateError('model failed'))
+            : Future.value('Back to normal.'),
+      ),
+      audioRecorder: FakeAudioRecorder(),
+    );
+    expect(controller.errorMessage, isNull);
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(
+      controller.errorMessage,
+      DictationController.transcriptionFailedMessage,
+    );
+
+    failing = false;
+    await controller.startListening();
+    expect(controller.errorMessage, isNull);
+    await controller.stopListening();
+
+    expect(controller.errorMessage, isNull);
+    expect(controller.latestTranscript, 'Back to normal.');
+  });
+
+  test('a transcription timeout surfaces its reason as the error', () async {
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: HangingSttEngine(),
+      audioRecorder: FakeAudioRecorder(),
+      transcribeTimeout: const Duration(milliseconds: 50),
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(controller.errorMessage, contains('took too long'));
+  });
+
+  test('silent audio is not reported as an error', () async {
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: FakeSttEngine(transcript: '   '),
+      audioRecorder: FakeAudioRecorder(),
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(controller.errorMessage, isNull);
+  });
+
   test('recovers when focused-field insertion fails', () async {
     final platformBridge = ThrowingInsertPlatformBridge();
     final audioRecorder = FakeAudioRecorder(
@@ -380,7 +764,7 @@ void main() {
     expect(controller.phase, DictationPhase.idle);
     expect(
       controller.statusMessage,
-      'Unable to insert text into the focused field. Copy the latest transcript manually and try again.',
+      DictationController.insertionFailedMessage,
     );
     expect(platformBridge.overlayVisible, isFalse);
     expect(platformBridge.insertAttempted, isTrue);
@@ -460,6 +844,69 @@ class ThrowingStopAudioRecorder implements AudioRecorder {
   }
 }
 
+class HangingSttEngine implements SttEngine {
+  @override
+  Future<bool> isReady() async => true;
+
+  @override
+  Future<void> prepare() async {}
+
+  @override
+  Future<String> transcribe(AudioRecording recording) =>
+      Completer<String>().future;
+}
+
+class SwitchableSttEngine implements SttEngine {
+  SwitchableSttEngine(this._transcribe);
+
+  final Future<String> Function(AudioRecording) _transcribe;
+
+  @override
+  Future<bool> isReady() async => true;
+
+  @override
+  Future<void> prepare() async {}
+
+  @override
+  Future<String> transcribe(AudioRecording recording) => _transcribe(recording);
+}
+
+class HangingStopAudioRecorder implements AudioRecorder {
+  @override
+  Future<void> start() async {}
+
+  @override
+  Future<AudioRecording> stop() => Completer<AudioRecording>().future;
+}
+
+/// Overlay calls that throw must never strand the dictation phase.
+class FailingOverlayPlatformBridge extends MockPlatformBridge {
+  FailingOverlayPlatformBridge({this.failTranscribingOnly = false});
+
+  final bool failTranscribingOnly;
+
+  @override
+  Future<void> showTranscribingOverlay() async {
+    throw StateError('overlay unavailable');
+  }
+
+  @override
+  Future<void> hideListeningOverlay() async {
+    if (failTranscribingOnly) {
+      return super.hideListeningOverlay();
+    }
+    throw StateError('overlay unavailable');
+  }
+
+  @override
+  Future<void> showDictationFailureNotification(String message) async {
+    if (failTranscribingOnly) {
+      return super.showDictationFailureNotification(message);
+    }
+    throw StateError('notifier unavailable');
+  }
+}
+
 class ThrowingSttEngine implements SttEngine {
   @override
   Future<bool> isReady() async => true;
@@ -509,6 +956,9 @@ class ThrowingInsertPlatformBridge implements PlatformBridge {
   Future<void> hideListeningOverlay() async {
     overlayVisible = false;
   }
+
+  @override
+  Future<void> showDictationFailureNotification(String message) async {}
 
   @override
   Future<void> insertTextIntoFocusedField(String text) async {

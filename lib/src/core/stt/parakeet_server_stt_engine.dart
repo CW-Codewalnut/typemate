@@ -60,6 +60,8 @@ class ParakeetServerSttEngine implements DisposableSttEngine {
     required this.tokensPath,
     this.port = 43007,
     this.startupTimeout = const Duration(seconds: 60),
+    this.responseTimeout = const Duration(seconds: 60),
+    this.socketCloseTimeout = const Duration(seconds: 5),
     ServerProcessStarter? processStarter,
     WebSocketConnector? webSocketConnector,
   }) : processStarter = processStarter ?? _startServerProcess,
@@ -72,6 +74,15 @@ class ParakeetServerSttEngine implements DisposableSttEngine {
   final String tokensPath;
   final int port;
   final Duration startupTimeout;
+
+  /// How long the server may decode one utterance before the request is
+  /// abandoned as hung.
+  final Duration responseTimeout;
+
+  /// A close handshake against a wedged server must never hang the
+  /// dictation flow; past this, the socket is abandoned.
+  final Duration socketCloseTimeout;
+
   final ServerProcessStarter processStarter;
   final WebSocketConnector webSocketConnector;
 
@@ -101,12 +112,19 @@ class ParakeetServerSttEngine implements DisposableSttEngine {
     final socket = await webSocketConnector(_url);
     try {
       socket.add(buildSherpaAudioMessage(audio.sampleRate, audio.samples));
-      final response = await socket.messages.first.timeout(
-        const Duration(seconds: 60),
-      );
+      final response = await socket.messages.first.timeout(responseTimeout);
       return _parseTranscript(response);
     } finally {
-      await socket.close();
+      await _closeQuietly(socket);
+    }
+  }
+
+  Future<void> _closeQuietly(SttServerSocket socket) async {
+    try {
+      await socket.close().timeout(socketCloseTimeout);
+    } catch (_) {
+      // An error here must not replace the transcription result (a throw in
+      // a finally block would) or hang the dictation flow.
     }
   }
 
@@ -161,7 +179,7 @@ class ParakeetServerSttEngine implements DisposableSttEngine {
   Future<bool> _canConnect() async {
     try {
       final socket = await webSocketConnector(_url);
-      await socket.close();
+      await _closeQuietly(socket);
       return true;
     } catch (_) {
       return false;

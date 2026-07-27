@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  local_notifier
   record_windows
   screen_retriever_windows
   window_manager

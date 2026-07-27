@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../../models/app_identity.dart';
+import '../desktop_notification_sender.dart';
 import '../platform_bridge.dart';
 
 typedef LinuxProcessRunner =
@@ -46,15 +47,18 @@ class LinuxPlatformBridge implements PlatformBridge {
     this.xdotoolLibraryDirectory,
     this.overlayExecutable = '',
     OverlayStarter? overlayStarter,
+    DesktopNotificationSender? notificationSender,
   }) : _processRunner = processRunner ?? _runProcess,
        _environment = environment ?? Platform.environment,
        _executablePath = executablePath ?? Platform.resolvedExecutable,
+       notificationSender = notificationSender ?? showDesktopNotification,
        // ignore: prefer_initializing_formals
        _overlayStarter = overlayStarter;
 
   final LinuxProcessRunner _processRunner;
   final Map<String, String> _environment;
   final String _executablePath;
+  final DesktopNotificationSender notificationSender;
 
   /// Bundled xdotool ships with a private libxdo; its directory goes on
   /// LD_LIBRARY_PATH so no system install is needed.
@@ -118,6 +122,16 @@ class LinuxPlatformBridge implements PlatformBridge {
     final overlay = _overlay;
     _overlay = null;
     await overlay?.close();
+  }
+
+  @override
+  Future<void> showDictationFailureNotification(String message) async {
+    try {
+      await notificationSender('Dictation failed', message);
+    } catch (_) {
+      // Notifications are best effort (headless sessions have no daemon);
+      // the in-app history banner still carries the reason.
+    }
   }
 
   @override

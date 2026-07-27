@@ -7,6 +7,11 @@ abstract interface class PlatformBridge {
 
   Future<void> hideListeningOverlay();
 
+  /// Posts an OS notification with the failure reason. It persists
+  /// (Windows: Action Center), so the user can read it again later; the
+  /// history page banner and failed entry carry the reason in-app.
+  Future<void> showDictationFailureNotification(String message);
+
   Future<void> insertTextIntoFocusedField(String text);
 
   Future<void> ensureLaunchAtStartup();

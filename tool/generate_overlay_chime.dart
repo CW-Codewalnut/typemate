@@ -10,6 +10,8 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'sound_synthesis.dart';
+
 const sampleRate = 22050;
 const durationMs = 180;
 
@@ -29,35 +31,6 @@ Int16List synthesizeChime() {
     samples[i] = (value.clamp(-1.0, 1.0) * 32767).round();
   }
   return samples;
-}
-
-Uint8List buildWav(Int16List samples) {
-  const bytesPerSample = 2;
-  final dataLength = samples.length * bytesPerSample;
-  final bytes = BytesBuilder();
-  void writeString(String value) => bytes.add(value.codeUnits);
-  void writeUint32(int value) => bytes.add(
-    Uint8List(4)..buffer.asByteData().setUint32(0, value, Endian.little),
-  );
-  void writeUint16(int value) => bytes.add(
-    Uint8List(2)..buffer.asByteData().setUint16(0, value, Endian.little),
-  );
-
-  writeString('RIFF');
-  writeUint32(36 + dataLength);
-  writeString('WAVE');
-  writeString('fmt ');
-  writeUint32(16);
-  writeUint16(1); // PCM
-  writeUint16(1); // mono
-  writeUint32(sampleRate);
-  writeUint32(sampleRate * bytesPerSample);
-  writeUint16(bytesPerSample);
-  writeUint16(16);
-  writeString('data');
-  writeUint32(dataLength);
-  bytes.add(samples.buffer.asUint8List());
-  return bytes.toBytes();
 }
 
 String buildHeader(Uint8List wav) {
@@ -96,7 +69,7 @@ let overlayChimeWavBase64 =
 }
 
 void main() {
-  final wav = buildWav(synthesizeChime());
+  final wav = buildPcm16Wav(synthesizeChime(), sampleRate: sampleRate);
   final header = buildHeader(wav);
   File('windows/runner/overlay_chime_wav.h').writeAsStringSync(header);
   File('linux/overlay/overlay_chime_wav.h').writeAsStringSync(header);

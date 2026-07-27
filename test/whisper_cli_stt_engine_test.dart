@@ -456,6 +456,36 @@ void main() {
       ),
     );
   });
+
+  group('DartSttProcessRunner', () {
+    test('returns output for a process that finishes in time', () async {
+      const runner = DartSttProcessRunner();
+      final result = Platform.isWindows
+          ? await runner.run('cmd', ['/c', 'echo hi'])
+          : await runner.run('echo', ['hi']);
+
+      expect(result.exitCode, 0);
+      expect(result.output.trim(), 'hi');
+    });
+
+    test('kills a hung process and reports it took too long', () async {
+      const runner = DartSttProcessRunner(timeout: Duration(milliseconds: 300));
+      final hangingCommand = Platform.isWindows
+          ? runner.run('ping', ['-n', '30', '127.0.0.1'])
+          : runner.run('sleep', ['30']);
+
+      await expectLater(
+        hangingCommand,
+        throwsA(
+          isA<SttRuntimeException>().having(
+            (error) => error.message,
+            'message',
+            contains('took too long'),
+          ),
+        ),
+      );
+    });
+  });
 }
 
 class FakeSttProcessRunner implements SttProcessRunner {
