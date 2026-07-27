@@ -1,11 +1,7 @@
 #include "type_mate_overlay.h"
 
-#include <mmsystem.h>
-
 #include <algorithm>
 #include <cmath>
-
-#include "overlay_chime_wav.h"
 
 namespace {
 constexpr wchar_t kOverlayWindowClass[] = L"TypeMateNativeOverlayWindow";
@@ -62,9 +58,11 @@ void TypeMateOverlay::EnsureWindow() {
   }
 }
 
+// The start chime is not played here: dictation sounds are Dart-side
+// (lib/src/core/platform/dictation_sounds.dart), one implementation for
+// every desktop.
 void TypeMateOverlay::Show(const std::wstring& state) {
   state_ = state.empty() ? L"listening" : state;
-  const bool appearing = hwnd_ == nullptr;
   EnsureWindow();
   if (!hwnd_) {
     return;
@@ -74,11 +72,6 @@ void TypeMateOverlay::Show(const std::wstring& state) {
                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
   SetTimer(hwnd_, kTimerId, kTimerMs, nullptr);
   InvalidateRect(hwnd_, nullptr, TRUE);
-  if (appearing) {
-    // Once per appearance, not on the listening->transcribing update.
-    PlaySound(reinterpret_cast<LPCWSTR>(kOverlayChimeWav), nullptr,
-              SND_MEMORY | SND_ASYNC | SND_NODEFAULT);
-  }
 }
 
 void TypeMateOverlay::Hide() {

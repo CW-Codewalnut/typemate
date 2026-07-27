@@ -1,8 +1,9 @@
-import Cocoa
+﻿import Cocoa
 
 // The dictation overlay: a 210x58 dark pill near the bottom centre with a
-// label and seven capsule waveform bars. Geometry, colours, cadence, and
-// the appearance chime mirror windows/runner/type_mate_overlay.cpp.
+// label and seven capsule waveform bars. Geometry, colours, and cadence
+// mirror windows/runner/type_mate_overlay.cpp. Dictation sounds are
+// Dart-side (lib/src/core/platform/dictation_sounds.dart).
 private let overlayWidth: CGFloat = 210
 private let overlayHeight: CGFloat = 58
 private let overlayMarginBottom: CGFloat = 28
@@ -65,18 +66,12 @@ final class TypeMateOverlay {
   private var panel: NSPanel?
   private var view: TypeMateOverlayView?
   private var timer: Timer?
-  private var chime: NSSound?
 
   func show(state: String) {
-    let appearing = panel == nil
     ensurePanel()
     view?.state = state.isEmpty ? "listening" : state
     view?.needsDisplay = true
     panel?.orderFrontRegardless()
-    if appearing {
-      // Once per appearance, not on the listening->transcribing update.
-      playChime()
-    }
   }
 
   func hide() {
@@ -120,11 +115,5 @@ final class TypeMateOverlay {
     }
     RunLoop.main.add(timer, forMode: .common)
     self.timer = timer
-  }
-
-  private func playChime() {
-    guard let data = Data(base64Encoded: overlayChimeWavBase64) else { return }
-    chime = NSSound(data: data)
-    chime?.play()
   }
 }

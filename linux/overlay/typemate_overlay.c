@@ -10,9 +10,7 @@
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 #include <X11/extensions/shape.h>
-#include <dlfcn.h>
 #include <math.h>
-#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -20,9 +18,9 @@
 #include <sys/select.h>
 #include <sys/time.h>
 
-#include "overlay_chime_wav.h"
-
 // Geometry and colours mirror windows/runner/type_mate_overlay.cpp.
+// Dictation sounds are Dart-side (lib/src/core/platform/dictation_sounds
+// .dart), one implementation for every desktop — this helper only draws.
 enum {
   kWidth = 210,
   kHeight = 58,
@@ -68,43 +66,7 @@ static void apply_pill_shape(Display *d, Window w) {
   XFreePixmap(d, mask);
 }
 
-// Play the appearance chime, matching the Windows overlay's PlaySound cue.
-// libasound is loaded at runtime in a forked child, so systems without it
-// (or without audio) keep the overlay working and just stay silent. ALSA's
-// "default" device is the same route the mic capture already relies on.
-static void play_chime(void) {
-  pid_t pid = fork();
-  if (pid != 0) return;  // parent, or fork failure: silent, never fatal
-
-  typedef struct snd_pcm snd_pcm_t;
-  typedef int (*open_fn)(snd_pcm_t **, const char *, int, int);
-  typedef int (*set_params_fn)(snd_pcm_t *, int, int, unsigned int,
-                               unsigned int, int, unsigned int);
-  typedef long (*writei_fn)(snd_pcm_t *, const void *, unsigned long);
-  typedef int (*drain_fn)(snd_pcm_t *);
-
-  void *alsa = dlopen("libasound.so.2", RTLD_NOW);
-  if (!alsa) _exit(0);
-  open_fn pcm_open = (open_fn)dlsym(alsa, "snd_pcm_open");
-  set_params_fn pcm_set_params = (set_params_fn)dlsym(alsa, "snd_pcm_set_params");
-  writei_fn pcm_writei = (writei_fn)dlsym(alsa, "snd_pcm_writei");
-  drain_fn pcm_drain = (drain_fn)dlsym(alsa, "snd_pcm_drain");
-  if (!pcm_open || !pcm_set_params || !pcm_writei || !pcm_drain) _exit(0);
-
-  snd_pcm_t *pcm = NULL;
-  if (pcm_open(&pcm, "default", 0 /* playback */, 0) < 0) _exit(0);
-  // 2 = SND_PCM_FORMAT_S16_LE, 3 = SND_PCM_ACCESS_RW_INTERLEAVED, mono,
-  // soft resample allowed, 100 ms max latency.
-  if (pcm_set_params(pcm, 2, 3, 1, kOverlayChimeRate, 1, 100000) < 0) _exit(0);
-  const short *frames = (const short *)(kOverlayChimeWav + 44);  // skip header
-  pcm_writei(pcm, frames, (kOverlayChimeWavLen - 44) / 2);
-  pcm_drain(pcm);
-  _exit(0);
-}
-
 int main(void) {
-  // Chime children exit on their own; never leave them as zombies.
-  signal(SIGCHLD, SIG_IGN);
   Display *d = XOpenDisplay(NULL);
   if (!d) return 1;
   int screen = DefaultScreen(d);
@@ -155,7 +117,6 @@ int main(void) {
   // which sidesteps any buffering on the parent's write of the first
   // command.
   XMapRaised(d, win);
-  play_chime();
   int visible = 1;
   long tick = 0;
 
