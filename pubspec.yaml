@@ -68,6 +68,7 @@ flutter:
 
   assets:
     - assets/typemate_logo.png
+    - assets/sounds/dictation_start.wav
     - assets/sounds/dictation_failed.wav
 
 # Launcher icons for all desktop targets are generated from the white

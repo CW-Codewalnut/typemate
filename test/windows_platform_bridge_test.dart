@@ -240,24 +240,19 @@ void main() {
     expect(transcribingProcess.killCount, 0);
   });
 
-  test('native overlay plays the chime once per appearance', () {
+  test('native overlay draws only — dictation sounds are Dart-side', () {
     final source = File(
       'windows/runner/type_mate_overlay.cpp',
     ).readAsStringSync();
 
-    expect(source, contains('#include "overlay_chime_wav.h"'));
-    expect(source, contains('const bool appearing = hwnd_ == nullptr;'));
-    expect(source, contains('PlaySound'));
-    expect(source, contains('SND_MEMORY | SND_ASYNC | SND_NODEFAULT'));
+    // Sounds moved to lib/src/core/platform/dictation_sounds.dart (one
+    // implementation for every desktop); the native overlay must not play
+    // audio of its own or the chime would double up.
+    expect(source, isNot(contains('PlaySound')));
+    expect(source, isNot(contains('overlay_chime_wav.h')));
 
     final cmake = File('windows/runner/CMakeLists.txt').readAsStringSync();
-    expect(cmake, contains('winmm.lib'));
-
-    final header = File(
-      'windows/runner/overlay_chime_wav.h',
-    ).readAsStringSync();
-    expect(header, contains('kOverlayChimeWav[]'));
-    expect(header, contains('kOverlayChimeRate'));
+    expect(cmake, isNot(contains('winmm.lib')));
   });
 
   test('native Windows overlay is bottom anchored, compact, and rounded', () {

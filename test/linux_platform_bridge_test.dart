@@ -17,7 +17,7 @@ class _FakeOverlaySink implements OverlaySink {
 }
 
 void main() {
-  test('X11 overlay draws capsule bars and plays the appearance chime', () {
+  test('X11 overlay draws capsule bars and no sound of its own', () {
     final source = File('linux/overlay/typemate_overlay.c').readAsStringSync();
 
     // Bars must have rounded capsule ends like the Windows RoundRect bars,
@@ -31,20 +31,11 @@ void main() {
       isNot(contains('XFillRectangle(d, buffer, gc, bx, by, kBarWidth, h)')),
     );
 
-    // The appearance chime: same generated WAV as Windows, ALSA loaded at
-    // runtime so missing libasound degrades to silence, never a crash.
-    expect(source, contains('#include "overlay_chime_wav.h"'));
-    expect(source, contains('libasound.so.2'));
-    expect(source, contains('play_chime();'));
-
-    // Both platforms must embed the identical sound.
-    final linuxHeader = File(
-      'linux/overlay/overlay_chime_wav.h',
-    ).readAsStringSync();
-    final windowsHeader = File(
-      'windows/runner/overlay_chime_wav.h',
-    ).readAsStringSync();
-    expect(linuxHeader, windowsHeader);
+    // Sounds moved to lib/src/core/platform/dictation_sounds.dart; the
+    // helper must not play audio of its own or the chime would double up.
+    expect(source, isNot(contains('overlay_chime_wav.h')));
+    expect(source, isNot(contains('libasound')));
+    expect(source, isNot(contains('play_chime')));
   });
 
   test('types into the focused field through xdotool', () async {

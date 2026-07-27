@@ -653,6 +653,41 @@ void main() {
     expect(failurePlays, 1);
   });
 
+  test('plays the start chime once per dictation', () async {
+    var startPlays = 0;
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: FakeSttEngine(transcript: 'Hello.'),
+      audioRecorder: FakeAudioRecorder(),
+      startSoundPlayer: () async => startPlays += 1,
+    );
+
+    await controller.startListening();
+    expect(startPlays, 1);
+    await controller.stopListening();
+    expect(startPlays, 1);
+
+    await controller.startListening();
+    expect(startPlays, 2);
+    await controller.stopListening();
+  });
+
+  test('a broken start-sound player never blocks dictation', () async {
+    final platformBridge = MockPlatformBridge();
+    final controller = DictationController(
+      platformBridge: platformBridge,
+      sttEngine: FakeSttEngine(transcript: 'Still works.'),
+      audioRecorder: FakeAudioRecorder(),
+      startSoundPlayer: () async => throw StateError('no audio device'),
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(controller.phase, DictationPhase.idle);
+    expect(platformBridge.lastInsertedText, 'Still works.');
+  });
+
   test('a broken failure-sound player never blocks the failure flow', () async {
     final platformBridge = MockPlatformBridge();
     final controller = DictationController(

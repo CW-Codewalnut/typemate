@@ -5,7 +5,7 @@
 //   dart tool/generate_failure_tone.dart
 //
 // The tone is a soft descending 660Hz -> 440Hz pair — the falling inverse
-// of the rising start chime (tool/generate_overlay_chime.dart), so success
+// of the rising start chime (tool/generate_start_sound.dart), so success
 // and failure are distinguishable by ear alone.
 import 'dart:io';
 import 'dart:math' as math;

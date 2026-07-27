@@ -188,46 +188,47 @@ void main() {
     expect(fetchScript, contains('if (Platform.isLinux) {'));
   });
 
-  test('native macOS overlay matches the Windows pill and plays the chime', () {
-    final source = File(
-      'macos/Runner/TypeMateOverlay.swift',
-    ).readAsStringSync();
+  test(
+    'native macOS overlay matches the Windows pill, no sound of its own',
+    () {
+      final source = File(
+        'macos/Runner/TypeMateOverlay.swift',
+      ).readAsStringSync();
 
-    // Same geometry and cadence as windows/runner/type_mate_overlay.cpp.
-    expect(source, contains('overlayWidth: CGFloat = 210'));
-    expect(source, contains('overlayHeight: CGFloat = 58'));
-    expect(source, contains('let barCount = 7'));
-    expect(source, contains('let barWidth = 5.0'));
-    expect(source, contains('let gap = 6.0'));
-    expect(source, contains('let maxHeight = 18.0'));
-    expect(source, contains('* 0.55'));
-    expect(source, contains('tickSeconds: TimeInterval = 0.07'));
-    // Rounded capsule bars and pill.
-    expect(source, contains('xRadius: barWidth / 2'));
-    expect(source, contains('xRadius: overlayHeight / 2'));
-    // Never steals focus from the field being dictated into.
-    expect(source, contains('.nonactivatingPanel'));
-    expect(source, contains('orderFrontRegardless'));
-    // The shared chime, once per appearance.
-    expect(source, contains('overlayChimeWavBase64'));
-    expect(source, contains('NSSound(data:'));
-    expect(source, contains('let appearing = panel == nil'));
+      // Same geometry and cadence as windows/runner/type_mate_overlay.cpp.
+      expect(source, contains('overlayWidth: CGFloat = 210'));
+      expect(source, contains('overlayHeight: CGFloat = 58'));
+      expect(source, contains('let barCount = 7'));
+      expect(source, contains('let barWidth = 5.0'));
+      expect(source, contains('let gap = 6.0'));
+      expect(source, contains('let maxHeight = 18.0'));
+      expect(source, contains('* 0.55'));
+      expect(source, contains('tickSeconds: TimeInterval = 0.07'));
+      // Rounded capsule bars and pill.
+      expect(source, contains('xRadius: barWidth / 2'));
+      expect(source, contains('xRadius: overlayHeight / 2'));
+      // Never steals focus from the field being dictated into.
+      expect(source, contains('.nonactivatingPanel'));
+      expect(source, contains('orderFrontRegardless'));
+      // Sounds moved to lib/src/core/platform/dictation_sounds.dart; the
+      // overlay must not play audio of its own or the chime would double up.
+      expect(source, isNot(contains('NSSound')));
+      expect(source, isNot(contains('overlayChimeWavBase64')));
 
-    final window = File(
-      'macos/Runner/MainFlutterWindow.swift',
-    ).readAsStringSync();
-    expect(window, contains('typemate/macos'));
-    expect(window, contains('showOverlay'));
-    expect(window, contains('hideOverlay'));
+      final window = File(
+        'macos/Runner/MainFlutterWindow.swift',
+      ).readAsStringSync();
+      expect(window, contains('typemate/macos'));
+      expect(window, contains('showOverlay'));
+      expect(window, contains('hideOverlay'));
 
-    final chime = File('macos/Runner/OverlayChimeWav.swift').readAsStringSync();
-    expect(chime, contains('overlayChimeWavBase64'));
-
-    // The Xcode project must compile both new sources.
-    final project = File(
-      'macos/Runner.xcodeproj/project.pbxproj',
-    ).readAsStringSync();
-    expect(project, contains('TypeMateOverlay.swift in Sources'));
-    expect(project, contains('OverlayChimeWav.swift in Sources'));
-  });
+      // The Xcode project must compile the overlay and must no longer
+      // reference the retired chime source.
+      final project = File(
+        'macos/Runner.xcodeproj/project.pbxproj',
+      ).readAsStringSync();
+      expect(project, contains('TypeMateOverlay.swift in Sources'));
+      expect(project, isNot(contains('OverlayChimeWav')));
+    },
+  );
 }

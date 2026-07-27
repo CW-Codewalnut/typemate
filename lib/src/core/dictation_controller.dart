@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'audio/audio_recorder.dart';
 import '../models/dictation_state.dart';
 import '../utils/text_metrics.dart';
-import 'platform/failure_sound.dart';
+import 'platform/dictation_sounds.dart';
 import 'platform/platform_bridge.dart';
 import 'stt/stt_engine.dart';
 
@@ -30,7 +30,8 @@ class DictationController extends ChangeNotifier {
     TranscriptionFailedCallback? onTranscriptionFailed,
     Duration transcribeTimeout = defaultTranscribeTimeout,
     Duration recorderStopTimeout = defaultRecorderStopTimeout,
-    FailureSoundPlayer? failureSoundPlayer,
+    DictationSoundPlayer? startSoundPlayer,
+    DictationSoundPlayer? failureSoundPlayer,
   }) {
     assert(
       audioRecorder != null || audioRecorderProvider != null,
@@ -45,6 +46,7 @@ class DictationController extends ChangeNotifier {
       onTranscriptionFailed,
       transcribeTimeout,
       recorderStopTimeout,
+      startSoundPlayer ?? playDictationStartSound,
       failureSoundPlayer ?? playDictationFailureSound,
     );
   }
@@ -57,6 +59,7 @@ class DictationController extends ChangeNotifier {
     this._onTranscriptionFailed,
     this._transcribeTimeout,
     this._recorderStopTimeout,
+    this._startSoundPlayer,
     this._failureSoundPlayer,
   );
 
@@ -83,7 +86,8 @@ class DictationController extends ChangeNotifier {
   final TranscriptionFailedCallback? _onTranscriptionFailed;
   final Duration _transcribeTimeout;
   final Duration _recorderStopTimeout;
-  final FailureSoundPlayer _failureSoundPlayer;
+  final DictationSoundPlayer _startSoundPlayer;
+  final DictationSoundPlayer _failureSoundPlayer;
 
   /// User-facing failure copy: plain words, no runtime internals. The
   /// History pointer is appended only to the OS notification — inside the
@@ -150,6 +154,13 @@ class DictationController extends ChangeNotifier {
 
     try {
       await _platformBridge.showListeningOverlay();
+      try {
+        // The rising chime marks listening — previously played by the
+        // native overlays, now one Dart implementation for all platforms.
+        await _startSoundPlayer();
+      } catch (_) {
+        // Sound is a garnish; the dictation continues without it.
+      }
       await recorder.start();
     } catch (error) {
       _activeRecorder = null;

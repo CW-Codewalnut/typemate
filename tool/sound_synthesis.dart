@@ -1,5 +1,5 @@
 // Shared audio helpers for the sound-generator tools
-// (generate_overlay_chime.dart, generate_failure_tone.dart): one WAV
+// (generate_start_sound.dart, generate_failure_tone.dart): one WAV
 // encoder so the container logic is never repeated per sound.
 import 'dart:typed_data';
 
