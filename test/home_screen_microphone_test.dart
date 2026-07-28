@@ -145,6 +145,44 @@ void main() {
     },
   );
 
+  testWidgets('a transcript can be deleted individually', (tester) async {
+    final historyController = DictationHistoryController();
+    final dictationController = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: MockSttEngine(),
+      audioRecorder: ImmediateAudioRecorder(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          controller: dictationController,
+          historyController: historyController,
+          microphoneController: MicrophoneSettingsController(
+            discovery: FakeMicrophoneDiscovery(const []),
+          ),
+          speechSettingsController: SpeechSettingsController(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 250));
+    await historyController.addTranscript('keep this one');
+    await historyController.addTranscript('delete this one');
+    await tester.pump();
+
+    // Entries are newest-first, so the first delete belongs to the entry
+    // added last.
+    final deleteButtons = find.byKey(const Key('history-delete-button'));
+    expect(deleteButtons, findsNWidgets(2));
+
+    await tester.tap(deleteButtons.first);
+    await tester.pump();
+
+    expect(find.text('delete this one'), findsNothing);
+    expect(find.text('keep this one'), findsOneWidget);
+    expect(historyController.entries.single.text, 'keep this one');
+  });
+
   testWidgets('other retries disable while one retry is transcribing', (
     tester,
   ) async {

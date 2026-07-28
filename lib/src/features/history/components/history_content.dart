@@ -66,9 +66,7 @@ class HistoryContent extends StatelessWidget {
                       dictationController!.isBusy
                   ? null
                   : () => _retryEntry(entry),
-              onDelete: entry.isFailed
-                  ? () => historyController.removeEntry(entry)
-                  : null,
+              onDelete: () => historyController.removeEntry(entry),
               expiresAt: entry.isFailed
                   ? historyController.failedEntryExpiry(entry)
                   : null,
