@@ -116,7 +116,10 @@ jobs:
           path: |
             models
             bin
-          key: speech-runtime-${{ runner.os }}-${{ hashFiles('tool/fetch_whisper_runtime.dart') }}
+          # The overlay source is in the key so editing it busts the cache
+          # and the Linux build recompiles the overlay (belt-and-suspenders
+          # with the source-newer-than-output check in the fetch script).
+          key: speech-runtime-${{ runner.os }}-${{ hashFiles('tool/fetch_whisper_runtime.dart', 'linux/overlay/typemate_overlay.c') }}
 
       - name: Build macOS app
         if: runner.os == 'macOS'
