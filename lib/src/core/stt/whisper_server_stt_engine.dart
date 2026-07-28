@@ -4,6 +4,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import '../audio/audio_recorder.dart';
+import '../diagnostics/diagnostic_log.dart';
+import '../diagnostics/diagnostic_reporter.dart';
 import 'parakeet_server_stt_engine.dart' show ServerProcessStarter;
 import 'stt_engine.dart';
 import 'whisper_cli_stt_engine.dart' show SttRuntimeException;
@@ -113,6 +115,7 @@ class WhisperServerSttEngine implements DisposableSttEngine {
     this.startupTimeout = const Duration(seconds: 30),
     this.responseTimeout = const Duration(seconds: 60),
     this.bodyReadTimeout = const Duration(seconds: 30),
+    this.diagnostics,
     ServerProcessStarter? processStarter,
     ServerConnectionProbe? connectionProbe,
     WhisperInferenceClient? inferenceClient,
@@ -144,6 +147,10 @@ class WhisperServerSttEngine implements DisposableSttEngine {
   final ServerProcessStarter processStarter;
   final ServerConnectionProbe connectionProbe;
   final WhisperInferenceClient? _injectedInferenceClient;
+
+  /// Records server lifecycle events and startup failures (with a stderr
+  /// tail) for troubleshooting; null in tests that don't assert on it.
+  final DiagnosticReporter? diagnostics;
 
   WhisperInferenceClient get inferenceClient =>
       _injectedInferenceClient ??
@@ -222,27 +229,65 @@ class WhisperServerSttEngine implements DisposableSttEngine {
     }
 
     _serverProcess?.kill();
-    _serverProcess = await processStarter(serverExecutable, [
-      '-m',
-      modelPath,
-      '--port',
-      '$port',
-      '-l',
-      cliLanguage,
-      '--beam-size',
-      '1',
-      '--vad',
-      '--vad-model',
-      vadModelPath,
-      '--vad-speech-pad-ms',
-      '100',
-    ]);
-    unawaited(_serverProcess!.stdout.drain<void>());
-    unawaited(_serverProcess!.stderr.drain<void>());
+    diagnostics?.info(
+      'stt',
+      'starting whisper server for "$cliLanguage" on port $port '
+          '($serverExecutable)',
+    );
+    final startupStopwatch = Stopwatch()..start();
+    final Process process;
+    try {
+      process = await processStarter(serverExecutable, [
+        '-m',
+        modelPath,
+        '--port',
+        '$port',
+        '-l',
+        cliLanguage,
+        '--beam-size',
+        '1',
+        '--vad',
+        '--vad-model',
+        vadModelPath,
+        '--vad-speech-pad-ms',
+        '100',
+      ]);
+    } catch (error) {
+      _serverProcess = null;
+      diagnostics?.failure(
+        'stt',
+        'whisper-spawn-failed',
+        'could not start the whisper server process (port $port): $error',
+      );
+      rethrow;
+    }
+    _serverProcess = process;
+    // Drain stdout so the pipe never blocks the server; stderr keeps a
+    // bounded tail so a startup failure can say why.
+    final stderrTail = DiagnosticTailBuffer();
+    unawaited(process.stdout.drain<void>());
+    process.stderr
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .listen(stderrTail.add, onError: (_) {}, cancelOnError: false);
+    // An early exit (crash, missing DLL, unsupported CPU) shows up in the
+    // log as an exit code instead of a silent startup timeout.
+    unawaited(
+      process.exitCode.then(
+        (code) => diagnostics?.info(
+          'stt',
+          'whisper server (port $port) exited with code $code',
+        ),
+      ),
+    );
 
     final deadline = DateTime.now().add(startupTimeout);
     while (DateTime.now().isBefore(deadline)) {
       if (await connectionProbe(port)) {
+        diagnostics?.info(
+          'stt',
+          'whisper server (port $port) ready in '
+              '${startupStopwatch.elapsedMilliseconds}ms',
+        );
         return;
       }
       await Future<void>.delayed(const Duration(milliseconds: 200));
@@ -250,6 +295,13 @@ class WhisperServerSttEngine implements DisposableSttEngine {
 
     _serverProcess?.kill();
     _serverProcess = null;
+    diagnostics?.failure(
+      'stt',
+      'whisper-start-timeout',
+      'whisper server (port $port) did not accept connections within '
+          '${startupTimeout.inSeconds}s'
+          '${stderrTail.isEmpty ? '' : '; stderr tail:\n${stderrTail.tail}'}',
+    );
     throw const SttRuntimeException(
       'The local speech server did not start. '
       'Check the whisper.cpp runtime and the model file.',

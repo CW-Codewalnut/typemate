@@ -1,12 +1,24 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:typemate/src/core/audio/audio_recorder.dart';
+import 'package:typemate/src/core/diagnostics/diagnostic_log.dart';
+import 'package:typemate/src/core/diagnostics/diagnostic_reporter.dart';
 import 'package:typemate/src/core/stt/parakeet_server_stt_engine.dart';
 import 'package:typemate/src/core/stt/whisper_cli_stt_engine.dart'
     show SttRuntimeException;
+
+class RecordingTelemetrySink implements TelemetrySink {
+  final calls = <(String, String, String)>[];
+
+  @override
+  void reportFailure(String area, String kind, String message) {
+    calls.add((area, kind, message));
+  }
+}
 
 void main() {
   group('decodePcm16Wav', () {
@@ -156,6 +168,32 @@ void main() {
       expect(transcript, 'closed late');
     });
 
+    test('reports a startup timeout with the server stderr tail', () async {
+      final logFile = File('${temp.path}/typemate.log');
+      final sink = RecordingTelemetrySink();
+      final transport = FakeTransport(
+        response: '{"text": "x"}',
+        serverEverStarts: false,
+        stderrText: 'onnxruntime error: model load failed',
+      );
+      final engine = buildEngine(
+        transport,
+        startupTimeout: const Duration(milliseconds: 50),
+        diagnostics: DiagnosticReporter(
+          log: DiagnosticLog(file: logFile),
+          telemetrySink: sink,
+        ),
+      );
+
+      await expectLater(engine.prepare(), throwsA(isA<SttRuntimeException>()));
+
+      final content = logFile.readAsStringSync();
+      expect(content, contains('[stt] starting English speech server'));
+      expect(content, contains('parakeet-start-timeout'));
+      expect(content, contains('onnxruntime error: model load failed'));
+      expect(sink.calls.single.$2, 'parakeet-start-timeout');
+    });
+
     test('shutdown kills the server process', () async {
       final transport = FakeTransport(response: '{"text": "x"}');
       final engine = buildEngine(transport);
@@ -172,6 +210,7 @@ ParakeetServerSttEngine buildEngine(
   FakeTransport transport, {
   Duration startupTimeout = const Duration(seconds: 5),
   Duration socketCloseTimeout = const Duration(seconds: 5),
+  DiagnosticReporter? diagnostics,
 }) {
   return ParakeetServerSttEngine(
     serverExecutable: 'sherpa-server.exe',
@@ -181,6 +220,7 @@ ParakeetServerSttEngine buildEngine(
     tokensPath: 'tokens.txt',
     startupTimeout: startupTimeout,
     socketCloseTimeout: socketCloseTimeout,
+    diagnostics: diagnostics,
     processStarter: transport.startProcess,
     webSocketConnector: transport.connect,
   );
@@ -192,9 +232,13 @@ class FakeTransport {
     this.alreadyRunning = false,
     this.serverEverStarts = true,
     this.closeHangs = false,
+    this.stderrText,
   });
 
   final String response;
+
+  /// Emitted as the spawned server's stderr, for diagnostics assertions.
+  final String? stderrText;
 
   /// Simulates an orphaned server from a previous run that is already
   /// reachable before this engine starts anything.
@@ -211,7 +255,7 @@ class FakeTransport {
     String executable,
     List<String> arguments,
   ) async {
-    final process = FakeProcess();
+    final process = FakeProcess(stderrText: stderrText);
     startedProcesses.add(process);
     startedArguments.add(arguments);
     return process;
@@ -256,17 +300,29 @@ class FakeSocket implements SttServerSocket {
 }
 
 class FakeProcess implements Process {
+  FakeProcess({this.stderrText});
+
   bool killed = false;
+  final String? stderrText;
+  final _exitCode = Completer<int>();
+
+  @override
+  Future<int> get exitCode => _exitCode.future;
 
   @override
   Stream<List<int>> get stdout => const Stream.empty();
 
   @override
-  Stream<List<int>> get stderr => const Stream.empty();
+  Stream<List<int>> get stderr => stderrText == null
+      ? const Stream.empty()
+      : Stream.value(utf8.encode(stderrText!));
 
   @override
   bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
     killed = true;
+    if (!_exitCode.isCompleted) {
+      _exitCode.complete(-1);
+    }
     return true;
   }
 

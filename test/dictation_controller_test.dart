@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:typemate/src/core/audio/audio_denoiser.dart';
 import 'package:typemate/src/core/audio/audio_recorder.dart';
+import 'package:typemate/src/core/diagnostics/diagnostic_log.dart';
+import 'package:typemate/src/core/diagnostics/diagnostic_reporter.dart';
 import 'package:typemate/src/core/dictation_controller.dart';
 import 'package:typemate/src/models/dictation_state.dart';
 import 'package:typemate/src/core/platform/platform_bridge.dart';
@@ -859,6 +861,103 @@ void main() {
     expect(platformBridge.insertAttempted, isTrue);
     expect(controller.latestTranscript, 'Insert this text.');
   });
+
+  group('diagnostics', () {
+    late Directory temp;
+    late File logFile;
+    late RecordingTelemetrySink sink;
+    late DiagnosticReporter reporter;
+
+    setUp(() {
+      temp = Directory.systemTemp.createTempSync('typemate-diag');
+      logFile = File('${temp.path}/typemate.log');
+      sink = RecordingTelemetrySink();
+      reporter = DiagnosticReporter(
+        log: DiagnosticLog(file: logFile),
+        telemetrySink: sink,
+      );
+    });
+
+    tearDown(() {
+      temp.deleteSync(recursive: true);
+    });
+
+    test('a transcription timeout is logged and reported', () async {
+      final controller = DictationController(
+        platformBridge: MockPlatformBridge(),
+        sttEngine: HangingSttEngine(),
+        audioRecorder: FakeAudioRecorder(),
+        diagnostics: reporter,
+        transcribeTimeout: const Duration(milliseconds: 50),
+      );
+
+      await controller.startListening();
+      await controller.stopListening();
+
+      final content = logFile.readAsStringSync();
+      expect(content, contains('[dictation] transcribe-timeout'));
+      expect(content, contains('clip 800ms'));
+      expect(sink.calls.single.$2, 'transcribe-timeout');
+    });
+
+    test('a transcription failure is logged with its cause', () async {
+      final controller = DictationController(
+        platformBridge: MockPlatformBridge(),
+        sttEngine: ThrowingSttEngine(),
+        audioRecorder: FakeAudioRecorder(),
+        diagnostics: reporter,
+      );
+
+      await controller.startListening();
+      await controller.stopListening();
+
+      expect(
+        logFile.readAsStringSync(),
+        contains('[dictation] transcribe-failed'),
+      );
+      expect(sink.calls.single.$2, 'transcribe-failed');
+    });
+
+    test('an engine prepare failure is logged and reported', () async {
+      final controller = DictationController(
+        platformBridge: MockPlatformBridge(),
+        sttEngine: ThrowingPrepareSttEngine(),
+        audioRecorder: FakeAudioRecorder(),
+        diagnostics: reporter,
+      );
+
+      await controller.prepare();
+
+      expect(logFile.readAsStringSync(), contains('[engine] prepare-failed'));
+      expect(sink.calls.single.$2, 'prepare-failed');
+    });
+
+    test('a successful dictation logs timing but no transcript', () async {
+      final controller = DictationController(
+        platformBridge: MockPlatformBridge(),
+        sttEngine: FakeSttEngine(transcript: 'secret words'),
+        audioRecorder: FakeAudioRecorder(),
+        diagnostics: reporter,
+      );
+
+      await controller.startListening();
+      await controller.stopListening();
+
+      final content = logFile.readAsStringSync();
+      expect(content, contains('transcribed 800ms clip in'));
+      expect(content, isNot(contains('secret words')));
+      expect(sink.calls, isEmpty);
+    });
+  });
+}
+
+class RecordingTelemetrySink implements TelemetrySink {
+  final calls = <(String, String, String)>[];
+
+  @override
+  void reportFailure(String area, String kind, String message) {
+    calls.add((area, kind, message));
+  }
 }
 
 class FakeAudioRecorder implements AudioRecorder {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/diagnostics/telemetry_controller.dart';
 import '../../core/dictation_controller.dart';
 import '../../core/dictation_history_controller.dart';
 import '../../core/hold_shortcut_controller.dart';
@@ -19,6 +20,8 @@ class HomeScreen extends StatefulWidget {
     required this.microphoneController,
     required this.speechSettingsController,
     this.shortcutController,
+    this.telemetryController,
+    this.logsDirectoryPath,
     this.onQuitRequested,
   });
 
@@ -27,6 +30,8 @@ class HomeScreen extends StatefulWidget {
   final MicrophoneSettingsController microphoneController;
   final SpeechSettingsController speechSettingsController;
   final HoldShortcutController? shortcutController;
+  final TelemetryController? telemetryController;
+  final String? logsDirectoryPath;
   final Future<void> Function()? onQuitRequested;
 
   @override
@@ -67,6 +72,8 @@ class _HomeScreenState extends State<HomeScreen> {
             microphoneController: widget.microphoneController,
             speechSettingsController: widget.speechSettingsController,
             shortcutController: widget.shortcutController,
+            telemetryController: widget.telemetryController,
+            logsDirectoryPath: widget.logsDirectoryPath,
             onQuitRequested: widget.onQuitRequested,
           ),
         };

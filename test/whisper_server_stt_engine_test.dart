@@ -1,11 +1,23 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:typemate/src/core/audio/audio_recorder.dart';
+import 'package:typemate/src/core/diagnostics/diagnostic_log.dart';
+import 'package:typemate/src/core/diagnostics/diagnostic_reporter.dart';
 import 'package:typemate/src/core/stt/whisper_server_stt_engine.dart';
 import 'package:typemate/src/core/stt/whisper_cli_stt_engine.dart'
     show SttRuntimeException;
+
+class _RecordingTelemetrySink implements TelemetrySink {
+  final calls = <(String, String, String)>[];
+
+  @override
+  void reportFailure(String area, String kind, String message) {
+    calls.add((area, kind, message));
+  }
+}
 
 void main() {
   const recording = AudioRecording(
@@ -110,6 +122,34 @@ void main() {
     },
   );
 
+  test('reports a startup timeout with the server stderr tail', () async {
+    final temp = await Directory.systemTemp.createTemp('whisper-diag-test');
+    addTearDown(() async => temp.delete(recursive: true));
+    final logFile = File('${temp.path}/typemate.log');
+    final sink = _RecordingTelemetrySink();
+    final transport = FakeHttpTransport(
+      response: '{"text": "x"}',
+      serverEverStarts: false,
+      stderrText: 'whisper_init: failed to load model',
+    );
+    final engine = buildEngine(
+      transport,
+      startupTimeout: const Duration(milliseconds: 50),
+      diagnostics: DiagnosticReporter(
+        log: DiagnosticLog(file: logFile),
+        telemetrySink: sink,
+      ),
+    );
+
+    await expectLater(engine.prepare(), throwsA(isA<SttRuntimeException>()));
+
+    final content = logFile.readAsStringSync();
+    expect(content, contains('[stt] starting whisper server for "hi"'));
+    expect(content, contains('whisper-start-timeout'));
+    expect(content, contains('whisper_init: failed to load model'));
+    expect(sink.calls.single.$2, 'whisper-start-timeout');
+  });
+
   test('shutdown kills the server process', () async {
     final transport = FakeHttpTransport(response: '{"text": "x"}');
     final engine = buildEngine(transport);
@@ -166,6 +206,7 @@ WhisperServerSttEngine buildEngine(
   FakeHttpTransport transport, {
   String? prompt,
   Duration startupTimeout = const Duration(seconds: 5),
+  DiagnosticReporter? diagnostics,
 }) {
   return WhisperServerSttEngine(
     serverExecutable: 'bin/whisper/whisper-server.exe',
@@ -175,6 +216,7 @@ WhisperServerSttEngine buildEngine(
     port: 43008,
     prompt: prompt,
     startupTimeout: startupTimeout,
+    diagnostics: diagnostics,
     processStarter: transport.startProcess,
     connectionProbe: transport.probe,
     inferenceClient: transport.infer,
@@ -186,11 +228,15 @@ class FakeHttpTransport {
     required this.response,
     this.alreadyRunning = false,
     this.serverEverStarts = true,
+    this.stderrText,
   });
 
   final String response;
   final bool alreadyRunning;
   final bool serverEverStarts;
+
+  /// Emitted as the spawned server's stderr, for diagnostics assertions.
+  final String? stderrText;
 
   final startedProcesses = <FakeServerProcess>[];
   final startedArguments = <List<String>>[];
@@ -201,7 +247,7 @@ class FakeHttpTransport {
     String executable,
     List<String> arguments,
   ) async {
-    final process = FakeServerProcess();
+    final process = FakeServerProcess(stderrText: stderrText);
     startedProcesses.add(process);
     startedArguments.add(arguments);
     return process;
@@ -222,17 +268,29 @@ class FakeHttpTransport {
 }
 
 class FakeServerProcess implements Process {
+  FakeServerProcess({this.stderrText});
+
   bool killed = false;
+  final String? stderrText;
+  final _exitCode = Completer<int>();
+
+  @override
+  Future<int> get exitCode => _exitCode.future;
 
   @override
   Stream<List<int>> get stdout => const Stream.empty();
 
   @override
-  Stream<List<int>> get stderr => const Stream.empty();
+  Stream<List<int>> get stderr => stderrText == null
+      ? const Stream.empty()
+      : Stream.value(utf8.encode(stderrText!));
 
   @override
   bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
     killed = true;
+    if (!_exitCode.isCompleted) {
+      _exitCode.complete(-1);
+    }
     return true;
   }
 
