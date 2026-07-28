@@ -73,6 +73,78 @@ void main() {
     },
   );
 
+  testWidgets('shows the engine starting state until prepare completes', (
+    tester,
+  ) async {
+    final engine = HoldingPrepareSttEngine();
+    final dictationController = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: engine,
+      audioRecorder: ImmediateAudioRecorder(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          controller: dictationController,
+          historyController: DictationHistoryController(),
+          microphoneController: MicrophoneSettingsController(
+            discovery: FakeMicrophoneDiscovery(const []),
+          ),
+          speechSettingsController: SpeechSettingsController(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 250));
+
+    // The hotkey does nothing while the engine loads; the page says so
+    // instead of showing a dictation instruction that will not work.
+    expect(find.textContaining('Starting the speech engine'), findsOneWidget);
+    expect(find.textContaining('Press and hold'), findsNothing);
+
+    engine.completePrepare();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.textContaining('Starting the speech engine'), findsNothing);
+    expect(find.textContaining('Press and hold'), findsOneWidget);
+  });
+
+  testWidgets(
+    'a failed entry shows its auto-delete date and deletes on demand',
+    (tester) async {
+      final historyController = DictationHistoryController();
+      final dictationController = DictationController(
+        platformBridge: MockPlatformBridge(),
+        sttEngine: MockSttEngine(),
+        audioRecorder: ImmediateAudioRecorder(),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomeScreen(
+            controller: dictationController,
+            historyController: historyController,
+            microphoneController: MicrophoneSettingsController(
+              discovery: FakeMicrophoneDiscovery(const []),
+            ),
+            speechSettingsController: SpeechSettingsController(),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pump(const Duration(milliseconds: 250));
+      await historyController.addFailure('failed', recordingPath: 'kept.wav');
+      await tester.pump();
+
+      expect(find.textContaining('Auto-deletes in 30 days'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('history-delete-button')));
+      await tester.pump();
+
+      expect(historyController.entries, isEmpty);
+      expect(find.byKey(const Key('history-delete-button')), findsNothing);
+    },
+  );
+
   testWidgets('other retries disable while one retry is transcribing', (
     tester,
   ) async {
@@ -655,6 +727,21 @@ class ImmediateAudioRecorder implements AudioRecorder {
       duration: Duration(milliseconds: 500),
     );
   }
+}
+
+class HoldingPrepareSttEngine implements SttEngine {
+  final Completer<void> _prepared = Completer<void>();
+
+  void completePrepare() => _prepared.complete();
+
+  @override
+  Future<bool> isReady() async => _prepared.isCompleted;
+
+  @override
+  Future<void> prepare() => _prepared.future;
+
+  @override
+  Future<String> transcribe(AudioRecording recording) async => '';
 }
 
 class FailingSttEngine implements SttEngine {

@@ -247,6 +247,24 @@ class DictationHistoryController extends ChangeNotifier {
     await store.saveEntries(_entries);
   }
 
+  /// When [entry] and its kept recording are deleted by the 30-day sweep,
+  /// shown on the entry so the user knows the recording does not sit
+  /// around forever.
+  DateTime failedEntryExpiry(DictationHistoryEntry entry) =>
+      entry.createdAt.add(failedEntryMaxAge);
+
+  /// Immediate deletion by the user: the entry goes away now and takes its
+  /// kept recording with it.
+  Future<void> removeEntry(DictationHistoryEntry entry) async {
+    _deleteRecordingQuietly(entry);
+    _entries = [
+      for (final existing in _entries)
+        if (!identical(existing, entry)) existing,
+    ];
+    notifyListeners();
+    await store.saveEntries(_entries);
+  }
+
   /// A retry that failed again: the entry keeps its recording but shows
   /// the fresh reason.
   Future<void> updateFailureReason(

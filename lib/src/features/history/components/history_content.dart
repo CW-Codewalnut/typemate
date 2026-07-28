@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/dictation_controller.dart';
 import '../../../core/dictation_history_controller.dart';
 import '../../../core/hold_shortcut_controller.dart';
+import '../../../models/dictation_state.dart';
 import 'empty_history_card.dart';
 import 'history_entry_card.dart';
 import 'shortcut_instruction_card.dart';
@@ -33,9 +34,15 @@ class HistoryContent extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        ShortcutInstructionCard(
-          instruction: _shortcutInstruction(shortcutController),
-        ),
+        if (dictationController?.phase == DictationPhase.preparing)
+          const ShortcutInstructionCard(
+            instruction: 'Starting the speech engine… one moment.',
+            busy: true,
+          )
+        else
+          ShortcutInstructionCard(
+            instruction: _shortcutInstruction(shortcutController),
+          ),
         if (historyController.entries.isNotEmpty) ...[
           const SizedBox(height: 34),
           _TodayHeader(onClearHistory: historyController.clear),
@@ -59,6 +66,12 @@ class HistoryContent extends StatelessWidget {
                       dictationController!.isBusy
                   ? null
                   : () => _retryEntry(entry),
+              onDelete: entry.isFailed
+                  ? () => historyController.removeEntry(entry)
+                  : null,
+              expiresAt: entry.isFailed
+                  ? historyController.failedEntryExpiry(entry)
+                  : null,
             ),
       ],
     );

@@ -96,6 +96,33 @@ void main() {
     expect(wav.existsSync(), isTrue);
   });
 
+  test('removeEntry deletes the entry and its kept recording now', () async {
+    final wav = wavFile('kept.wav');
+    final controller = DictationHistoryController(store: _MemoryStore());
+    await controller.addTranscript('keep me');
+    await controller.addFailure('failed', recordingPath: wav.path);
+
+    await controller.removeEntry(
+      controller.entries.singleWhere((entry) => entry.isFailed),
+    );
+
+    expect(controller.entries.single.text, 'keep me');
+    expect(wav.existsSync(), isFalse);
+  });
+
+  test('failedEntryExpiry is the entry age limit from creation', () async {
+    final controller = DictationHistoryController(
+      store: _MemoryStore(),
+      clock: () => DateTime(2026, 7, 27, 12),
+    );
+    await controller.addFailure('failed');
+
+    expect(
+      controller.failedEntryExpiry(controller.entries.single),
+      DateTime(2026, 8, 26, 12),
+    );
+  });
+
   test('clearing history deletes kept recordings', () async {
     final wav = wavFile('kept.wav');
     final controller = DictationHistoryController(store: _MemoryStore());
