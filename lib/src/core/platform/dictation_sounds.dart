@@ -83,8 +83,11 @@ void _playWindows(String path) {
 }
 
 Future<void> _playLinux(String path) async {
-  // PipeWire/Pulse desktops ship paplay; aplay covers bare ALSA setups.
+  // Player availability differs per distro: stock Lubuntu ships only
+  // pw-play (PipeWire), Pulse desktops ship paplay, bare ALSA has aplay —
+  // try in that order and stop at the first that works.
   for (final command in [
+    ['pw-play', path],
     ['paplay', path],
     ['aplay', '-q', path],
   ]) {
