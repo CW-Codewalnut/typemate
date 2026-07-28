@@ -14,12 +14,12 @@ import 'dart:io';
 /// clone runs this once. Release bundles copy both folders next to the
 /// executable.
 ///
-/// Runtime revision 2026-07-28 — CI caches models/ and bin/ keyed on this
+/// Runtime revision 2026-07-28b — CI caches models/ and bin/ keyed on this
 /// file's hash, so bump this line whenever a hosted binary is replaced
-/// under the same asset name (this revision: chime-less Linux overlay —
-/// dictation sounds now play from Dart assets, so the helper no longer
-/// carries or plays a chime; the replaced typemate-overlay-linux-x64.tar.gz
-/// must be uploaded to the models-v1 release before this reaches CI).
+/// under the same asset name (this revision: the Linux overlay is now
+/// compiled from linux/overlay/typemate_overlay.c instead of fetched, so
+/// there is no hosted overlay binary to keep in sync — the source is the
+/// single source of truth).
 
 class _ModelSpec {
   const _ModelSpec(this.fileName, this.url, this.expectedSizeBytes);
@@ -159,14 +159,11 @@ Future<void> main(List<String> arguments) async {
       if (exitCode != 0) {
         return;
       }
-      await _fetchToolArchive(
-        client,
-        url:
-            'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/typemate-overlay-linux-x64.tar.gz',
-        targetDirectory: 'bin/overlay',
-        files: const ['typemate-overlay'],
-        force: force,
-      );
+      // The overlay is compiled from the in-repo source rather than fetched
+      // as a prebuilt binary: the binary is small, the source is the single
+      // source of truth, and a stale hosted binary previously drifted from
+      // the source (it kept playing a chime the app now plays itself).
+      await _compileLinuxOverlay(force: force);
     }
   } finally {
     client.close();
@@ -222,6 +219,54 @@ Future<void> _fetchToolArchive(
     stdout.writeln('tool_ready=${target.absolute.path}');
   } finally {
     await stagingDirectory.delete(recursive: true);
+  }
+}
+
+/// Compiles the X11 overlay helper from `linux/overlay/typemate_overlay.c`
+/// into `bin/overlay/typemate-overlay`. Building from source (rather than
+/// fetching a prebuilt binary) keeps the shipped overlay in lockstep with
+/// the repo — no hosted binary to keep in sync. Needs gcc plus the libX11
+/// and libXext dev headers; when they are missing the overlay is skipped
+/// with a warning (it is optional — the app falls back to its in-window
+/// status), so a developer box without them still builds.
+Future<void> _compileLinuxOverlay({required bool force}) async {
+  const output = 'bin/overlay/typemate-overlay';
+  if (!force && File(output).existsSync()) {
+    stdout.writeln('tool_ready=${File(output).absolute.parent.path}');
+    return;
+  }
+  const source = 'linux/overlay/typemate_overlay.c';
+  if (!File(source).existsSync()) {
+    stderr.writeln('overlay_source_missing=$source');
+    return;
+  }
+  await Directory('bin/overlay').create(recursive: true);
+  stdout.writeln('compiling=$source');
+  try {
+    final result = await Process.run('gcc', [
+      source,
+      '-o',
+      output,
+      '-lX11',
+      '-lXext',
+      '-lm',
+    ]);
+    if (result.exitCode != 0) {
+      // Non-fatal: the overlay is a nicety, and its absence degrades to the
+      // in-window status rather than breaking dictation.
+      stderr.writeln(
+        'overlay_compile_failed (install gcc, libx11-dev, libxext-dev to '
+        'ship the overlay): ${result.stderr}',
+      );
+      return;
+    }
+    await _markExecutable(File(output));
+    stdout.writeln('tool_ready=${File(output).absolute.parent.path}');
+  } on ProcessException catch (error) {
+    stderr.writeln(
+      'overlay_compile_skipped (gcc not found; install gcc, libx11-dev, '
+      'libxext-dev to ship the overlay): ${error.message}',
+    );
   }
 }
 
