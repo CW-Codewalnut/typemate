@@ -63,18 +63,24 @@ binary to keep in sync.
 
 ## Design choices worth a reviewer's attention
 
-- **Compile failure is non-fatal.** If gcc / libX11-dev / libXext-dev are
-  absent, `_compileLinuxOverlay` prints a warning and returns without
-  setting a failure exit code. Rationale: the overlay is optional — the app
-  degrades to its in-window status when the binary is missing
-  (`resolveBundledTool` already falls back), so a developer box without the
-  X11 dev headers still builds and runs. **CI installs the headers**, so the
-  release always ships the overlay. Reviewers may want to confirm this
-  matches the intended "overlay is a nicety, never a hard dependency"
-  stance.
-- **Skip-if-exists is preserved.** Like the old fetch, the compile is
-  skipped when `bin/overlay/typemate-overlay` already exists (unless
-  `--force`), so incremental builds don't recompile.
+- **Recompile when the source is newer than the output** (not plain
+  skip-if-exists). A machine that already has an older or stale-prebuilt
+  binary — every box that built before this change — picks up the current
+  source instead of silently keeping the old chime-playing binary, and
+  later edits to `typemate_overlay.c` always rebuild. Fresh checkouts stamp
+  the source "now", so a restored CI cache also recompiles. (Addresses the
+  original review's #1 and #2.)
+- **Compile failure is fatal in CI, non-fatal on dev boxes.** When
+  `CI=true` (GitHub Actions), a missing toolchain or failed compile sets a
+  non-zero exit code, so `linux/CMakeLists.txt`'s `FATAL_ERROR` fails the
+  build — a release can never silently ship overlay-less. On a developer
+  box (no `CI` env) it warns and continues, because the overlay is optional
+  and the app falls back to its in-window status (`resolveBundledTool`).
+  (Addresses the original review's #3.)
+- **Cache key includes the overlay source.** Both Linux cache keys hash
+  `linux/overlay/typemate_overlay.c` alongside the fetch script, so editing
+  the overlay busts the Actions cache — redundant with the mtime check, but
+  explicit.
 - **The hosted `typemate-overlay-linux-x64.tar.gz` on `models-v1` is now
   unused.** It can be left as-is (harmless) or deleted later; no code
   references it.

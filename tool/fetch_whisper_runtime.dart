@@ -225,21 +225,38 @@ Future<void> _fetchToolArchive(
 /// Compiles the X11 overlay helper from `linux/overlay/typemate_overlay.c`
 /// into `bin/overlay/typemate-overlay`. Building from source (rather than
 /// fetching a prebuilt binary) keeps the shipped overlay in lockstep with
-/// the repo — no hosted binary to keep in sync. Needs gcc plus the libX11
-/// and libXext dev headers; when they are missing the overlay is skipped
-/// with a warning (it is optional — the app falls back to its in-window
-/// status), so a developer box without them still builds.
+/// the repo — no hosted binary to keep in sync.
+///
+/// Recompiles whenever the source is newer than the output, so a machine
+/// that already has an older (or stale prebuilt) binary picks up the
+/// current source instead of silently keeping the old one, and later edits
+/// to the source always rebuild.
+///
+/// Needs gcc plus the libX11/libXext dev headers. On a developer box
+/// without them the overlay is skipped with a warning — it is optional, and
+/// the app falls back to its in-window status. In CI (`CI=true`) a missing
+/// toolchain or failed compile is FATAL, so a release can never silently
+/// ship without the overlay.
 Future<void> _compileLinuxOverlay({required bool force}) async {
   const output = 'bin/overlay/typemate-overlay';
-  if (!force && File(output).existsSync()) {
-    stdout.writeln('tool_ready=${File(output).absolute.parent.path}');
-    return;
-  }
   const source = 'linux/overlay/typemate_overlay.c';
-  if (!File(source).existsSync()) {
+  final outputFile = File(output);
+  final sourceFile = File(source);
+  if (!sourceFile.existsSync()) {
     stderr.writeln('overlay_source_missing=$source');
     return;
   }
+  final stale =
+      !outputFile.existsSync() ||
+      sourceFile.lastModifiedSync().isAfter(outputFile.lastModifiedSync());
+  if (!force && !stale) {
+    stdout.writeln('tool_ready=${outputFile.absolute.parent.path}');
+    return;
+  }
+
+  // GitHub Actions (and most CI) set CI=true; a build there must not ship
+  // an overlay-less release just because the toolchain regressed.
+  final inCi = Platform.environment['CI'] == 'true';
   await Directory('bin/overlay').create(recursive: true);
   stdout.writeln('compiling=$source');
   try {
@@ -252,21 +269,25 @@ Future<void> _compileLinuxOverlay({required bool force}) async {
       '-lm',
     ]);
     if (result.exitCode != 0) {
-      // Non-fatal: the overlay is a nicety, and its absence degrades to the
-      // in-window status rather than breaking dictation.
       stderr.writeln(
         'overlay_compile_failed (install gcc, libx11-dev, libxext-dev to '
         'ship the overlay): ${result.stderr}',
       );
+      if (inCi) {
+        exitCode = 1;
+      }
       return;
     }
-    await _markExecutable(File(output));
-    stdout.writeln('tool_ready=${File(output).absolute.parent.path}');
+    await _markExecutable(outputFile);
+    stdout.writeln('tool_ready=${outputFile.absolute.parent.path}');
   } on ProcessException catch (error) {
     stderr.writeln(
       'overlay_compile_skipped (gcc not found; install gcc, libx11-dev, '
       'libxext-dev to ship the overlay): ${error.message}',
     );
+    if (inCi) {
+      exitCode = 1;
+    }
   }
 }
 
