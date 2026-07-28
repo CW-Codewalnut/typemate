@@ -5,8 +5,10 @@ import 'dart:io';
 /// - models/ggml-small-vaani-hindi-q6.bin (Hindi, Vaani fine-tune)
 /// - models/ggml-hindi2hinglish-swift.bin (Hinglish, Oriserve Swift)
 /// - models/ggml-silero-v5.1.2.bin (VAD)
+/// - models/gtcrn_simple.onnx (optional noise suppression, GTCRN)
 /// - bin/whisper/ (whisper-cli and its DLLs, OpenBLAS build)
-/// - bin/sherpa/ (sherpa-onnx websocket server for the Parakeet model)
+/// - bin/sherpa/ (sherpa-onnx websocket server for the Parakeet model,
+///   plus the offline denoiser that runs the GTCRN model)
 ///
 /// All are gitignored because they exceed practical git limits, so a fresh
 /// clone runs this once. Release bundles copy both folders next to the
@@ -74,6 +76,13 @@ const _models = [
     'ggml-silero-v5.1.2.bin',
     'https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin',
     885098,
+  ),
+  // GTCRN speech-enhancement model for the optional noise-suppression
+  // toggle, run by the sherpa-onnx offline denoiser.
+  _ModelSpec(
+    'gtcrn_simple.onnx',
+    'https://github.com/k2-fsa/sherpa-onnx/releases/download/speech-enhancement-models/gtcrn_simple.onnx',
+    535638,
   ),
 ];
 
@@ -224,19 +233,29 @@ final _sherpaArchiveName = _isWindows
 final _sherpaArchiveUrl =
     'https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.4/'
     '$_sherpaArchiveName.tar.bz2';
-final _sherpaServerFileName = _isWindows
-    ? 'sherpa-onnx-offline-websocket-server.exe'
-    : 'sherpa-onnx-offline-websocket-server';
-final _sherpaArchiveServerPath =
-    '$_sherpaArchiveName/bin/$_sherpaServerFileName';
+// The websocket server keeps Parakeet resident; the offline denoiser runs
+// the GTCRN model for the optional noise-suppression toggle. Both come out
+// of the same archive.
+final _sherpaBinaryFileNames = _isWindows
+    ? const [
+        'sherpa-onnx-offline-websocket-server.exe',
+        'sherpa-onnx-offline-denoiser.exe',
+      ]
+    : const [
+        'sherpa-onnx-offline-websocket-server',
+        'sherpa-onnx-offline-denoiser',
+      ];
 
 Future<void> _fetchSherpaServer(
   HttpClient client, {
   required bool force,
 }) async {
-  final targetFile = File('bin/sherpa/$_sherpaServerFileName');
-  if (!force && targetFile.existsSync()) {
-    stdout.writeln('sherpa_ready=${targetFile.absolute.path}');
+  final targetDirectory = Directory('bin/sherpa');
+  final missing = _sherpaBinaryFileNames
+      .where((name) => !File('${targetDirectory.path}/$name').existsSync())
+      .toList();
+  if (!force && missing.isEmpty) {
+    stdout.writeln('sherpa_ready=${targetDirectory.absolute.path}');
     return;
   }
 
@@ -256,7 +275,8 @@ Future<void> _fetchSherpaServer(
       archive.path,
       '-C',
       stagingDirectory.path,
-      _sherpaArchiveServerPath,
+      for (final name in _sherpaBinaryFileNames)
+        '$_sherpaArchiveName/bin/$name',
     ]);
     if (extract.exitCode != 0) {
       stderr.writeln('sherpa_extract_failed=${extract.stderr}');
@@ -264,12 +284,14 @@ Future<void> _fetchSherpaServer(
       return;
     }
 
-    await targetFile.parent.create(recursive: true);
-    final installed = await File(
-      '${stagingDirectory.path}/$_sherpaArchiveServerPath',
-    ).copy(targetFile.path);
-    await _markExecutable(installed);
-    stdout.writeln('sherpa_ready=${targetFile.absolute.path}');
+    await targetDirectory.create(recursive: true);
+    for (final name in _sherpaBinaryFileNames) {
+      final installed = await File(
+        '${stagingDirectory.path}/$_sherpaArchiveName/bin/$name',
+      ).copy('${targetDirectory.path}/$name');
+      await _markExecutable(installed);
+    }
+    stdout.writeln('sherpa_ready=${targetDirectory.absolute.path}');
   } finally {
     await stagingDirectory.delete(recursive: true);
   }

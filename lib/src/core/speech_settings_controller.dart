@@ -13,9 +13,17 @@ abstract interface class SpeechSettingsStore {
 }
 
 class SpeechSettingsSnapshot {
-  const SpeechSettingsSnapshot({required this.languageCode});
+  const SpeechSettingsSnapshot({
+    required this.languageCode,
+    this.noiseSuppressionEnabled = true,
+  });
 
   final String languageCode;
+
+  /// Runs the bundled GTCRN denoiser on each recording before
+  /// transcription. On by default; the Settings toggle turns it off for
+  /// users who prefer the raw capture.
+  final bool noiseSuppressionEnabled;
 }
 
 class NoopSpeechSettingsStore implements SpeechSettingsStore {
@@ -44,6 +52,9 @@ class FileSpeechSettingsStore implements SpeechSettingsStore {
     if (decoded case {'languageCode': final String languageCode}) {
       return SpeechSettingsSnapshot(
         languageCode: _knownLanguageCode(languageCode),
+        // Settings files written before the toggle existed lack the key,
+        // which reads as the on default.
+        noiseSuppressionEnabled: decoded['noiseSuppressionEnabled'] != false,
       );
     }
 
@@ -54,7 +65,10 @@ class FileSpeechSettingsStore implements SpeechSettingsStore {
   Future<void> save(SpeechSettingsSnapshot snapshot) async {
     await file.parent.create(recursive: true);
     await file.writeAsString(
-      jsonEncode({'languageCode': snapshot.languageCode}),
+      jsonEncode({
+        'languageCode': snapshot.languageCode,
+        'noiseSuppressionEnabled': snapshot.noiseSuppressionEnabled,
+      }),
       flush: true,
     );
   }
@@ -69,8 +83,10 @@ class SpeechSettingsController extends ChangeNotifier {
   final SpeechSettingsStore store;
 
   String _languageCode = 'en';
+  bool _noiseSuppressionEnabled = true;
 
   String get languageCode => _languageCode;
+  bool get noiseSuppressionEnabled => _noiseSuppressionEnabled;
   SpeechLanguageOption get selectedLanguage => speechLanguageOptions.firstWhere(
     (option) => option.code == _languageCode,
     orElse: () => speechLanguageOptions.first,
@@ -79,6 +95,7 @@ class SpeechSettingsController extends ChangeNotifier {
   Future<void> load() async {
     final snapshot = await store.load();
     _languageCode = snapshot.languageCode;
+    _noiseSuppressionEnabled = snapshot.noiseSuppressionEnabled;
     notifyListeners();
   }
 
@@ -92,6 +109,20 @@ class SpeechSettingsController extends ChangeNotifier {
     await _save();
   }
 
-  Future<void> _save() =>
-      store.save(SpeechSettingsSnapshot(languageCode: _languageCode));
+  Future<void> setNoiseSuppressionEnabled(bool enabled) async {
+    if (_noiseSuppressionEnabled == enabled) {
+      return;
+    }
+
+    _noiseSuppressionEnabled = enabled;
+    notifyListeners();
+    await _save();
+  }
+
+  Future<void> _save() => store.save(
+    SpeechSettingsSnapshot(
+      languageCode: _languageCode,
+      noiseSuppressionEnabled: _noiseSuppressionEnabled,
+    ),
+  );
 }

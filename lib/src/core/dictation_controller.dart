@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import 'audio/audio_denoiser.dart';
 import 'audio/audio_recorder.dart';
 import '../models/dictation_state.dart';
 import '../utils/text_metrics.dart';
@@ -11,6 +12,10 @@ import 'platform/platform_bridge.dart';
 import 'stt/stt_engine.dart';
 
 typedef AudioRecorderProvider = AudioRecorder? Function();
+
+/// Returns the denoiser to run on the finished recording, or null when
+/// noise suppression is off (or its runtime is unavailable).
+typedef AudioDenoiserProvider = AudioDenoiser? Function();
 typedef TranscriptGeneratedCallback =
     Future<void> Function(String transcript, {Duration duration});
 typedef TranscriptionFailedCallback =
@@ -26,6 +31,7 @@ class DictationController extends ChangeNotifier {
     required SttEngine sttEngine,
     AudioRecorder? audioRecorder,
     AudioRecorderProvider? audioRecorderProvider,
+    AudioDenoiserProvider? audioDenoiserProvider,
     TranscriptGeneratedCallback? onTranscriptGenerated,
     TranscriptionFailedCallback? onTranscriptionFailed,
     Duration transcribeTimeout = defaultTranscribeTimeout,
@@ -42,6 +48,7 @@ class DictationController extends ChangeNotifier {
       platformBridge,
       sttEngine,
       audioRecorderProvider ?? (() => audioRecorder!),
+      audioDenoiserProvider,
       onTranscriptGenerated,
       onTranscriptionFailed,
       transcribeTimeout,
@@ -55,6 +62,7 @@ class DictationController extends ChangeNotifier {
     this._platformBridge,
     this._sttEngine,
     this._audioRecorderProvider,
+    this._audioDenoiserProvider,
     this._onTranscriptGenerated,
     this._onTranscriptionFailed,
     this._transcribeTimeout,
@@ -82,6 +90,7 @@ class DictationController extends ChangeNotifier {
   final PlatformBridge _platformBridge;
   final SttEngine _sttEngine;
   final AudioRecorderProvider _audioRecorderProvider;
+  final AudioDenoiserProvider? _audioDenoiserProvider;
   final TranscriptGeneratedCallback? _onTranscriptGenerated;
   final TranscriptionFailedCallback? _onTranscriptionFailed;
   final Duration _transcribeTimeout;
@@ -179,7 +188,7 @@ class DictationController extends ChangeNotifier {
     }
 
     final recorder = _activeRecorder;
-    late final AudioRecording recording;
+    AudioRecording recording;
     try {
       recording = recorder == null
           ? const AudioRecording(path: '', duration: Duration.zero)
@@ -197,6 +206,15 @@ class DictationController extends ChangeNotifier {
       // The overlay is informational; transcription proceeds without it.
     }
     _setPhase(DictationPhase.transcribing, 'Transcribing locally...');
+
+    final denoiser = _audioDenoiserProvider?.call();
+    if (denoiser != null) {
+      try {
+        recording = await denoiser.denoise(recording);
+      } catch (_) {
+        // Denoising is best-effort; the raw recording still transcribes.
+      }
+    }
 
     final String transcript;
     try {

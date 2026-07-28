@@ -1,6 +1,19 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:typemate/src/app.dart';
 import 'package:typemate/src/core/speech_settings_controller.dart';
+
+class MemorySpeechSettingsStore implements SpeechSettingsStore {
+  SpeechSettingsSnapshot? saved;
+
+  @override
+  Future<SpeechSettingsSnapshot> load() async =>
+      saved ?? const SpeechSettingsSnapshot(languageCode: 'en');
+
+  @override
+  Future<void> save(SpeechSettingsSnapshot snapshot) async => saved = snapshot;
+}
 
 void main() {
   group('speechLanguageOptions', () {
@@ -73,6 +86,82 @@ void main() {
 
       await controller.selectLanguage('ta');
       expect(controller.languageCode, 'ta');
+    });
+
+    test('noise suppression is on by default', () {
+      expect(SpeechSettingsController().noiseSuppressionEnabled, isTrue);
+    });
+
+    test(
+      'persists the noise suppression toggle alongside the language',
+      () async {
+        final store = MemorySpeechSettingsStore();
+        final controller = SpeechSettingsController(store: store);
+        await controller.selectLanguage('hi');
+
+        await controller.setNoiseSuppressionEnabled(false);
+
+        expect(controller.noiseSuppressionEnabled, isFalse);
+        expect(store.saved?.noiseSuppressionEnabled, isFalse);
+        expect(store.saved?.languageCode, 'hi');
+
+        await controller.setNoiseSuppressionEnabled(true);
+        expect(store.saved?.noiseSuppressionEnabled, isTrue);
+        expect(store.saved?.languageCode, 'hi');
+      },
+    );
+
+    test('load restores the persisted noise suppression state', () async {
+      final store = MemorySpeechSettingsStore()
+        ..saved = const SpeechSettingsSnapshot(
+          languageCode: 'ta',
+          noiseSuppressionEnabled: false,
+        );
+      final controller = SpeechSettingsController(store: store);
+
+      await controller.load();
+
+      expect(controller.languageCode, 'ta');
+      expect(controller.noiseSuppressionEnabled, isFalse);
+    });
+  });
+
+  group('FileSpeechSettingsStore', () {
+    late Directory tempDirectory;
+
+    setUp(() {
+      tempDirectory = Directory.systemTemp.createTempSync('typemate-speech');
+    });
+
+    tearDown(() {
+      tempDirectory.deleteSync(recursive: true);
+    });
+
+    File settingsFile() => File('${tempDirectory.path}/speech-settings.json');
+
+    test('round-trips a disabled noise suppression toggle', () async {
+      final store = FileSpeechSettingsStore(file: settingsFile());
+
+      await store.save(
+        const SpeechSettingsSnapshot(
+          languageCode: 'hi',
+          noiseSuppressionEnabled: false,
+        ),
+      );
+      final loaded = await store.load();
+
+      expect(loaded.languageCode, 'hi');
+      expect(loaded.noiseSuppressionEnabled, isFalse);
+    });
+
+    test('settings written before the toggle existed read as on', () async {
+      settingsFile().writeAsStringSync('{"languageCode":"ta"}');
+      final store = FileSpeechSettingsStore(file: settingsFile());
+
+      final loaded = await store.load();
+
+      expect(loaded.languageCode, 'ta');
+      expect(loaded.noiseSuppressionEnabled, isTrue);
     });
   });
 }
