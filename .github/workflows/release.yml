@@ -21,6 +21,12 @@ on:
 permissions:
   contents: write
 
+# Anonymous error-reporting backend, baked only into release builds via
+# --dart-define (see lib/main.dart). A DSN is an ingest-only address,
+# safe to commit — not a secret.
+env:
+  TYPEMATE_SENTRY_DSN: https://6dd30c1b5156941a36bca5322e9395ee@o4511812673994752.ingest.de.sentry.io/4511812753490000
+
 jobs:
   # Hard gate: a known-vulnerable dependency stops all three builders
   # before anything is packaged or drafted.
@@ -125,7 +131,7 @@ jobs:
           key: speech-runtime-Linux-${{ hashFiles('tool/fetch_whisper_runtime.dart', 'linux/overlay/typemate_overlay.c') }}
 
       - name: Build Linux release bundle
-        run: flutter build linux --release
+        run: flutter build linux --release --dart-define=TYPEMATE_SENTRY_DSN=$TYPEMATE_SENTRY_DSN
 
       - name: Package portable tarball
         run: |
@@ -188,7 +194,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Build macOS release app
-        run: flutter build macos --release
+        run: flutter build macos --release --dart-define=TYPEMATE_SENTRY_DSN=$TYPEMATE_SENTRY_DSN
 
       # The Xcode build has no fetch hook (unlike the Windows/Linux CMake
       # builds), so the runtimes are copied next to the executable, where

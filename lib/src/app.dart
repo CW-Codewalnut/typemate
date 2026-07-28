@@ -12,6 +12,9 @@ import 'core/audio/microphone_discovery.dart';
 import 'core/audio/microphone_audio_recorder_factory.dart';
 import 'core/audio/system_default_microphone_discovery.dart';
 import 'core/audio/record_package_audio.dart';
+import 'core/diagnostics/diagnostic_log.dart';
+import 'core/diagnostics/diagnostic_reporter.dart';
+import 'core/diagnostics/telemetry_controller.dart';
 import 'core/dictation_controller.dart';
 import 'core/dictation_history_controller.dart';
 import 'core/hold_shortcut_controller.dart';
@@ -44,6 +47,8 @@ class TypeMateApp extends StatefulWidget {
     this.platformBridge,
     this.audioRecorderFactory,
     this.audioDenoiser,
+    this.diagnosticReporter,
+    this.telemetryController,
     this.dataDirectory,
     this.splashDuration = const Duration(milliseconds: 900),
   });
@@ -54,6 +59,13 @@ class TypeMateApp extends StatefulWidget {
   final PlatformBridge? platformBridge;
   final AudioRecorderFactory? audioRecorderFactory;
   final AudioDenoiser? audioDenoiser;
+
+  /// Diagnostics funnel created in main(); tests that omit it run with a
+  /// disabled local log and no telemetry.
+  final DiagnosticReporter? diagnosticReporter;
+
+  /// Error-reporting consent state, surfaced as the Settings toggle.
+  final TelemetryController? telemetryController;
 
   /// Overrides where settings and history files live. Tests point this at a
   /// temp directory so end-to-end runs never touch real user data.
@@ -72,6 +84,7 @@ class _TypeMateAppState extends State<TypeMateApp> {
   late final HoldShortcutController shortcutController;
   late final PlatformBridge platformBridge;
   late final SttEngine _sttEngine;
+  late final DiagnosticReporter _diagnostics;
   late bool _showSplash;
   late String _lastPreparedLanguageCode;
   AudioDenoiser? _audioDenoiser;
@@ -79,6 +92,7 @@ class _TypeMateAppState extends State<TypeMateApp> {
   @override
   void initState() {
     super.initState();
+    _diagnostics = widget.diagnosticReporter ?? DiagnosticReporter();
     _showSplash = widget.splashDuration > Duration.zero;
     if (_showSplash) {
       Timer(widget.splashDuration, () {
@@ -125,6 +139,7 @@ class _TypeMateAppState extends State<TypeMateApp> {
         widget.sttEngine ??
         createDefaultSttEngine(
           languageCodeProvider: () => speechSettingsController.languageCode,
+          diagnostics: _diagnostics,
         );
     if (platformBridge case final QuitRequestSource quitSource) {
       quitSource.onQuitRequested = _shutDownAndExit;
@@ -132,6 +147,7 @@ class _TypeMateAppState extends State<TypeMateApp> {
     controller = DictationController(
       platformBridge: platformBridge,
       sttEngine: _sttEngine,
+      diagnostics: _diagnostics,
       onTranscriptGenerated: historyController.addTranscript,
       onTranscriptionFailed: historyController.addFailure,
       audioRecorderProvider: () {
@@ -240,6 +256,8 @@ class _TypeMateAppState extends State<TypeMateApp> {
                       microphoneController: microphoneController,
                       speechSettingsController: speechSettingsController,
                       shortcutController: shortcutController,
+                      telemetryController: widget.telemetryController,
+                      logsDirectoryPath: _diagnostics.log.directoryPath,
                       onQuitRequested: _shutDownAndExit,
                     ),
             ),
@@ -385,6 +403,26 @@ SpeechSettingsStore createDefaultSpeechSettingsStore({
   );
 }
 
+/// The local troubleshooting log, next to the other per-user data so
+/// "Open log folder" from Settings lands in a familiar place.
+DiagnosticLog createDefaultDiagnosticLog({
+  Map<String, String>? environment,
+  Directory? directory,
+}) {
+  final base = directory ?? _typeMateDataDirectory(environment: environment);
+  return DiagnosticLog(file: File('${base.path}/logs/typemate.log'));
+}
+
+TelemetrySettingsStore createDefaultTelemetrySettingsStore({
+  Map<String, String>? environment,
+  Directory? directory,
+}) {
+  final base = directory ?? _typeMateDataDirectory(environment: environment);
+  return FileTelemetrySettingsStore(
+    file: File('${base.path}/telemetry-settings.json'),
+  );
+}
+
 /// Where dictation WAVs live between capture and transcription. Anchored to
 /// the per-user data directory because the process CWD is unreliable: an
 /// autostart launch via the HKCU Run key inherited C:\Windows\System32,
@@ -521,6 +559,7 @@ SttEngine createDefaultSttEngine({
   Map<String, String>? environment,
   PathExists? pathExists,
   SttLanguageCodeProvider? languageCodeProvider,
+  DiagnosticReporter? diagnostics,
   String? currentDirectoryPath,
   String? executableDirectoryPath,
 }) {
@@ -568,6 +607,7 @@ SttEngine createDefaultSttEngine({
         cliLanguage: language.cliLanguage ?? language.code,
         prompt: language.prompt,
         port: language.port,
+        diagnostics: diagnostics,
       ),
   };
 
@@ -577,6 +617,7 @@ SttEngine createDefaultSttEngine({
     decoderPath: resolve('$bundledParakeetDirRelativePath/decoder.int8.onnx'),
     joinerPath: resolve('$bundledParakeetDirRelativePath/joiner.int8.onnx'),
     tokensPath: resolve('$bundledParakeetDirRelativePath/tokens.txt'),
+    diagnostics: diagnostics,
   );
 
   return LanguageRoutingSttEngine(

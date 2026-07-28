@@ -4,6 +4,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import '../audio/audio_recorder.dart';
+import '../diagnostics/diagnostic_log.dart';
+import '../diagnostics/diagnostic_reporter.dart';
 import 'stt_engine.dart';
 import 'whisper_cli_stt_engine.dart' show SttRuntimeException;
 
@@ -62,6 +64,7 @@ class ParakeetServerSttEngine implements DisposableSttEngine {
     this.startupTimeout = const Duration(seconds: 60),
     this.responseTimeout = const Duration(seconds: 60),
     this.socketCloseTimeout = const Duration(seconds: 5),
+    this.diagnostics,
     ServerProcessStarter? processStarter,
     WebSocketConnector? webSocketConnector,
   }) : processStarter = processStarter ?? _startServerProcess,
@@ -85,6 +88,10 @@ class ParakeetServerSttEngine implements DisposableSttEngine {
 
   final ServerProcessStarter processStarter;
   final WebSocketConnector webSocketConnector;
+
+  /// Records server lifecycle events and startup failures (with a stderr
+  /// tail) for troubleshooting; null in tests that don't assert on it.
+  final DiagnosticReporter? diagnostics;
 
   Process? _serverProcess;
 
@@ -142,27 +149,63 @@ class ParakeetServerSttEngine implements DisposableSttEngine {
     }
 
     _serverProcess?.kill();
-    _serverProcess = await processStarter(serverExecutable, [
-      '--port=$port',
-      '--encoder=$encoderPath',
-      '--decoder=$decoderPath',
-      '--joiner=$joinerPath',
-      '--tokens=$tokensPath',
-      // No --model-type: Parakeet is a NeMo transducer, which the server's
-      // model-type shortcut list does not cover; auto-detection handles it.
-      '--num-work-threads=4',
-      // The server's default log file is ./log.txt in the working
-      // directory; keep it out of the app folder.
-      '--log-file=${Directory.systemTemp.path}/typemate-sherpa-server.log',
-    ]);
+    diagnostics?.info(
+      'stt',
+      'starting English speech server on port $port ($serverExecutable)',
+    );
+    final startupStopwatch = Stopwatch()..start();
+    final Process process;
+    try {
+      process = await processStarter(serverExecutable, [
+        '--port=$port',
+        '--encoder=$encoderPath',
+        '--decoder=$decoderPath',
+        '--joiner=$joinerPath',
+        '--tokens=$tokensPath',
+        // No --model-type: Parakeet is a NeMo transducer, which the server's
+        // model-type shortcut list does not cover; auto-detection handles it.
+        '--num-work-threads=4',
+        // The server's default log file is ./log.txt in the working
+        // directory; keep it out of the app folder.
+        '--log-file=${Directory.systemTemp.path}/typemate-sherpa-server.log',
+      ]);
+    } catch (error) {
+      _serverProcess = null;
+      diagnostics?.failure(
+        'stt',
+        'parakeet-spawn-failed',
+        'could not start the English speech server process: $error',
+      );
+      rethrow;
+    }
+    _serverProcess = process;
     // The server logs verbosely while loading the model; without draining,
     // the full OS pipe buffer blocks it before it ever starts listening.
-    unawaited(_serverProcess!.stdout.drain<void>());
-    unawaited(_serverProcess!.stderr.drain<void>());
+    // stderr keeps a bounded tail so a startup failure can say why.
+    final stderrTail = DiagnosticTailBuffer();
+    unawaited(process.stdout.drain<void>());
+    process.stderr
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .listen(stderrTail.add, onError: (_) {}, cancelOnError: false);
+    // An early exit (crash, missing DLL, unsupported CPU) shows up in the
+    // log as an exit code instead of a silent startup timeout.
+    unawaited(
+      process.exitCode.then(
+        (code) => diagnostics?.info(
+          'stt',
+          'English speech server (port $port) exited with code $code',
+        ),
+      ),
+    );
 
     final deadline = DateTime.now().add(startupTimeout);
     while (DateTime.now().isBefore(deadline)) {
       if (await _canConnect()) {
+        diagnostics?.info(
+          'stt',
+          'English speech server ready in '
+              '${startupStopwatch.elapsedMilliseconds}ms',
+        );
         return;
       }
       await Future<void>.delayed(const Duration(milliseconds: 250));
@@ -170,6 +213,13 @@ class ParakeetServerSttEngine implements DisposableSttEngine {
 
     _serverProcess?.kill();
     _serverProcess = null;
+    diagnostics?.failure(
+      'stt',
+      'parakeet-start-timeout',
+      'English speech server did not accept connections within '
+          '${startupTimeout.inSeconds}s'
+          '${stderrTail.isEmpty ? '' : '; stderr tail:\n${stderrTail.tail}'}',
+    );
     throw const SttRuntimeException(
       'The local English speech server did not start. '
       'Check the sherpa-onnx runtime and the Parakeet model files.',

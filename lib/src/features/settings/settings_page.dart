@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../components/content_page_shell.dart';
+import '../../core/diagnostics/telemetry_controller.dart';
 import '../../core/hold_shortcut_controller.dart';
 import '../../models/app_identity.dart';
 import '../../core/microphone_settings_controller.dart';
@@ -10,6 +11,7 @@ import 'components/microphone_selection_panel.dart';
 import 'components/noise_suppression_panel.dart';
 import 'components/shortcut_settings_panel.dart';
 import 'components/speech_settings_panel.dart';
+import 'components/troubleshooting_panel.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
@@ -17,12 +19,26 @@ class SettingsPage extends StatelessWidget {
     required this.microphoneController,
     required this.speechSettingsController,
     this.shortcutController,
+    this.telemetryController,
+    this.logsDirectoryPath,
+    this.onOpenLogsFolder,
     this.onQuitRequested,
   });
 
   final MicrophoneSettingsController microphoneController;
   final SpeechSettingsController speechSettingsController;
   final HoldShortcutController? shortcutController;
+
+  /// Anonymous error-reporting consent; null or unavailable hides the
+  /// toggle (tests and builds without a telemetry DSN).
+  final TelemetryController? telemetryController;
+
+  /// Where the local diagnostic log lives; null hides the whole
+  /// Troubleshooting panel (tests without a reporter).
+  final String? logsDirectoryPath;
+
+  /// Injectable for widget tests; defaults to the OS file manager.
+  final Future<void> Function(String path)? onOpenLogsFolder;
 
   /// Shuts the app down completely (closing the window only hides it —
   /// the hotkey keeps working in the background).
@@ -52,6 +68,15 @@ class SettingsPage extends StatelessWidget {
           if (shortcutController != null) ...[
             const SizedBox(height: 24),
             ShortcutSettingsPanel(controller: shortcutController!),
+          ],
+          if (logsDirectoryPath != null ||
+              (telemetryController?.isAvailable ?? false)) ...[
+            const SizedBox(height: 24),
+            TroubleshootingPanel(
+              logsDirectoryPath: logsDirectoryPath,
+              telemetryController: telemetryController,
+              onOpenLogsFolder: onOpenLogsFolder,
+            ),
           ],
           if (onQuitRequested != null) ...[
             const SizedBox(height: 24),

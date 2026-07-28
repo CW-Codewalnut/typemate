@@ -7,6 +7,7 @@ import 'audio/audio_denoiser.dart';
 import 'audio/audio_recorder.dart';
 import '../models/dictation_state.dart';
 import '../utils/text_metrics.dart';
+import 'diagnostics/diagnostic_reporter.dart';
 import 'platform/dictation_sounds.dart';
 import 'platform/platform_bridge.dart';
 import 'stt/stt_engine.dart';
@@ -32,6 +33,7 @@ class DictationController extends ChangeNotifier {
     AudioRecorder? audioRecorder,
     AudioRecorderProvider? audioRecorderProvider,
     AudioDenoiserProvider? audioDenoiserProvider,
+    DiagnosticReporter? diagnostics,
     TranscriptGeneratedCallback? onTranscriptGenerated,
     TranscriptionFailedCallback? onTranscriptionFailed,
     Duration transcribeTimeout = defaultTranscribeTimeout,
@@ -49,6 +51,7 @@ class DictationController extends ChangeNotifier {
       sttEngine,
       audioRecorderProvider ?? (() => audioRecorder!),
       audioDenoiserProvider,
+      diagnostics ?? DiagnosticReporter(),
       onTranscriptGenerated,
       onTranscriptionFailed,
       transcribeTimeout,
@@ -63,6 +66,7 @@ class DictationController extends ChangeNotifier {
     this._sttEngine,
     this._audioRecorderProvider,
     this._audioDenoiserProvider,
+    this._diagnostics,
     this._onTranscriptGenerated,
     this._onTranscriptionFailed,
     this._transcribeTimeout,
@@ -91,6 +95,7 @@ class DictationController extends ChangeNotifier {
   final SttEngine _sttEngine;
   final AudioRecorderProvider _audioRecorderProvider;
   final AudioDenoiserProvider? _audioDenoiserProvider;
+  final DiagnosticReporter _diagnostics;
   final TranscriptGeneratedCallback? _onTranscriptGenerated;
   final TranscriptionFailedCallback? _onTranscriptionFailed;
   final Duration _transcribeTimeout;
@@ -134,7 +139,12 @@ class DictationController extends ChangeNotifier {
     _setPhase(DictationPhase.preparing, 'Preparing local speech engine...');
     try {
       await _sttEngine.prepare();
-    } catch (_) {
+    } catch (error) {
+      _diagnostics.failure(
+        'engine',
+        'prepare-failed',
+        'speech engine prepare failed: $error',
+      );
       _setPhase(
         DictationPhase.idle,
         'Unable to prepare local speech engine. Check the speech runtime and model file, then try again.',
@@ -174,6 +184,11 @@ class DictationController extends ChangeNotifier {
     } catch (error) {
       _activeRecorder = null;
       debugPrint('TypeMate: unable to start recording: $error');
+      _diagnostics.failure(
+        'dictation',
+        'record-start-failed',
+        'unable to start recording: $error',
+      );
       await _failDictation(failedToStartRecordingMessage);
     }
   }
@@ -193,8 +208,13 @@ class DictationController extends ChangeNotifier {
       recording = recorder == null
           ? const AudioRecording(path: '', duration: Duration.zero)
           : await recorder.stop().timeout(_recorderStopTimeout);
-    } catch (_) {
+    } catch (error) {
       _activeRecorder = null;
+      _diagnostics.failure(
+        'dictation',
+        'record-stop-failed',
+        'recorder failed to stop: $error',
+      );
       await _failDictation(failedToFinishRecordingMessage);
       return;
     }
@@ -211,24 +231,46 @@ class DictationController extends ChangeNotifier {
     if (denoiser != null) {
       try {
         recording = await denoiser.denoise(recording);
-      } catch (_) {
+      } catch (error) {
         // Denoising is best-effort; the raw recording still transcribes.
+        _diagnostics.failure(
+          'dictation',
+          'denoise-failed',
+          'noise suppression failed; transcribing the raw recording: $error',
+        );
       }
     }
 
     final String transcript;
+    final timeout = transcribeTimeoutFor(recording.duration);
+    final transcribeStopwatch = Stopwatch()..start();
     try {
-      transcript = await _sttEngine
-          .transcribe(recording)
-          .timeout(transcribeTimeoutFor(recording.duration));
+      transcript = await _sttEngine.transcribe(recording).timeout(timeout);
     } on TimeoutException {
+      _diagnostics.failure(
+        'dictation',
+        'transcribe-timeout',
+        'transcription timed out after ${timeout.inSeconds}s '
+            '(clip ${recording.duration.inMilliseconds}ms)',
+      );
       await _failTranscription(recording, transcriptionTimeoutMessage);
       return;
     } catch (error) {
       debugPrint('TypeMate: transcription failed: $error');
+      _diagnostics.failure(
+        'dictation',
+        'transcribe-failed',
+        'transcription failed: $error',
+      );
       await _failTranscription(recording, transcriptionFailedMessage);
       return;
     }
+    // Length and timing only — never the transcript itself.
+    _diagnostics.info(
+      'dictation',
+      'transcribed ${recording.duration.inMilliseconds}ms clip in '
+          '${transcribeStopwatch.elapsedMilliseconds}ms',
+    );
     // Audio does not outlive a completed transcription: dictation is
     // private, so successful and silent WAVs are discarded immediately.
     // Only a FAILED dictation keeps its recording (moved aside in
@@ -260,7 +302,12 @@ class DictationController extends ChangeNotifier {
     _setPhase(DictationPhase.inserting, 'Inserting into focused text field...');
     try {
       await _platformBridge.insertTextIntoFocusedField(usableTranscript);
-    } catch (_) {
+    } catch (error) {
+      _diagnostics.failure(
+        'dictation',
+        'insert-failed',
+        'text insertion failed: $error',
+      );
       await _failDictation(insertionFailedMessage);
       return;
     }
@@ -367,16 +414,28 @@ class DictationController extends ChangeNotifier {
     _errorMessage = null;
     _setPhase(DictationPhase.transcribing, 'Retrying transcription...');
     final String transcript;
+    final timeout = transcribeTimeoutFor(duration);
     try {
       transcript = await _sttEngine
           .transcribe(AudioRecording(path: recordingPath, duration: duration))
-          .timeout(transcribeTimeoutFor(duration));
+          .timeout(timeout);
     } on TimeoutException {
+      _diagnostics.failure(
+        'dictation',
+        'retry-timeout',
+        'retry transcription timed out after ${timeout.inSeconds}s '
+            '(clip ${duration.inMilliseconds}ms)',
+      );
       _errorMessage = transcriptionTimeoutMessage;
       _setPhase(DictationPhase.idle, transcriptionTimeoutMessage);
       return null;
     } catch (error) {
       debugPrint('TypeMate: retry transcription failed: $error');
+      _diagnostics.failure(
+        'dictation',
+        'retry-failed',
+        'retry transcription failed: $error',
+      );
       _errorMessage = transcriptionFailedMessage;
       _setPhase(DictationPhase.idle, transcriptionFailedMessage);
       return null;

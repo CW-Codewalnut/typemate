@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../components/settings_toggle_tile.dart';
 import '../../../core/speech_settings_controller.dart';
 
 /// Card for the optional GTCRN denoising pass that cleans each recording
@@ -32,14 +33,8 @@ class NoiseSuppressionPanel extends StatelessWidget {
             const SizedBox(height: 8),
             ListenableBuilder(
               listenable: controller,
-              builder: (context, _) => SwitchListTile(
-                key: const Key('noise-suppression-toggle'),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                // Rounds the hover/splash ink so it nests cleanly inside
-                // the rounded card instead of showing square corners.
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+              builder: (context, _) => SettingsToggleTile(
+                toggleKey: const Key('noise-suppression-toggle'),
                 title: const Text('Suppress background noise'),
                 value: controller.noiseSuppressionEnabled,
                 onChanged: (value) =>
