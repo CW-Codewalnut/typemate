@@ -19,7 +19,8 @@ class HistoryEntryCard extends StatelessWidget {
   /// run (another dictation in flight, or no recording kept).
   final Future<void> Function()? onRetry;
 
-  /// Deletes a failed entry (and its kept recording) immediately.
+  /// Deletes this entry immediately (for failed entries, also removes the
+  /// kept recording).
   final Future<void> Function()? onDelete;
 
   /// When the 30-day sweep will delete this failed entry, shown so the
@@ -101,10 +102,22 @@ class HistoryEntryCard extends StatelessWidget {
                         ),
                     ],
                   )
-                : IconButton(
-                    tooltip: 'Copy transcription',
-                    onPressed: () => _copyToClipboard(context),
-                    icon: const Icon(Icons.copy),
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'Copy transcription',
+                        onPressed: () => _copyToClipboard(context),
+                        icon: const Icon(Icons.copy),
+                      ),
+                      if (onDelete != null)
+                        IconButton(
+                          key: const Key('history-delete-button'),
+                          tooltip: 'Delete this transcription',
+                          onPressed: () => onDelete!(),
+                          icon: const Icon(Icons.delete_outline),
+                        ),
+                    ],
                   );
 
             // On narrow layouts the fixed time column eats too much width,
