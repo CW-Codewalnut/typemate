@@ -45,7 +45,7 @@ Section: utils
 Priority: optional
 Architecture: amd64
 Installed-Size: $INSTALLED_SIZE_KB
-Depends: libgtk-3-0 (>= 3.24)
+Depends: libgtk-3-0 (>= 3.24), libcurl4t64 | libcurl4
 Maintainer: CodeWalnut <nattu@codewalnut.com>
 Homepage: https://github.com/CW-Codewalnut/typemate
 Description: Local push-to-talk dictation that types into any app

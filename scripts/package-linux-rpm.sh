@@ -25,7 +25,7 @@ Summary:        Local push-to-talk dictation that types into any app
 License:        Apache-2.0
 URL:            https://github.com/CW-Codewalnut/typemate
 BuildArch:      x86_64
-Requires:       gtk3
+Requires:       gtk3, libcurl
 # The bundle ships its own runtimes/libraries; do not scan them for deps.
 AutoReqProv:    no
 # Models are already quantized; use fast gzip instead of slow xz/zstd.
