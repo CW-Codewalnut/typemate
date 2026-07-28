@@ -10,8 +10,13 @@ DIST_DIR="dist"
 PACKAGE_NAME="typemate-windows-x64"
 STAGING_DIR="build/package/$PACKAGE_NAME"
 ZIP_PATH="$DIST_DIR/$PACKAGE_NAME.zip"
+# Anonymous error reporting backend for RELEASE builds only; dev builds
+# (plain `flutter run`/`flutter build`) carry no DSN and send nothing.
+# A DSN is an ingest-only address, safe to commit (not a secret).
+TYPEMATE_SENTRY_DSN="${TYPEMATE_SENTRY_DSN:-https://6dd30c1b5156941a36bca5322e9395ee@o4511812673994752.ingest.de.sentry.io/4511812753490000}"
 
-"$FLUTTER_BIN" build windows
+"$FLUTTER_BIN" build windows \
+  --dart-define=TYPEMATE_SENTRY_DSN="$TYPEMATE_SENTRY_DSN"
 
 test -f "$RELEASE_DIR/typemate.exe"
 rm -rf "$STAGING_DIR"
