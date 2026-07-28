@@ -7,6 +7,7 @@ import '../../models/app_identity.dart';
 import '../../core/microphone_settings_controller.dart';
 import '../../core/speech_settings_controller.dart';
 import 'components/microphone_selection_panel.dart';
+import 'components/noise_suppression_panel.dart';
 import 'components/shortcut_settings_panel.dart';
 import 'components/speech_settings_panel.dart';
 
@@ -46,6 +47,8 @@ class SettingsPage extends StatelessWidget {
           SpeechSettingsPanel(controller: speechSettingsController),
           const SizedBox(height: 24),
           MicrophoneSelectionPanel(controller: microphoneController),
+          const SizedBox(height: 24),
+          NoiseSuppressionPanel(controller: speechSettingsController),
           if (shortcutController != null) ...[
             const SizedBox(height: 24),
             ShortcutSettingsPanel(controller: shortcutController!),

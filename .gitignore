@@ -43,6 +43,7 @@ node_modules/
 # tool/fetch_whisper_runtime.dart. The models are too large for git (GitHub
 # rejects files over 100 MB) and the binaries follow them for consistency.
 /models/*.bin
+/models/*.onnx
 /models/*.part
 /models/parakeet-tdt-0.6b-v3-int8/
 /bin/whisper/*.exe
