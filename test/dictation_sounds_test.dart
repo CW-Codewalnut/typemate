@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:typemate/src/core/platform/dictation_sounds.dart';
 
 void main() {
   // The checked-in assets are what ship and what every platform's player
@@ -52,5 +53,30 @@ void main() {
       sampleRate: 16000,
       minDataBytes: 16000 ~/ 2,
     );
+  });
+
+  test('a hung sound player is killed at the timeout', () async {
+    // A wedged audio stack must never loop a 200ms cue forever.
+    final hangingCommand = Platform.isWindows
+        ? ['ping', '-n', '30', '127.0.0.1']
+        : ['sleep', '30'];
+
+    final stopwatch = Stopwatch()..start();
+    final playedCleanly = await runBoundedSoundPlayer(
+      hangingCommand,
+      timeout: const Duration(milliseconds: 300),
+    );
+    stopwatch.stop();
+
+    expect(playedCleanly, isFalse);
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 5)));
+  });
+
+  test('a well-behaved sound player reports success', () async {
+    final quickCommand = Platform.isWindows
+        ? ['cmd', '/c', 'echo ok']
+        : ['true'];
+
+    expect(await runBoundedSoundPlayer(quickCommand), isTrue);
   });
 }

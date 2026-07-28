@@ -3,6 +3,7 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:ffi/ffi.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart' show rootBundle;
 
 /// Plays the bundled dictation cues — the rising start chime when listening
@@ -50,12 +51,36 @@ Future<void> _playBundledSound(String assetPath, String tempName) async {
     if (Platform.isWindows) {
       _playWindows(path);
     } else if (Platform.isMacOS) {
-      unawaited(Process.run('afplay', [path]));
+      unawaited(runBoundedSoundPlayer(['afplay', path]));
     } else if (Platform.isLinux) {
       unawaited(_playLinux(path));
     }
   } catch (_) {
     // Sound is a garnish; it must never break the dictation flow.
+  }
+}
+
+/// Runs a sound-player command with a hard cap. A wedged audio stack (seen
+/// with pw-play on a misbehaving PipeWire sink) can otherwise hang the
+/// player forever — audibly looping a 200ms cue. Returns whether the
+/// player exited cleanly.
+@visibleForTesting
+Future<bool> runBoundedSoundPlayer(
+  List<String> command, {
+  Duration timeout = const Duration(seconds: 5),
+}) async {
+  try {
+    final process = await Process.start(command.first, command.sublist(1));
+    final exitCode = await process.exitCode.timeout(
+      timeout,
+      onTimeout: () {
+        process.kill(ProcessSignal.sigkill);
+        return -1;
+      },
+    );
+    return exitCode == 0;
+  } catch (_) {
+    return false;
   }
 }
 
@@ -91,13 +116,8 @@ Future<void> _playLinux(String path) async {
     ['paplay', path],
     ['aplay', '-q', path],
   ]) {
-    try {
-      final result = await Process.run(command.first, command.sublist(1));
-      if (result.exitCode == 0) {
-        return;
-      }
-    } catch (_) {
-      // Try the next player.
+    if (await runBoundedSoundPlayer(command)) {
+      return;
     }
   }
 }
