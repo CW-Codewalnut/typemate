@@ -90,7 +90,9 @@ jobs:
           sudo apt-get update -qq
           # libnotify-dev: the local_notifier plugin links libnotify to post
           # dictation-failure notifications.
-          sudo apt-get install -y -qq clang cmake ninja-build pkg-config libgtk-3-dev libnotify-dev xvfb
+          # libx11-dev/libxext-dev: the X11 overlay helper is compiled from
+          # source during the build (tool/fetch_whisper_runtime.dart).
+          sudo apt-get install -y -qq clang cmake ninja-build pkg-config libgtk-3-dev libnotify-dev libx11-dev libxext-dev xvfb
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
