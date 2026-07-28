@@ -12,10 +12,12 @@ import 'dart:io';
 /// clone runs this once. Release bundles copy both folders next to the
 /// executable.
 ///
-/// Runtime revision 2026-07-24 — CI caches models/ and bin/ keyed on this
+/// Runtime revision 2026-07-28 — CI caches models/ and bin/ keyed on this
 /// file's hash, so bump this line whenever a hosted binary is replaced
-/// under the same asset name (this revision: capsule-bar + chime Linux
-/// overlay; first macOS whisper universal2 build).
+/// under the same asset name (this revision: chime-less Linux overlay —
+/// dictation sounds now play from Dart assets, so the helper no longer
+/// carries or plays a chime; the replaced typemate-overlay-linux-x64.tar.gz
+/// must be uploaded to the models-v1 release before this reaches CI).
 
 class _ModelSpec {
   const _ModelSpec(this.fileName, this.url, this.expectedSizeBytes);
