@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import 'components/app_scroll_behavior.dart';
 import 'components/splash_screen.dart';
 import 'components/window_title_bar.dart';
+import 'core/audio/audio_denoiser.dart';
 import 'core/audio/microphone_discovery.dart';
 import 'core/audio/microphone_audio_recorder_factory.dart';
 import 'core/audio/system_default_microphone_discovery.dart';
@@ -42,6 +43,7 @@ class TypeMateApp extends StatefulWidget {
     this.sttEngine,
     this.platformBridge,
     this.audioRecorderFactory,
+    this.audioDenoiser,
     this.dataDirectory,
     this.splashDuration = const Duration(milliseconds: 900),
   });
@@ -51,6 +53,7 @@ class TypeMateApp extends StatefulWidget {
   final SttEngine? sttEngine;
   final PlatformBridge? platformBridge;
   final AudioRecorderFactory? audioRecorderFactory;
+  final AudioDenoiser? audioDenoiser;
 
   /// Overrides where settings and history files live. Tests point this at a
   /// temp directory so end-to-end runs never touch real user data.
@@ -70,6 +73,8 @@ class _TypeMateAppState extends State<TypeMateApp> {
   late final PlatformBridge platformBridge;
   late final SttEngine _sttEngine;
   late bool _showSplash;
+  late String _lastPreparedLanguageCode;
+  AudioDenoiser? _audioDenoiser;
 
   @override
   void initState() {
@@ -137,6 +142,16 @@ class _TypeMateAppState extends State<TypeMateApp> {
 
         return recorderFactory.create(selectedMicrophone);
       },
+      // Resolved lazily on the first noise-suppressed dictation so an
+      // install without the optional denoiser runtime still boots and
+      // dictates; the toggle then simply has nothing to run.
+      audioDenoiserProvider: () {
+        if (!speechSettingsController.noiseSuppressionEnabled) {
+          return null;
+        }
+        return _audioDenoiser ??=
+            widget.audioDenoiser ?? createDefaultAudioDenoiser();
+      },
     );
     shortcutController = HoldShortcutController(
       dictationController: controller,
@@ -153,6 +168,7 @@ class _TypeMateAppState extends State<TypeMateApp> {
     // Swap resident speech servers as soon as the language changes so the
     // newly selected model is warm before the next dictation, and the old
     // one's RAM is released.
+    _lastPreparedLanguageCode = speechSettingsController.languageCode;
     speechSettingsController.addListener(_onLanguageChanged);
     // Linux: closing the window hides it instead of quitting (the runner's
     // delete-event handler owns this), so dictation keeps running in the
@@ -160,6 +176,12 @@ class _TypeMateAppState extends State<TypeMateApp> {
   }
 
   void _onLanguageChanged() {
+    // The controller also notifies for non-language settings (the noise
+    // suppression toggle); only an actual language change swaps servers.
+    if (speechSettingsController.languageCode == _lastPreparedLanguageCode) {
+      return;
+    }
+    _lastPreparedLanguageCode = speechSettingsController.languageCode;
     unawaited(
       _sttEngine.prepare().catchError((_) {
         // Preloading is best-effort; a failure surfaces on the next
@@ -476,6 +498,14 @@ final bundledSherpaServerRelativePath = platformExecutablePath(
   'bin/sherpa/sherpa-onnx-offline-websocket-server',
 );
 const bundledParakeetDirRelativePath = 'models/parakeet-tdt-0.6b-v3-int8';
+// Optional noise suppression: the sherpa-onnx offline denoiser (from the
+// same archive as the websocket server) running the GTCRN
+// speech-enhancement model, applied per recording when the Settings toggle
+// is on.
+final bundledDenoiserRelativePath = platformExecutablePath(
+  'bin/sherpa/sherpa-onnx-offline-denoiser',
+);
+const bundledGtcrnModelRelativePath = 'models/gtcrn_simple.onnx';
 // The 25 languages Parakeet TDT 0.6B v3 transcribes, with automatic
 // language detection — every one routes to the same resident server.
 const parakeetLanguageCodes = [
@@ -557,6 +587,55 @@ SttEngine createDefaultSttEngine({
     fallback: whisperEnginesByCode['hi']!,
     languageCodeProvider: languageCodeProvider ?? (() => 'en'),
   );
+}
+
+/// Creates the noise-suppression step, or null when its runtime is not
+/// present. Unlike the speech runtimes this never throws: noise
+/// suppression is an enhancement, and dictation must keep working on the
+/// raw recording when the optional denoiser is missing.
+AudioDenoiser? createDefaultAudioDenoiser({
+  Map<String, String>? environment,
+  PathExists? pathExists,
+  String? currentDirectoryPath,
+  String? executableDirectoryPath,
+}) {
+  final values = environment ?? Platform.environment;
+  final exists = pathExists ?? (path) => File(path).existsSync();
+  final searchDirectories = [
+    currentDirectoryPath ?? Directory.current.path,
+    executableDirectoryPath ?? File(Platform.resolvedExecutable).parent.path,
+  ];
+
+  String? resolveOptional(String relativePath, String? environmentValue) {
+    final override = environmentValue?.trim() ?? '';
+    if (override.isNotEmpty) {
+      return override;
+    }
+    for (final directory in searchDirectories) {
+      final candidate = '${directory.replaceAll('\\', '/')}/$relativePath';
+      if (exists(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  final executable = resolveOptional(
+    bundledDenoiserRelativePath,
+    values['TYPEMATE_DENOISER'],
+  );
+  final modelPath = resolveOptional(
+    bundledGtcrnModelRelativePath,
+    values['TYPEMATE_DENOISER_MODEL'],
+  );
+  if (executable == null || modelPath == null) {
+    debugPrint(
+      'TypeMate: noise suppression runtime is missing; recordings are '
+      'transcribed as captured. Run: dart run tool/fetch_whisper_runtime.dart',
+    );
+    return null;
+  }
+  return SherpaGtcrnAudioDenoiser(executable: executable, modelPath: modelPath);
 }
 
 /// Resolves a helper tool: env override, then the copy bundled next to the

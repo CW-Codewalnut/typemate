@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:typemate/src/core/audio/audio_denoiser.dart';
 import 'package:typemate/src/core/audio/audio_recorder.dart';
 import 'package:typemate/src/core/dictation_controller.dart';
 import 'package:typemate/src/models/dictation_state.dart';
@@ -105,6 +106,59 @@ void main() {
       DictationController.transcriptionFailedMessage +
           DictationController.retryFromHistoryHint,
     );
+  });
+
+  test('denoises the recording before transcription when enabled', () async {
+    final engine = FakeSttEngine(transcript: 'hello');
+    final denoiser = SpyAudioDenoiser();
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: engine,
+      audioRecorder: FakeAudioRecorder(),
+      audioDenoiserProvider: () => denoiser,
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(denoiser.denoisedPaths, ['preview.wav']);
+    expect(engine.lastRecording?.path, 'preview.wav');
+    expect(controller.latestTranscript, 'hello');
+  });
+
+  test(
+    'transcribes the raw recording when the provider returns null',
+    () async {
+      final engine = FakeSttEngine(transcript: 'hello');
+      final controller = DictationController(
+        platformBridge: MockPlatformBridge(),
+        sttEngine: engine,
+        audioRecorder: FakeAudioRecorder(),
+        audioDenoiserProvider: () => null,
+      );
+
+      await controller.startListening();
+      await controller.stopListening();
+
+      expect(engine.lastRecording?.path, 'preview.wav');
+      expect(controller.latestTranscript, 'hello');
+    },
+  );
+
+  test('a crashing denoiser never breaks the dictation', () async {
+    final engine = FakeSttEngine(transcript: 'hello');
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: engine,
+      audioRecorder: FakeAudioRecorder(),
+      audioDenoiserProvider: () => ThrowingAudioDenoiser(),
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(engine.lastRecording?.path, 'preview.wav');
+    expect(controller.latestTranscript, 'hello');
   });
 
   test('transcription timeout scales with the recording length', () {
@@ -939,6 +993,23 @@ class FailingOverlayPlatformBridge extends MockPlatformBridge {
       return super.showDictationFailureNotification(message);
     }
     throw StateError('notifier unavailable');
+  }
+}
+
+class SpyAudioDenoiser implements AudioDenoiser {
+  final denoisedPaths = <String>[];
+
+  @override
+  Future<AudioRecording> denoise(AudioRecording recording) async {
+    denoisedPaths.add(recording.path);
+    return recording;
+  }
+}
+
+class ThrowingAudioDenoiser implements AudioDenoiser {
+  @override
+  Future<AudioRecording> denoise(AudioRecording recording) {
+    throw StateError('denoiser crashed');
   }
 }
 
