@@ -67,35 +67,63 @@ class MicrophoneSettingsController extends ChangeNotifier {
     _watchTimer = null;
   }
 
+  /// Whether the interval re-scan is active; lets the panel's lifecycle
+  /// handling be asserted in tests.
+  bool get isWatchingDevices => _watchTimer != null;
+
   @override
   void dispose() {
     stopWatchingDevices();
     super.dispose();
   }
 
+  bool _isRefreshing = false;
+
   /// One silent re-scan: updates state only when the device list actually
   /// changed, and never lets a transient scan failure wipe a working list.
+  /// Guarded against overlap: if a scan outlives the watch interval, later
+  /// ticks skip instead of racing it with a possibly-stale result.
   Future<void> refreshDeviceList() async {
-    if (_isLoading) {
+    if (_isLoading || _isRefreshing) {
       return;
     }
-    final List<MicrophoneDevice> discovered;
+    _isRefreshing = true;
     try {
-      discovered = await discovery.listMicrophones();
-    } catch (_) {
-      return;
+      final List<MicrophoneDevice> discovered;
+      try {
+        discovered = await discovery.listMicrophones();
+      } catch (_) {
+        return;
+      }
+      // The persisted preference wins on every re-scan, so a re-plugged
+      // favorite reclaims the selection from the temporary fallback.
+      String? persistedName;
+      try {
+        persistedName = await store.loadSelectedMicrophoneName();
+      } catch (_) {
+        persistedName = null;
+      }
+      if (listEquals(discovered, _microphones)) {
+        // A scan that works again after a failed load must still retire
+        // the stale error message, even when both lists are empty.
+        if (_hasError) {
+          _hasError = false;
+          _statusMessage = _statusForCount(discovered.length);
+          notifyListeners();
+        }
+        return;
+      }
+      _microphones = discovered;
+      _selectedMicrophone = _selectDefault(
+        discovered,
+        preferredName: persistedName,
+      );
+      _hasError = false;
+      _statusMessage = _statusForCount(discovered.length);
+      notifyListeners();
+    } finally {
+      _isRefreshing = false;
     }
-    if (listEquals(discovered, _microphones)) {
-      return;
-    }
-    _microphones = discovered;
-    _selectedMicrophone = _selectDefault(
-      discovered,
-      preferredName: _selectedMicrophone?.name,
-    );
-    _hasError = false;
-    _statusMessage = _statusForCount(discovered.length);
-    notifyListeners();
   }
 
   void selectMicrophone(MicrophoneDevice microphone) {
