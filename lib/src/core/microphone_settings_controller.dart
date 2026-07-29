@@ -20,6 +20,7 @@ class MicrophoneSettingsController extends ChangeNotifier {
   bool _hasError = false;
   String _statusMessage = 'Microphones not scanned yet.';
   Timer? _watchTimer;
+  bool _isRefreshing = false;
 
   List<MicrophoneDevice> get microphones => List.unmodifiable(_microphones);
   MicrophoneDevice? get selectedMicrophone => _selectedMicrophone;
@@ -77,8 +78,6 @@ class MicrophoneSettingsController extends ChangeNotifier {
     super.dispose();
   }
 
-  bool _isRefreshing = false;
-
   /// One silent re-scan: updates state only when the device list actually
   /// changed, and never lets a transient scan failure wipe a working list.
   /// Guarded against overlap: if a scan outlives the watch interval, later
@@ -95,14 +94,6 @@ class MicrophoneSettingsController extends ChangeNotifier {
       } catch (_) {
         return;
       }
-      // The persisted preference wins on every re-scan, so a re-plugged
-      // favorite reclaims the selection from the temporary fallback.
-      String? persistedName;
-      try {
-        persistedName = await store.loadSelectedMicrophoneName();
-      } catch (_) {
-        persistedName = null;
-      }
       if (listEquals(discovered, _microphones)) {
         // A scan that works again after a failed load must still retire
         // the stale error message, even when both lists are empty.
@@ -112,6 +103,14 @@ class MicrophoneSettingsController extends ChangeNotifier {
           notifyListeners();
         }
         return;
+      }
+      // The persisted preference wins whenever the list changes, so a
+      // re-plugged favorite reclaims the selection from the fallback.
+      String? persistedName;
+      try {
+        persistedName = await store.loadSelectedMicrophoneName();
+      } catch (_) {
+        persistedName = null;
       }
       _microphones = discovered;
       _selectedMicrophone = _selectDefault(
