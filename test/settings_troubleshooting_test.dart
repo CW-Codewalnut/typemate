@@ -60,15 +60,19 @@ void main() {
     Future<void> Function(String path)? onOpenLogsFolder,
   }) {
     return MaterialApp(
-      home: SettingsPage(
-        microphoneController: MicrophoneSettingsController(
-          discovery: _FakeDiscovery(),
-          store: _MemoryMicStore(),
+      // The Scaffold mirrors production (HomeScreen wraps every page in
+      // one) and hosts the failure snack bar.
+      home: Scaffold(
+        body: SettingsPage(
+          microphoneController: MicrophoneSettingsController(
+            discovery: _FakeDiscovery(),
+            store: _MemoryMicStore(),
+          ),
+          speechSettingsController: SpeechSettingsController(),
+          telemetryController: telemetryController,
+          logsDirectoryPath: logsDirectoryPath,
+          onOpenLogsFolder: onOpenLogsFolder,
         ),
-        speechSettingsController: SpeechSettingsController(),
-        telemetryController: telemetryController,
-        logsDirectoryPath: logsDirectoryPath,
-        onOpenLogsFolder: onOpenLogsFolder,
       ),
     );
   }
@@ -123,6 +127,26 @@ void main() {
     expect(controller.enabled, isFalse);
     expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
     expect(store.saved?.errorReportingEnabled, isFalse);
+  });
+
+  testWidgets('a failing open shows a snack bar instead of an unhandled '
+      'error', (tester) async {
+    const path = r'C:\Users\jane\AppData\Roaming\TypeMate\logs';
+    await tester.pumpWidget(
+      buildSettings(
+        logsDirectoryPath: path,
+        onOpenLogsFolder: (_) async =>
+            throw StateError('xdg-open: No such file or directory'),
+      ),
+    );
+    await tester.pump();
+
+    final button = find.byKey(const Key('open-log-folder'));
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pump();
+
+    expect(find.text('Couldn\'t open the log folder: $path'), findsOneWidget);
   });
 
   testWidgets('no troubleshooting panel without logs or telemetry', (

@@ -91,6 +91,11 @@ class TelemetryController extends ChangeNotifier implements TelemetrySink {
   bool _enabled = true;
   bool _running = false;
 
+  /// Serializes start/stop transitions: a toggle flip while a start is
+  /// still in flight queues behind it instead of racing it, so the SDK
+  /// can never be left running after the user opted out.
+  Future<void> _transitions = Future<void>.value();
+
   bool get isAvailable => dsn.isNotEmpty && _sink != null && _starter != null;
   bool get enabled => _enabled;
 
@@ -120,7 +125,11 @@ class TelemetryController extends ChangeNotifier implements TelemetrySink {
     await _applyEnabledState();
   }
 
-  Future<void> _applyEnabledState() async {
+  Future<void> _applyEnabledState() {
+    return _transitions = _transitions.then((_) => _transitionNow());
+  }
+
+  Future<void> _transitionNow() async {
     final starter = _starter;
     if (!isAvailable || starter == null) {
       return;

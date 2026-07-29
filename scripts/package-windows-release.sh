@@ -12,8 +12,19 @@ STAGING_DIR="build/package/$PACKAGE_NAME"
 ZIP_PATH="$DIST_DIR/$PACKAGE_NAME.zip"
 # Anonymous error reporting backend for RELEASE builds only; dev builds
 # (plain `flutter run`/`flutter build`) carry no DSN and send nothing.
-# A DSN is an ingest-only address, safe to commit (not a secret).
-TYPEMATE_SENTRY_DSN="${TYPEMATE_SENTRY_DSN:-https://6dd30c1b5156941a36bca5322e9395ee@o4511812673994752.ingest.de.sentry.io/4511812753490000}"
+# The single source of truth is the TYPEMATE_SENTRY_DSN env in
+# .github/workflows/release.yml; CI must always provide it. The literal
+# below exists ONLY for packaging locally on a dev machine (a DSN is an
+# ingest-only address, safe to commit) and must be kept matching the
+# workflow's value if the DSN ever rotates.
+if [ -z "${TYPEMATE_SENTRY_DSN:-}" ]; then
+  if [ -n "${CI:-}" ]; then
+    echo "ERROR: TYPEMATE_SENTRY_DSN is not set; CI must pass the DSN from release.yml" >&2
+    exit 1
+  fi
+  echo "NOTE: TYPEMATE_SENTRY_DSN not set; using the local-packaging fallback DSN" >&2
+  TYPEMATE_SENTRY_DSN="https://6dd30c1b5156941a36bca5322e9395ee@o4511812673994752.ingest.de.sentry.io/4511812753490000"
+fi
 
 "$FLUTTER_BIN" build windows \
   --dart-define=TYPEMATE_SENTRY_DSN="$TYPEMATE_SENTRY_DSN"
