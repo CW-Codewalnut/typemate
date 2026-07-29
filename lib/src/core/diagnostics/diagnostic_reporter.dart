@@ -20,9 +20,10 @@ class DiagnosticReporter {
 
   final DiagnosticLog log;
 
-  /// Mutable: telemetry attaches after its async init and detaches when the
-  /// user turns the Settings toggle off.
-  TelemetrySink? telemetrySink;
+  /// Where failure reports go besides the local log. In production this is
+  /// the TelemetryController, which itself gates on consent and backend
+  /// state — this reference never changes after construction.
+  final TelemetrySink? telemetrySink;
 
   void info(String area, String message) => log.log(area, message);
 

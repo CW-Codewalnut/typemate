@@ -22,10 +22,15 @@ Future<void> stopSentryTelemetry() => Sentry.close();
 /// quoted paths are replaced in the message and every exception value.
 /// Reports authored by [SentryTelemetrySink] are pre-scrubbed; this also
 /// covers crash events captured by the SDK itself.
+///
+/// serverName is overwritten with a placeholder rather than removed:
+/// copyWith cannot null a field, and with sendDefaultPii off the SDK
+/// never sets the hostname anyway — the placeholder guarantees it stays
+/// out even if a future configuration changes that.
 FutureOr<SentryEvent?> scrubSentryEvent(SentryEvent event, Hint hint) {
   final message = event.message;
   return event.copyWith(
-    serverName: null,
+    serverName: '<device>',
     message: message == null
         ? null
         : SentryMessage(

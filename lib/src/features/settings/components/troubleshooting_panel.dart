@@ -23,6 +23,23 @@ class TroubleshootingPanel extends StatelessWidget {
 
   bool get _showsTelemetryToggle => telemetryController?.isAvailable ?? false;
 
+  /// Opening the folder can fail (no permissions to create it, no
+  /// xdg-open on minimal Linux installs). The troubleshooting button of
+  /// all places must not surface an unhandled async error, so failures
+  /// land in a snack bar that still shows the path to browse manually.
+  Future<void> _openLogsFolder(BuildContext context, String path) async {
+    try {
+      await (onOpenLogsFolder ?? revealDirectory)(path);
+    } catch (_) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text('Couldn\'t open the log folder: $path')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -55,8 +72,7 @@ class TroubleshootingPanel extends StatelessWidget {
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 key: const Key('open-log-folder'),
-                onPressed: () =>
-                    (onOpenLogsFolder ?? revealDirectory)(logsPath),
+                onPressed: () => _openLogsFolder(context, logsPath),
                 icon: const Icon(Icons.folder_open, size: 18),
                 label: const Text('Open log folder'),
               ),
