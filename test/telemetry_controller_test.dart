@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -86,6 +87,34 @@ void main() {
       expect(started, 2);
       expect(store.saved?.errorReportingEnabled, isTrue);
       expect(sink.calls, [('stt', 'kind', 'forwarded')]);
+    });
+
+    test('opting out while a start is in flight still stops the '
+        'backend', () async {
+      final startGate = Completer<void>();
+      var started = 0;
+      var stopped = 0;
+      final controller = TelemetryController(
+        dsn: 'https://x@example.ingest.sentry.io/1',
+        telemetrySink: _RecordingSink(),
+        startTelemetry: () {
+          started++;
+          return startGate.future;
+        },
+        stopTelemetry: () async => stopped++,
+      );
+
+      final loading = controller.load();
+      // Let load() get past the store read and into the pending start.
+      await Future<void>.delayed(Duration.zero);
+      expect(started, 1);
+
+      final disabling = controller.setEnabled(false);
+      startGate.complete();
+      await loading;
+      await disabling;
+
+      expect(stopped, 1);
     });
 
     test('a failing telemetry start leaves the app unaffected', () async {
