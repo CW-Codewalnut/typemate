@@ -24,6 +24,15 @@ class _MicrophoneSelectionPanelState extends State<MicrophoneSelectionPanel> {
   }
 
   @override
+  void didUpdateWidget(MicrophoneSelectionPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.stopWatchingDevices();
+      widget.controller.startWatchingDevices();
+    }
+  }
+
+  @override
   void dispose() {
     widget.controller.stopWatchingDevices();
     super.dispose();
