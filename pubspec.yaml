@@ -63,6 +63,14 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
 
+  # macOS builds must resolve sentry-cocoa through CocoaPods, where
+  # sentry_flutter pins the exact version its Swift code compiles
+  # against. Swift Package Manager resolves a version RANGE instead and
+  # pulled a newer sentry-cocoa with a changed API, breaking the plugin
+  # compile on CI (SentryBinaryImageCache has no member 'image').
+  config:
+    enable-swift-package-manager: false
+
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
