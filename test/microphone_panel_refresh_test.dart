@@ -70,6 +70,31 @@ void main() {
     expect(controller.selectedMicrophone, _brio);
   });
 
+  testWidgets('swapping the controller moves the device watch to the '
+      'new one', (tester) async {
+    final first = MicrophoneSettingsController(
+      discovery: _MutableDiscovery([_brio]),
+    );
+    final second = MicrophoneSettingsController(
+      discovery: _MutableDiscovery([_brio]),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: MicrophoneSelectionPanel(controller: first)),
+      ),
+    );
+    expect(first.isWatchingDevices, isTrue);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: MicrophoneSelectionPanel(controller: second)),
+      ),
+    );
+
+    expect(first.isWatchingDevices, isFalse);
+    expect(second.isWatchingDevices, isTrue);
+  });
+
   testWidgets('losing every device swaps the dropdown for the status '
       'message', (tester) async {
     final discovery = _MutableDiscovery([_brio]);
