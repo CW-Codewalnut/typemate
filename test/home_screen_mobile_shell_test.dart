@@ -18,10 +18,7 @@ class _NoMicrophones implements MicrophoneDiscovery {
 }
 
 void main() {
-  Future<void> pumpHome(
-    WidgetTester tester, {
-    required bool showDictationTab,
-  }) async {
+  Future<void> pumpHome(WidgetTester tester, {required bool mobile}) async {
     final controller = DictationController(
       platformBridge: MockPlatformBridge(),
       sttEngine: MockSttEngine(),
@@ -37,33 +34,49 @@ void main() {
             discovery: _NoMicrophones(),
           ),
           speechSettingsController: SpeechSettingsController(),
-          showDictationTab: showDictationTab,
-          languageOptions: showDictationTab
+          useMobileDictationSurface: mobile,
+          languageOptions: mobile
               ? androidSpeechLanguageOptions
               : speechLanguageOptions,
-          showNoiseSuppression: !showDictationTab,
+          showNoiseSuppression: !mobile,
         ),
       ),
     );
     await tester.pump(const Duration(milliseconds: 300));
   }
 
-  testWidgets('mobile shell leads with the Dictate tab', (tester) async {
+  testWidgets('mobile leads with Dictate: mic card on top of history', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    await pumpHome(tester, showDictationTab: true);
+    await pumpHome(tester, mobile: true);
 
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.text('Dictate'), findsWidgets);
+    expect(
+      find.text('History'),
+      findsNothing,
+      reason: 'Dictate replaces the History tab; it is the same page.',
+    );
     expect(find.byKey(const Key('hold-to-dictate-button')), findsOneWidget);
+    expect(
+      find.byKey(const Key('history-main-column')),
+      findsOneWidget,
+      reason: 'History renders below the mic on the same page.',
+    );
   });
 
-  testWidgets('desktop shell keeps its three destinations', (tester) async {
-    await pumpHome(tester, showDictationTab: false);
+  testWidgets('desktop keeps History with the shortcut instruction', (
+    tester,
+  ) async {
+    await pumpHome(tester, mobile: false);
 
     expect(find.text('Dictate'), findsNothing);
+    expect(find.text('History'), findsWidgets);
+    expect(find.byKey(const Key('hold-to-dictate-button')), findsNothing);
   });
 
   testWidgets('mobile settings hide the desktop-only panels', (tester) async {
@@ -71,7 +84,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    await pumpHome(tester, showDictationTab: true);
+    await pumpHome(tester, mobile: true);
     await tester.tap(find.text('Settings'));
     await tester.pump(const Duration(milliseconds: 300));
 

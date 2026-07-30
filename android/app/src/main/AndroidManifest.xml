@@ -1,8 +1,17 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Dictation records from the microphone; the speech model downloads
          once over the network. Transcription itself is fully on-device. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Haptic confirmation when dictation starts and stops. -->
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <!-- Progress notification for the one-time model download. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- The model download runs as a dataSync foreground service so it
+         survives the app being backgrounded (background_downloader). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <application
         android:label="TypeMate"
         android:name="${applicationName}"
@@ -29,6 +38,28 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- The floating mic: appears next to the user's regular keyboard
+             whenever a text field is focused, once the user enables the
+             service under system Accessibility settings. -->
+        <service
+            android:name=".TypeMateAccessibilityService"
+            android:exported="true"
+            android:label="TypeMate floating mic"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+        <!-- background_downloader runs its download on WorkManager's
+             foreground service; Android 14+ requires the service to
+             declare the dataSync type it will request at runtime. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

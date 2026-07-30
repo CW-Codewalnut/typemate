@@ -44,6 +44,8 @@ dependencies:
   sentry_flutter: ^8.14.2
   sentry: ^8.14.2
   sherpa_onnx: ^1.13.4
+  background_downloader: ^9.5.7
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:

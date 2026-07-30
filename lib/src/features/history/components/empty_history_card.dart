@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
 
 class EmptyHistoryCard extends StatelessWidget {
-  const EmptyHistoryCard({super.key});
+  const EmptyHistoryCard({
+    super.key,
+    this.hint =
+        'Hold the shortcut, speak, and your generated text will appear here.',
+  });
+
+  /// How to make the first entry happen; mobile words it around the mic
+  /// instead of the desktop shortcut.
+  final String hint;
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +27,7 @@ class EmptyHistoryCard extends StatelessWidget {
             Text('No speech history yet.', style: theme.textTheme.bodyLarge),
             const SizedBox(height: 6),
             Text(
-              'Hold the shortcut, speak, and your generated text will appear here.',
+              hint,
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,

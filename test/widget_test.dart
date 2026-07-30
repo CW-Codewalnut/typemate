@@ -7,27 +7,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('shows the splash logo before revealing the shell', (
-    tester,
-  ) async {
+  testWidgets('opens straight to the shell (no in-app splash)', (tester) async {
     await tester.pumpWidget(
       TypeMateApp(
         microphoneDiscovery: FakeMicrophoneDiscovery(),
         holdShortcutRegistrar: const NoopHoldShortcutRegistrar(),
         sttEngine: MockSttEngine(),
-        splashDuration: const Duration(milliseconds: 400),
       ),
     );
     await tester.pump();
 
-    expect(find.byKey(const Key('splash-logo')), findsOneWidget);
-    expect(find.text('Speech history'), findsNothing);
-
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.pump(const Duration(milliseconds: 400));
-
-    expect(find.byKey(const Key('splash-logo')), findsNothing);
+    // The native OS splash covers startup; the shell is the first Flutter
+    // frame, with no manufactured splash in between.
     expect(find.text('Speech history'), findsOneWidget);
+
+    // Let the engine-prepare timer fire so none is left pending.
+    await tester.pump(const Duration(milliseconds: 200));
   });
 
   testWidgets('shuts down disposable engines when the app closes', (
@@ -39,7 +34,6 @@ void main() {
         microphoneDiscovery: FakeMicrophoneDiscovery(),
         holdShortcutRegistrar: const NoopHoldShortcutRegistrar(),
         sttEngine: engine,
-        splashDuration: Duration.zero,
       ),
     );
     await tester.pump(const Duration(milliseconds: 200));
@@ -55,7 +49,6 @@ void main() {
         microphoneDiscovery: FakeMicrophoneDiscovery(),
         holdShortcutRegistrar: const NoopHoldShortcutRegistrar(),
         sttEngine: MockSttEngine(),
-        splashDuration: Duration.zero,
       ),
     );
     await tester.pump(const Duration(milliseconds: 200));

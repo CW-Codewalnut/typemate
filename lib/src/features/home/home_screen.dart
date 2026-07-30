@@ -5,9 +5,10 @@ import '../../core/dictation_controller.dart';
 import '../../core/dictation_history_controller.dart';
 import '../../core/hold_shortcut_controller.dart';
 import '../../core/microphone_settings_controller.dart';
+import '../../core/platform/android/floating_mic_controller.dart';
 import '../../core/speech_settings_controller.dart';
 import '../../core/stt/stt_model_provisioner.dart';
-import '../dictation/dictation_page.dart';
+import '../history/components/mobile_dictation_card.dart';
 import '../history/history_page.dart';
 import '../insights/insights_page.dart';
 import '../settings/settings_page.dart';
@@ -25,9 +26,10 @@ class HomeScreen extends StatefulWidget {
     this.telemetryController,
     this.logsDirectoryPath,
     this.onQuitRequested,
-    this.showDictationTab = false,
+    this.useMobileDictationSurface = false,
     this.modelProvisioner,
     this.microphonePermissionWarmUp,
+    this.floatingMicController,
     this.languageOptions = speechLanguageOptions,
     this.showNoiseSuppression = true,
   });
@@ -41,15 +43,19 @@ class HomeScreen extends StatefulWidget {
   final String? logsDirectoryPath;
   final Future<void> Function()? onQuitRequested;
 
-  /// Mobile: dictation runs from an in-app hold-to-talk tab instead of a
-  /// global shortcut.
-  final bool showDictationTab;
+  /// Mobile: the first tab is Dictate — the history page with a
+  /// hold-to-talk mic card where desktop shows its shortcut instruction.
+  final bool useMobileDictationSurface;
 
-  /// First-run speech model download state for the dictation tab.
+  /// First-run speech model download state for the mobile mic card.
   final SttModelProvisioner? modelProvisioner;
 
-  /// Pre-shows the OS microphone permission prompt on the dictation tab.
+  /// Pre-shows the OS microphone permission prompt once dictation
+  /// becomes possible.
   final Future<void> Function()? microphonePermissionWarmUp;
+
+  /// Floating-mic enablement state for the mobile dictation card.
+  final FloatingMicController? floatingMicController;
 
   /// Languages this platform's engines serve.
   final List<SpeechLanguageOption> languageOptions;
@@ -62,18 +68,31 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
+  AppLifecycleListener? _lifecycleListener;
 
   @override
   void initState() {
     super.initState();
-    // With a dictation tab the engine prepares from there, after the model
+    // On mobile the mic card prepares the engine itself, after the model
     // provisioner confirms the files exist (fresh installs have none yet).
-    if (!widget.showDictationTab) {
+    if (!widget.useMobileDictationSurface) {
       widget.controller.prepare();
     }
     widget.microphoneController.loadMicrophones();
     widget.historyController.load();
     widget.speechSettingsController.load();
+    // The floating mic (a separate engine in the same process) appends to
+    // the history file while the app is backgrounded; reload on return so
+    // those dictations show up.
+    _lifecycleListener = AppLifecycleListener(
+      onResume: widget.historyController.load,
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycleListener?.dispose();
+    super.dispose();
   }
 
   @override
@@ -88,16 +107,24 @@ class _HomeScreenState extends State<HomeScreen> {
       ]),
       builder: (context, _) {
         final pages = [
-          if (widget.showDictationTab)
-            DictationPage(
-              controller: widget.controller,
-              modelProvisioner: widget.modelProvisioner,
-              microphonePermissionWarmUp: widget.microphonePermissionWarmUp,
-            ),
           HistoryPage(
             historyController: widget.historyController,
             dictationController: widget.controller,
             shortcutController: widget.shortcutController,
+            // Mobile: the same page desktop has, but the instruction slot
+            // holds the hold-to-talk mic and the tab is called Dictate.
+            title: widget.useMobileDictationSurface
+                ? 'Dictate'
+                : 'Speech history',
+            dictationSurface: widget.useMobileDictationSurface
+                ? MobileDictationCard(
+                    controller: widget.controller,
+                    modelProvisioner: widget.modelProvisioner,
+                    microphonePermissionWarmUp:
+                        widget.microphonePermissionWarmUp,
+                    floatingMicController: widget.floatingMicController,
+                  )
+                : null,
           ),
           InsightsPage(historyController: widget.historyController),
           SettingsPage(
@@ -129,7 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             labelType: NavigationRailLabelType.all,
                             destinations: [
                               for (final destination in _destinations(
-                                widget.showDictationTab,
+                                widget.useMobileDictationSurface,
                               ))
                                 NavigationRailDestination(
                                   icon: destination.icon,
@@ -149,7 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       onDestinationSelected: _selectDestination,
                       destinations: [
                         for (final destination in _destinations(
-                          widget.showDictationTab,
+                          widget.useMobileDictationSurface,
                         ))
                           NavigationDestination(
                             icon: destination.icon,
@@ -183,18 +210,21 @@ class _Destination {
   final String label;
 }
 
-List<_Destination> _destinations(bool showDictationTab) => [
-  if (showDictationTab)
+List<_Destination> _destinations(bool useMobileDictationSurface) => [
+  // One first tab on every platform: dictation how-to plus history. On
+  // mobile it leads with the mic, so it is named for what you do there.
+  if (useMobileDictationSurface)
     const _Destination(
       icon: Icon(Icons.mic_none),
       selectedIcon: Icon(Icons.mic),
       label: 'Dictate',
+    )
+  else
+    const _Destination(
+      icon: Icon(Icons.history),
+      selectedIcon: Icon(Icons.history_toggle_off),
+      label: 'History',
     ),
-  const _Destination(
-    icon: Icon(Icons.history),
-    selectedIcon: Icon(Icons.history_toggle_off),
-    label: 'History',
-  ),
   const _Destination(
     icon: Icon(Icons.insights_outlined),
     selectedIcon: Icon(Icons.insights),

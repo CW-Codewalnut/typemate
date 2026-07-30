@@ -8,7 +8,7 @@ import 'package:typemate/src/core/dictation_controller.dart';
 import 'package:typemate/src/core/platform/mock_platform_bridge.dart';
 import 'package:typemate/src/core/stt/stt_engine.dart';
 import 'package:typemate/src/core/stt/stt_model_provisioner.dart';
-import 'package:typemate/src/features/dictation/dictation_page.dart';
+import 'package:typemate/src/features/history/components/mobile_dictation_card.dart';
 
 class FixedTranscriptSttEngine implements SttEngine {
   FixedTranscriptSttEngine(this.transcript);
@@ -29,19 +29,22 @@ class FixedTranscriptSttEngine implements SttEngine {
 }
 
 void main() {
-  Widget wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
+  Widget wrap(Widget child) => MaterialApp(
+    home: Scaffold(body: SingleChildScrollView(child: child)),
+  );
 
-  testWidgets('hold to talk produces and copies a transcript', (tester) async {
+  testWidgets('hold to talk dictates and inserts via the bridge', (
+    tester,
+  ) async {
     final bridge = MockPlatformBridge();
-    final engine = FixedTranscriptSttEngine('ship the android build');
     final controller = DictationController(
       platformBridge: bridge,
-      sttEngine: engine,
+      sttEngine: FixedTranscriptSttEngine('ship the android build'),
       audioRecorder: MockAudioRecorder(),
     );
     addTearDown(controller.dispose);
 
-    await tester.pumpWidget(wrap(DictationPage(controller: controller)));
+    await tester.pumpWidget(wrap(MobileDictationCard(controller: controller)));
     await tester.pump();
 
     final button = find.byKey(const Key('hold-to-dictate-button'));
@@ -55,16 +58,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
 
-    expect(find.text('ship the android build'), findsOneWidget);
     expect(
       bridge.lastInsertedText,
       'ship the android build',
-      reason: 'The bridge insertion is what lands the text on the clipboard.',
+      reason: 'The bridge insertion lands the text on the clipboard.',
     );
   });
 
   testWidgets('fresh install walks through the model download', (tester) async {
-    final directory = Directory.systemTemp.createTempSync('typemate-dict');
+    final directory = Directory.systemTemp.createTempSync('typemate-card');
     addTearDown(() => directory.deleteSync(recursive: true));
     final provisioner = SttModelProvisioner(
       modelDirectory: directory,
@@ -98,7 +100,7 @@ void main() {
     var permissionWarmUps = 0;
     await tester.pumpWidget(
       wrap(
-        DictationPage(
+        MobileDictationCard(
           controller: controller,
           modelProvisioner: provisioner,
           microphonePermissionWarmUp: () async => permissionWarmUps += 1,
@@ -111,18 +113,10 @@ void main() {
     expect(
       find.byKey(const Key('hold-to-dictate-button')),
       findsNothing,
-      reason: 'No dictation surface before the model exists.',
+      reason: 'No mic before the model exists.',
     );
-    expect(
-      engine.prepared,
-      isFalse,
-      reason: 'The engine must not try to load missing model files.',
-    );
-    expect(
-      permissionWarmUps,
-      0,
-      reason: 'No permission prompt while dictation is still impossible.',
-    );
+    expect(engine.prepared, isFalse);
+    expect(permissionWarmUps, 0);
 
     await tester.tap(find.byKey(const Key('start-model-download')));
     await tester.pumpAndSettle();
@@ -131,20 +125,14 @@ void main() {
     expect(find.byKey(const Key('hold-to-dictate-button')), findsOneWidget);
     expect(
       engine.prepared,
-      isTrue,
-      reason: 'The engine warms up as soon as the model lands.',
+      isFalse,
+      reason: 'Engine loads lazily on first dictation, not on model ready.',
     );
-    expect(
-      permissionWarmUps,
-      1,
-      reason: 'The permission prompt fires once dictation becomes possible.',
-    );
+    expect(permissionWarmUps, 1);
   });
 
-  testWidgets('an already provisioned model goes straight to dictation', (
-    tester,
-  ) async {
-    final directory = Directory.systemTemp.createTempSync('typemate-dict2');
+  testWidgets('a provisioned model goes straight to the mic', (tester) async {
+    final directory = Directory.systemTemp.createTempSync('typemate-card2');
     addTearDown(() => directory.deleteSync(recursive: true));
     File('${directory.path}/a.onnx').writeAsStringSync('0123456789');
     final provisioner = SttModelProvisioner(
@@ -178,7 +166,7 @@ void main() {
     var permissionWarmUps = 0;
     await tester.pumpWidget(
       wrap(
-        DictationPage(
+        MobileDictationCard(
           controller: controller,
           modelProvisioner: provisioner,
           microphonePermissionWarmUp: () async => permissionWarmUps += 1,
@@ -188,11 +176,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('hold-to-dictate-button')), findsOneWidget);
-    expect(engine.prepared, isTrue);
     expect(
-      permissionWarmUps,
-      1,
-      reason: 'A provisioned install prompts for the microphone right away.',
+      engine.prepared,
+      isFalse,
+      reason: 'Engine loads lazily on first dictation, not on model ready.',
     );
+    expect(permissionWarmUps, 1);
   });
 }

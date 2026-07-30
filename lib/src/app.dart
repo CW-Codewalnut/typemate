@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'components/app_scroll_behavior.dart';
-import 'components/splash_screen.dart';
 import 'components/window_title_bar.dart';
 import 'core/audio/audio_denoiser.dart';
 import 'core/audio/microphone_discovery.dart';
@@ -22,6 +21,7 @@ import 'core/microphone_settings_controller.dart';
 import 'core/microphone_settings_store.dart';
 import 'core/speech_settings_controller.dart';
 import 'core/platform/android/android_platform_bridge.dart';
+import 'core/platform/android/floating_mic_controller.dart';
 import 'core/platform/linux/linux_platform_bridge.dart';
 import 'core/platform/linux/linux_x11_hold_shortcut_registrar.dart';
 import 'core/platform/macos/macos_platform_bridge.dart';
@@ -53,7 +53,6 @@ class TypeMateApp extends StatefulWidget {
     this.diagnosticReporter,
     this.telemetryController,
     this.dataDirectory,
-    this.splashDuration = const Duration(milliseconds: 900),
     this.useMobileShell,
     this.modelProvisioner,
   });
@@ -75,7 +74,6 @@ class TypeMateApp extends StatefulWidget {
   /// Overrides where settings and history files live. Tests point this at a
   /// temp directory so end-to-end runs never touch real user data.
   final Directory? dataDirectory;
-  final Duration splashDuration;
 
   /// Mobile experience: in-app dictation tab, no window title bar, no
   /// shortcut/quit/noise-suppression settings, Parakeet-only languages.
@@ -101,7 +99,7 @@ class _TypeMateAppState extends State<TypeMateApp> {
   late final DiagnosticReporter _diagnostics;
   late final bool _useMobileShell;
   SttModelProvisioner? _modelProvisioner;
-  late bool _showSplash;
+  FloatingMicController? _floatingMicController;
   late String _lastPreparedLanguageCode;
   AudioDenoiser? _audioDenoiser;
 
@@ -110,13 +108,8 @@ class _TypeMateAppState extends State<TypeMateApp> {
     super.initState();
     _diagnostics = widget.diagnosticReporter ?? DiagnosticReporter();
     _useMobileShell = widget.useMobileShell ?? Platform.isAndroid;
-    _showSplash = widget.splashDuration > Duration.zero;
-    if (_showSplash) {
-      Timer(widget.splashDuration, () {
-        if (mounted) {
-          setState(() => _showSplash = false);
-        }
-      });
+    if (_useMobileShell) {
+      _floatingMicController = FloatingMicController();
     }
     final recordingsDirectory = createDefaultRecordingsDirectory(
       directory: widget.dataDirectory,
@@ -267,6 +260,7 @@ class _TypeMateAppState extends State<TypeMateApp> {
     historyController.dispose();
     microphoneController.dispose();
     _modelProvisioner?.dispose();
+    _floatingMicController?.dispose();
     controller.dispose();
     super.dispose();
   }
@@ -286,38 +280,30 @@ class _TypeMateAppState extends State<TypeMateApp> {
         children: [
           if (!_useMobileShell) const WindowTitleBar(),
           Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              child: _showSplash
-                  ? const SplashScreen()
-                  : HomeScreen(
-                      controller: controller,
-                      historyController: historyController,
-                      microphoneController: microphoneController,
-                      speechSettingsController: speechSettingsController,
-                      // Mobile hides every desktop-only Settings surface:
-                      // no global shortcut, no file-manager log folder, no
-                      // Quit (Android lifecycles apps itself).
-                      shortcutController: _useMobileShell
-                          ? null
-                          : shortcutController,
-                      telemetryController: widget.telemetryController,
-                      logsDirectoryPath: _useMobileShell
-                          ? null
-                          : _diagnostics.log.directoryPath,
-                      onQuitRequested: _useMobileShell
-                          ? null
-                          : _shutDownAndExit,
-                      showDictationTab: _useMobileShell,
-                      modelProvisioner: _modelProvisioner,
-                      microphonePermissionWarmUp: _useMobileShell
-                          ? warmUpMicrophonePermission
-                          : null,
-                      languageOptions: _useMobileShell
-                          ? androidSpeechLanguageOptions
-                          : speechLanguageOptions,
-                      showNoiseSuppression: !_useMobileShell,
-                    ),
+            child: HomeScreen(
+              controller: controller,
+              historyController: historyController,
+              microphoneController: microphoneController,
+              speechSettingsController: speechSettingsController,
+              // Mobile hides every desktop-only Settings surface: no global
+              // shortcut, no file-manager log folder, no Quit (Android
+              // lifecycles apps itself).
+              shortcutController: _useMobileShell ? null : shortcutController,
+              telemetryController: widget.telemetryController,
+              logsDirectoryPath: _useMobileShell
+                  ? null
+                  : _diagnostics.log.directoryPath,
+              onQuitRequested: _useMobileShell ? null : _shutDownAndExit,
+              useMobileDictationSurface: _useMobileShell,
+              modelProvisioner: _modelProvisioner,
+              microphonePermissionWarmUp: _useMobileShell
+                  ? warmUpMicrophonePermission
+                  : null,
+              floatingMicController: _floatingMicController,
+              languageOptions: _useMobileShell
+                  ? androidSpeechLanguageOptions
+                  : speechLanguageOptions,
+              showNoiseSuppression: !_useMobileShell,
             ),
           ),
         ],

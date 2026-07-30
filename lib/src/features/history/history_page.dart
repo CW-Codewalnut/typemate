@@ -12,11 +12,19 @@ class HistoryPage extends StatelessWidget {
     required this.historyController,
     this.dictationController,
     this.shortcutController,
+    this.dictationSurface,
+    this.title = 'Speech history',
   });
 
   final DictationHistoryController historyController;
   final DictationController? dictationController;
   final HoldShortcutController? shortcutController;
+
+  /// Mobile's hold-to-talk mic (and model download), shown where desktop
+  /// shows its shortcut instruction card.
+  final Widget? dictationSurface;
+
+  final String title;
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +34,8 @@ class HistoryPage extends StatelessWidget {
         historyController: historyController,
         dictationController: dictationController,
         shortcutController: shortcutController,
+        dictationSurface: dictationSurface,
+        title: title,
       ),
     );
   }

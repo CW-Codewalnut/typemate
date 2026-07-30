@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter_test/flutter_test.dart';
+
 import 'package:typemate/src/core/audio/audio_recorder.dart';
 import 'package:typemate/src/core/audio/microphone_audio_recorder_factory.dart';
 import 'package:typemate/src/core/audio/microphone_discovery.dart';
@@ -175,5 +177,19 @@ class FakeSttEngine implements SttEngine {
   Future<String> transcribe(AudioRecording recording) async {
     transcribeCalls += 1;
     return transcript;
+  }
+}
+
+/// Pumps until [condition] holds (bounded). The mobile shell does work
+/// off the frame pipeline (platform-channel permission warm-up before
+/// engine prepare), so waiting on frames alone races real devices.
+Future<void> pumpUntil(
+  WidgetTester tester,
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 10),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!condition() && DateTime.now().isBefore(deadline)) {
+    await tester.pump(const Duration(milliseconds: 100));
   }
 }

@@ -5,6 +5,8 @@ import 'package:integration_test/integration_test.dart';
 import 'package:typemate/src/app.dart';
 import 'package:typemate/src/core/audio/record_package_audio.dart';
 import 'package:typemate/src/core/audio/system_default_microphone_discovery.dart';
+import 'package:typemate/src/core/hold_shortcut_controller.dart';
+import 'package:typemate/src/core/platform/android/android_platform_bridge.dart';
 import 'package:typemate/src/core/platform/linux/linux_platform_bridge.dart';
 import 'package:typemate/src/core/platform/linux/linux_x11_hold_shortcut_registrar.dart';
 import 'package:typemate/src/core/platform/macos/macos_platform_bridge.dart';
@@ -35,6 +37,12 @@ void main() {
       expect(bridge, isA<MacosPlatformBridge>());
       expect(registrar, isA<MacosPollingHoldShortcutRegistrar>());
       expect(discovery, isA<RecordPackageMicrophoneDiscovery>());
+    } else if (Platform.isAndroid) {
+      // No global shortcut in-app (the accessibility service owns the
+      // system-wide surface); insertion is the clipboard bridge.
+      expect(bridge, isA<AndroidPlatformBridge>());
+      expect(registrar, isA<NoopHoldShortcutRegistrar>());
+      expect(discovery, isA<SystemDefaultMicrophoneDiscovery>());
     } else {
       fail('Unsupported CI operating system: ${Platform.operatingSystem}');
     }

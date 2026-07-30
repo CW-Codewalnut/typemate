@@ -20,14 +20,16 @@ void main() {
         // CI must observe the machine it runs on, not reconfigure it.
         platformBridge: MockPlatformBridge(),
         dataDirectory: dataDirectory,
-        // The splash is time-based and integration tests run on a real
-        // clock, so it is covered by widget tests instead.
-        splashDuration: Duration.zero,
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Speech history'), findsOneWidget);
+    // Mobile's first tab is Dictate (the same page with the mic card);
+    // desktop titles it Speech history.
+    expect(
+      find.text(Platform.isAndroid ? 'Dictate' : 'Speech history'),
+      findsWidgets,
+    );
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Prepare local engine'), findsNothing);
   });

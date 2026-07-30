@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_description">Shows a floating
+        dictation mic whenever a text field is focused and types what you
+        say into it, so you can keep using your regular keyboard. Speech
+        is transcribed entirely on this device; TypeMate reads only the
+        focused text field (to add your words to it) and nothing you say
+        or type ever leaves your phone.</string>
+</resources>
