@@ -12,17 +12,31 @@ const parakeetAndroidModelDirectoryName = 'parakeet-tdt-0.6b-v3-int8';
 /// byte-for-byte the model the desktop resident server loads. Individual
 /// files (not the .tar.bz2 archive) so the download streams straight to
 /// disk with HTTP-range resume and no on-phone archive extraction.
+///
+/// PINNED to a commit revision, never a branch: content at a commit is
+/// immutable, so a resume can never append bytes of a newer upload onto
+/// an older partial file, and we ship exactly the bytes that were
+/// validated — not whatever `main` points at later. The byte sizes come
+/// from the same revision and gate the rename-to-complete.
+const _parakeetModelRevision = '2bda32ec70b097a55adaa07d9a7173915b43cc78';
 const _parakeetModelBaseUrl =
-    'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main';
+    'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/$_parakeetModelRevision';
+
+const _parakeetModelFileSizes = {
+  'encoder.int8.onnx': 652184281,
+  'decoder.int8.onnx': 11845275,
+  'joiner.int8.onnx': 6355277,
+  'tokens.txt': 93939,
+};
 
 final parakeetAndroidModelFiles = [
   for (final name in sherpaParakeetModelFileNames)
-    SttModelFile(url: '$_parakeetModelBaseUrl/$name', relativePath: name),
+    SttModelFile(
+      url: '$_parakeetModelBaseUrl/$name',
+      relativePath: name,
+      expectedBytes: _parakeetModelFileSizes[name]!,
+    ),
 ];
-
-/// Approximate on-disk size (encoder 622 MB + decoder 12 MB + joiner 6 MB
-/// + tokens); drives the progress fraction and the size shown to the user.
-const parakeetAndroidModelTotalBytes = 671000000;
 
 /// The Android speech stack: the on-device Parakeet engine plus the
 /// first-run downloader for its model files. Both point at the same
@@ -43,7 +57,6 @@ createAndroidSpeechRuntime({
     provisioner: SttModelProvisioner(
       modelDirectory: modelDirectory,
       files: parakeetAndroidModelFiles,
-      expectedTotalBytes: parakeetAndroidModelTotalBytes,
     ),
   );
 }

@@ -7,10 +7,12 @@ const _files = [
   SttModelFile(
     url: 'https://example.test/encoder.onnx',
     relativePath: 'encoder.onnx',
+    expectedBytes: 10,
   ),
   SttModelFile(
     url: 'https://example.test/tokens.txt',
     relativePath: 'tokens.txt',
+    expectedBytes: 10,
   ),
 ];
 
@@ -27,7 +29,6 @@ void main() {
       SttModelProvisioner(
         modelDirectory: directory,
         files: _files,
-        expectedTotalBytes: 20,
         downloader:
             downloader ??
             (
@@ -144,6 +145,37 @@ void main() {
     expect(
       File('${directory.path}/tokens.txt').readAsStringSync(),
       '0123456789',
+    );
+  });
+
+  test('a wrong-sized download fails and discards the partial file', () async {
+    final sut = provisioner(
+      downloader:
+          (
+            file,
+            target, {
+            required resumeFromBytes,
+            required onProgress,
+          }) async {
+            // The stream "ends" early: fewer bytes than the pinned
+            // revision's exact size.
+            target.writeAsStringSync('01234');
+          },
+    );
+    await sut.refresh();
+
+    await sut.download();
+
+    expect(sut.phase, SttModelProvisionPhase.failed);
+    expect(
+      File('${directory.path}/encoder.onnx').existsSync(),
+      isFalse,
+      reason: 'A wrong-sized file must never be renamed to complete.',
+    );
+    expect(
+      File('${directory.path}/encoder.onnx.part').existsSync(),
+      isFalse,
+      reason: 'The mismatched partial is discarded so retry starts clean.',
     );
   });
 }
