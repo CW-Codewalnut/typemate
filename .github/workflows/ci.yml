@@ -51,6 +51,37 @@ jobs:
       contents: read
       security-events: write
 
+  # The Android app has no e2e harness yet (no emulator in CI); a release
+  # build catches Gradle/Kotlin/plugin breakage, which is where every
+  # Android failure so far has lived. Runs alongside the test matrix.
+  build-android:
+    name: Android build
+    needs: security
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build release APK
+        run: flutter build apk --release
+
   test:
     name: Tests and e2e (${{ matrix.name }})
     needs: security
