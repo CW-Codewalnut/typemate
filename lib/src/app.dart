@@ -21,6 +21,7 @@ import 'core/hold_shortcut_controller.dart';
 import 'core/microphone_settings_controller.dart';
 import 'core/microphone_settings_store.dart';
 import 'core/speech_settings_controller.dart';
+import 'core/platform/android/android_platform_bridge.dart';
 import 'core/platform/linux/linux_platform_bridge.dart';
 import 'core/platform/linux/linux_x11_hold_shortcut_registrar.dart';
 import 'core/platform/macos/macos_platform_bridge.dart';
@@ -29,9 +30,11 @@ import 'core/platform/mock_platform_bridge.dart';
 import 'core/platform/platform_bridge.dart';
 import 'core/platform/windows/windows_platform_bridge.dart';
 import 'core/platform/windows/windows_polling_hold_shortcut_registrar.dart';
+import 'core/stt/android_speech_runtime.dart';
 import 'core/stt/language_routing_stt_engine.dart';
 import 'core/stt/parakeet_server_stt_engine.dart';
 import 'core/stt/stt_engine.dart';
+import 'core/stt/stt_model_provisioner.dart';
 import 'core/stt/whisper_cli_stt_engine.dart';
 import 'core/stt/whisper_server_stt_engine.dart';
 import 'features/home/home_screen.dart';
@@ -51,6 +54,8 @@ class TypeMateApp extends StatefulWidget {
     this.telemetryController,
     this.dataDirectory,
     this.splashDuration = const Duration(milliseconds: 900),
+    this.useMobileShell,
+    this.modelProvisioner,
   });
 
   final MicrophoneDiscovery? microphoneDiscovery;
@@ -72,6 +77,15 @@ class TypeMateApp extends StatefulWidget {
   final Directory? dataDirectory;
   final Duration splashDuration;
 
+  /// Mobile experience: in-app dictation tab, no window title bar, no
+  /// shortcut/quit/noise-suppression settings, Parakeet-only languages.
+  /// Defaults to the platform (Android); tests can force it on desktop.
+  final bool? useMobileShell;
+
+  /// Overrides the speech model download state; tests pair it with a mock
+  /// [sttEngine].
+  final SttModelProvisioner? modelProvisioner;
+
   @override
   State<TypeMateApp> createState() => _TypeMateAppState();
 }
@@ -85,6 +99,8 @@ class _TypeMateAppState extends State<TypeMateApp> {
   late final PlatformBridge platformBridge;
   late final SttEngine _sttEngine;
   late final DiagnosticReporter _diagnostics;
+  late final bool _useMobileShell;
+  SttModelProvisioner? _modelProvisioner;
   late bool _showSplash;
   late String _lastPreparedLanguageCode;
   AudioDenoiser? _audioDenoiser;
@@ -93,6 +109,7 @@ class _TypeMateAppState extends State<TypeMateApp> {
   void initState() {
     super.initState();
     _diagnostics = widget.diagnosticReporter ?? DiagnosticReporter();
+    _useMobileShell = widget.useMobileShell ?? Platform.isAndroid;
     _showSplash = widget.splashDuration > Duration.zero;
     if (_showSplash) {
       Timer(widget.splashDuration, () {
@@ -135,12 +152,31 @@ class _TypeMateAppState extends State<TypeMateApp> {
       store: createDefaultSpeechSettingsStore(directory: widget.dataDirectory),
     );
     platformBridge = widget.platformBridge ?? createDefaultPlatformBridge();
-    _sttEngine =
-        widget.sttEngine ??
-        createDefaultSttEngine(
-          languageCodeProvider: () => speechSettingsController.languageCode,
-          diagnostics: _diagnostics,
+    final injectedEngine = widget.sttEngine;
+    if (injectedEngine != null) {
+      _sttEngine = injectedEngine;
+      _modelProvisioner = widget.modelProvisioner;
+    } else if (Platform.isAndroid) {
+      // Android cannot spawn the bundled desktop servers; it runs the same
+      // Parakeet model in-process, downloaded on first run.
+      final dataDirectory = widget.dataDirectory;
+      if (dataDirectory == null) {
+        throw StateError(
+          'Android bootstrap must provide dataDirectory (see main.dart).',
         );
+      }
+      final speechRuntime = createAndroidSpeechRuntime(
+        dataDirectory: dataDirectory,
+        diagnostics: _diagnostics,
+      );
+      _sttEngine = speechRuntime.engine;
+      _modelProvisioner = speechRuntime.provisioner;
+    } else {
+      _sttEngine = createDefaultSttEngine(
+        languageCodeProvider: () => speechSettingsController.languageCode,
+        diagnostics: _diagnostics,
+      );
+    }
     if (platformBridge case final QuitRequestSource quitSource) {
       quitSource.onQuitRequested = _shutDownAndExit;
     }
@@ -148,6 +184,9 @@ class _TypeMateAppState extends State<TypeMateApp> {
       platformBridge: platformBridge,
       sttEngine: _sttEngine,
       diagnostics: _diagnostics,
+      readyStatusMessage: _useMobileShell
+          ? 'Ready. Hold the mic button and speak.'
+          : DictationController.defaultReadyStatusMessage,
       onTranscriptGenerated: historyController.addTranscript,
       onTranscriptionFailed: historyController.addFailure,
       audioRecorderProvider: () {
@@ -227,6 +266,7 @@ class _TypeMateAppState extends State<TypeMateApp> {
     speechSettingsController.dispose();
     historyController.dispose();
     microphoneController.dispose();
+    _modelProvisioner?.dispose();
     controller.dispose();
     super.dispose();
   }
@@ -244,7 +284,7 @@ class _TypeMateAppState extends State<TypeMateApp> {
           Platform.isLinux ? VirtualWindowFrame(child: child!) : child!,
       home: Column(
         children: [
-          const WindowTitleBar(),
+          if (!_useMobileShell) const WindowTitleBar(),
           Expanded(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 300),
@@ -255,10 +295,28 @@ class _TypeMateAppState extends State<TypeMateApp> {
                       historyController: historyController,
                       microphoneController: microphoneController,
                       speechSettingsController: speechSettingsController,
-                      shortcutController: shortcutController,
+                      // Mobile hides every desktop-only Settings surface:
+                      // no global shortcut, no file-manager log folder, no
+                      // Quit (Android lifecycles apps itself).
+                      shortcutController: _useMobileShell
+                          ? null
+                          : shortcutController,
                       telemetryController: widget.telemetryController,
-                      logsDirectoryPath: _diagnostics.log.directoryPath,
-                      onQuitRequested: _shutDownAndExit,
+                      logsDirectoryPath: _useMobileShell
+                          ? null
+                          : _diagnostics.log.directoryPath,
+                      onQuitRequested: _useMobileShell
+                          ? null
+                          : _shutDownAndExit,
+                      showDictationTab: _useMobileShell,
+                      modelProvisioner: _modelProvisioner,
+                      microphonePermissionWarmUp: _useMobileShell
+                          ? warmUpMicrophonePermission
+                          : null,
+                      languageOptions: _useMobileShell
+                          ? androidSpeechLanguageOptions
+                          : speechLanguageOptions,
+                      showNoiseSuppression: !_useMobileShell,
                     ),
             ),
           ),
@@ -291,7 +349,11 @@ PlatformBridge createDefaultPlatformBridge({
   bool? isWindows,
   bool? isLinux,
   bool? isMacOS,
+  bool? isAndroid,
 }) {
+  if (isAndroid ?? Platform.isAndroid) {
+    return AndroidPlatformBridge();
+  }
   if (isWindows ?? Platform.isWindows) {
     return WindowsPlatformBridge();
   }
@@ -335,13 +397,16 @@ HoldShortcutRegistrar createDefaultHoldShortcutRegistrar({
 MicrophoneDiscovery createDefaultMicrophoneDiscovery({
   bool? isWindows,
   bool? isLinux,
+  bool? isAndroid,
 }) {
   // Windows uses the record plugin's MediaFoundation backend: built into
   // Windows 10/11, so microphone discovery needs no external binaries.
   if (isWindows ?? Platform.isWindows) {
     return RecordPackageMicrophoneDiscovery();
   }
-  if (isLinux ?? Platform.isLinux) {
+  // Linux and Android record from the system default input, which the OS
+  // routes to whichever microphone is active; the picker offers one entry.
+  if ((isLinux ?? Platform.isLinux) || (isAndroid ?? Platform.isAndroid)) {
     return const SystemDefaultMicrophoneDiscovery();
   }
 
@@ -352,11 +417,23 @@ MicrophoneDiscovery createDefaultMicrophoneDiscovery({
 AudioRecorderFactory createDefaultAudioRecorderFactory({
   required Directory outputDirectory,
   bool? isWindows,
+  bool? isLinux,
+  bool? isAndroid,
 }) {
   if (isWindows ?? Platform.isWindows) {
     return RecordPackageAudioRecorderFactory(outputDirectory: outputDirectory);
   }
-  if (Platform.isLinux) {
+  if (isAndroid ?? Platform.isAndroid) {
+    // Android records the system default input (device selection is an OS
+    // concern) and must request the runtime microphone permission before
+    // the first capture.
+    return RecordPackageAudioRecorderFactory(
+      outputDirectory: outputDirectory,
+      useSystemDefaultDevice: true,
+      requestPermission: true,
+    );
+  }
+  if (isLinux ?? Platform.isLinux) {
     // Linux records through ffmpeg's Pulse input; the binary comes from the
     // distro (documented dependency), an env override, or PATH.
     return MicrophoneAudioRecorderFactory.linux(

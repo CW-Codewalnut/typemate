@@ -40,6 +40,7 @@ class DictationController extends ChangeNotifier {
     Duration recorderStopTimeout = defaultRecorderStopTimeout,
     DictationSoundPlayer? startSoundPlayer,
     DictationSoundPlayer? failureSoundPlayer,
+    String readyStatusMessage = defaultReadyStatusMessage,
   }) {
     assert(
       audioRecorder != null || audioRecorderProvider != null,
@@ -58,6 +59,7 @@ class DictationController extends ChangeNotifier {
       recorderStopTimeout,
       startSoundPlayer ?? playDictationStartSound,
       failureSoundPlayer ?? playDictationFailureSound,
+      readyStatusMessage,
     );
   }
 
@@ -73,7 +75,13 @@ class DictationController extends ChangeNotifier {
     this._recorderStopTimeout,
     this._startSoundPlayer,
     this._failureSoundPlayer,
+    this._readyStatusMessage,
   );
+
+  /// Desktop wording; the mobile shell passes its own (there is no
+  /// shortcut to hold on a phone).
+  static const defaultReadyStatusMessage =
+      'Ready. Hold the shortcut and speak.';
 
   /// Base allowance for a transcription; the recording's own length is
   /// added on top (decoding runs at roughly realtime or faster), capped at
@@ -102,6 +110,7 @@ class DictationController extends ChangeNotifier {
   final Duration _recorderStopTimeout;
   final DictationSoundPlayer _startSoundPlayer;
   final DictationSoundPlayer _failureSoundPlayer;
+  final String _readyStatusMessage;
 
   /// User-facing failure copy: plain words, no runtime internals. The
   /// History pointer is appended only to the OS notification — inside the
@@ -151,7 +160,7 @@ class DictationController extends ChangeNotifier {
       );
       return;
     }
-    _setPhase(DictationPhase.idle, 'Ready. Hold the shortcut and speak.');
+    _setPhase(DictationPhase.idle, _readyStatusMessage);
   }
 
   Future<void> startListening() async {
