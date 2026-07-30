@@ -84,8 +84,20 @@ Notes for reviewers of this draft:
 1. Real upload keystore configured in `android/key.properties` +
    `build.gradle.kts` signing config (never commit the keystore).
 2. `flutter build appbundle --release` (verified working, 101.8 MB).
+   **versionCode:** Play requires a strictly increasing `versionCode`
+   per upload. It comes from the `+buildNumber` suffix in
+   `pubspec.yaml`'s `version:` — bump it (e.g. `1.5.0+9`) for every
+   Play upload, not just the semantic version.
 3. Closed testing track first; Play requires review; personal accounts
    created after Nov 2023 additionally require a 12-tester/14-day closed
    test before production access.
 4. Verify on a real phone: model download on Wi-Fi, dictation accuracy,
    RAM behavior on the target device tier.
+
+## Phase 2 notes
+
+- Backgrounded downloads: Android freezes the app process in the
+  background, which pauses a first-run model download mid-flight. The
+  resume flow recovers on next open, but a polished v2 should move the
+  download to a foreground service or WorkManager so it survives
+  backgrounding.

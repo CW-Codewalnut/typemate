@@ -5,23 +5,30 @@ import 'package:flutter/foundation.dart';
 
 /// One file of a speech model that must exist locally before the engine
 /// can load. [relativePath] is resolved inside the provisioner's model
-/// directory.
+/// directory. [expectedBytes] is the exact size at the pinned revision;
+/// a download only counts as complete when the bytes on disk match.
 class SttModelFile {
-  const SttModelFile({required this.url, required this.relativePath});
+  const SttModelFile({
+    required this.url,
+    required this.relativePath,
+    required this.expectedBytes,
+  });
 
   final String url;
   final String relativePath;
+  final int expectedBytes;
 }
 
-/// Streams [file] to [target], reporting received byte counts through
-/// [onProgress]. [resumeFromBytes] > 0 asks the server for the remainder
-/// (HTTP Range) and appends.
+/// Streams [file] to [target]. [resumeFromBytes] > 0 asks the server for
+/// the remainder (HTTP Range) and appends. [onProgress] reports the total
+/// bytes present in the file so far — including resumed bytes, and
+/// restarting from zero when the server ignored the range request.
 typedef SttModelFileDownloader =
     Future<void> Function(
       SttModelFile file,
       File target, {
       required int resumeFromBytes,
-      required void Function(int receivedBytes) onProgress,
+      required void Function(int fileBytes) onProgress,
     });
 
 enum SttModelProvisionPhase {
@@ -45,25 +52,25 @@ enum SttModelProvisionPhase {
 /// [SttModelProvisionPhase.ready] immediately.
 ///
 /// Each file downloads to a `.part` sibling and only renames to its final
-/// name after completing, so a killed app never leaves a truncated file
-/// that looks complete. An existing `.part` resumes where it stopped.
+/// name after its size matches the pinned revision's exact byte count, so
+/// a killed app, a truncated stream, or a server serving different bytes
+/// can never leave a corrupt file that looks complete. An existing
+/// `.part` resumes where it stopped.
 class SttModelProvisioner extends ChangeNotifier {
   SttModelProvisioner({
     required this.modelDirectory,
     required this.files,
-    required this.expectedTotalBytes,
     SttModelFileDownloader? downloader,
   }) : _downloader = downloader ?? _httpDownloader;
 
   final Directory modelDirectory;
   final List<SttModelFile> files;
 
-  /// Approximate size of the full download, for the progress fraction and
-  /// the user-facing size label. Completion is decided per file by its
-  /// rename, never by this number.
-  final int expectedTotalBytes;
-
   final SttModelFileDownloader _downloader;
+
+  /// Exact size of the full download, summed from the per-file sizes.
+  int get expectedTotalBytes =>
+      files.fold(0, (sum, file) => sum + file.expectedBytes);
 
   SttModelProvisionPhase _phase = SttModelProvisionPhase.checking;
   double _progress = 0;
@@ -114,25 +121,36 @@ class SttModelProvisioner extends ChangeNotifier {
     for (final file in files) {
       final target = _targetFor(file);
       if (target.existsSync()) {
-        completedBytes += target.lengthSync();
+        completedBytes += file.expectedBytes;
         _reportProgress(completedBytes);
         continue;
       }
       final part = _partFor(file);
       final resumeFromBytes = part.existsSync() ? part.lengthSync() : 0;
-      completedBytes += resumeFromBytes;
-      _reportProgress(completedBytes);
       final baseBytes = completedBytes;
+      _reportProgress(baseBytes + resumeFromBytes);
       try {
         await _downloader(
           file,
           part,
           resumeFromBytes: resumeFromBytes,
-          onProgress: (receivedBytes) =>
-              _reportProgress(baseBytes + receivedBytes),
+          onProgress: (fileBytes) => _reportProgress(baseBytes + fileBytes),
         );
+        final actualBytes = part.existsSync() ? part.lengthSync() : 0;
+        if (actualBytes != file.expectedBytes) {
+          // Wrong size means the stream ended early or the server sent
+          // different bytes; keep nothing so the retry starts clean
+          // instead of resuming a file that can never validate.
+          if (part.existsSync()) {
+            part.deleteSync();
+          }
+          throw StateError(
+            '${file.relativePath} downloaded $actualBytes bytes, '
+            'expected ${file.expectedBytes}',
+          );
+        }
         part.renameSync(target.path);
-        completedBytes = baseBytes + (target.lengthSync() - resumeFromBytes);
+        completedBytes = baseBytes + file.expectedBytes;
       } catch (error) {
         _errorMessage =
             'Download interrupted. Check your connection and try again.';
@@ -146,9 +164,8 @@ class SttModelProvisioner extends ChangeNotifier {
   }
 
   void _reportProgress(int bytes) {
-    final fraction = expectedTotalBytes <= 0
-        ? 0.0
-        : (bytes / expectedTotalBytes).clamp(0.0, 1.0);
+    final total = expectedTotalBytes;
+    final fraction = total <= 0 ? 0.0 : (bytes / total).clamp(0.0, 1.0);
     if ((fraction - _progress).abs() < 0.001) {
       return;
     }
@@ -162,6 +179,11 @@ class SttModelProvisioner extends ChangeNotifier {
   }
 }
 
+/// A dead-but-open connection on flaky mobile networks would otherwise
+/// leave the download UI stuck mid-progress forever; when no bytes arrive
+/// for this long the download fails into the retry/resume flow instead.
+const _downloadIdleTimeout = Duration(seconds: 30);
+
 /// Default downloader: dart:io HttpClient streaming to disk with an HTTP
 /// Range request when resuming. Hugging Face and GitHub release hosts both
 /// honor ranges and redirects.
@@ -169,15 +191,17 @@ Future<void> _httpDownloader(
   SttModelFile file,
   File target, {
   required int resumeFromBytes,
-  required void Function(int receivedBytes) onProgress,
+  required void Function(int fileBytes) onProgress,
 }) async {
   final client = HttpClient();
   try {
-    final request = await client.getUrl(Uri.parse(file.url));
+    final request = await client
+        .getUrl(Uri.parse(file.url))
+        .timeout(_downloadIdleTimeout);
     if (resumeFromBytes > 0) {
       request.headers.add(HttpHeaders.rangeHeader, 'bytes=$resumeFromBytes-');
     }
-    final response = await request.close();
+    final response = await request.close().timeout(_downloadIdleTimeout);
     final resumed =
         resumeFromBytes > 0 && response.statusCode == HttpStatus.partialContent;
     if (response.statusCode != HttpStatus.ok &&
@@ -190,12 +214,14 @@ Future<void> _httpDownloader(
     final sink = target.openWrite(
       mode: resumed ? FileMode.append : FileMode.write,
     );
-    var received = 0;
+    var fileBytes = resumed ? resumeFromBytes : 0;
     try {
-      await for (final chunk in response) {
+      // Stream.timeout throws when the gap BETWEEN chunks exceeds the
+      // idle window — a stall detector, not a cap on total duration.
+      await for (final chunk in response.timeout(_downloadIdleTimeout)) {
         sink.add(chunk);
-        received += chunk.length;
-        onProgress(received);
+        fileBytes += chunk.length;
+        onProgress(fileBytes);
       }
       await sink.flush();
     } finally {

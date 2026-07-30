@@ -69,9 +69,12 @@ void main() {
     final provisioner = SttModelProvisioner(
       modelDirectory: directory,
       files: const [
-        SttModelFile(url: 'https://example.test/a', relativePath: 'a.onnx'),
+        SttModelFile(
+          url: 'https://example.test/a',
+          relativePath: 'a.onnx',
+          expectedBytes: 10,
+        ),
       ],
-      expectedTotalBytes: 10,
       downloader:
           (
             file,
@@ -147,9 +150,12 @@ void main() {
     final provisioner = SttModelProvisioner(
       modelDirectory: directory,
       files: const [
-        SttModelFile(url: 'https://example.test/a', relativePath: 'a.onnx'),
+        SttModelFile(
+          url: 'https://example.test/a',
+          relativePath: 'a.onnx',
+          expectedBytes: 10,
+        ),
       ],
-      expectedTotalBytes: 10,
       downloader:
           (
             file,

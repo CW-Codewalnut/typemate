@@ -32,14 +32,18 @@ subprojects {
     }
     // The same stale-plugin problem for the SDK: sentry_flutter 8.x
     // compiles against android-34 while package_info_plus requires 36.
-    fun forceCompileSdk() {
-        extensions.findByType(com.android.build.gradle.BaseExtension::class.java)
-            ?.compileSdkVersion(36)
-    }
-    if (state.executed) {
-        forceCompileSdk()
-    } else {
-        afterEvaluate { forceCompileSdk() }
+    // :app is excluded so it keeps following flutter.compileSdkVersion
+    // when Flutter moves on.
+    if (name != "app") {
+        fun forceCompileSdk() {
+            extensions.findByType(com.android.build.gradle.BaseExtension::class.java)
+                ?.compileSdkVersion(36)
+        }
+        if (state.executed) {
+            forceCompileSdk()
+        } else {
+            afterEvaluate { forceCompileSdk() }
+        }
     }
 }
 

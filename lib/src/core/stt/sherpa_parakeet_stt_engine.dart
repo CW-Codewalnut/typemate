@@ -81,6 +81,12 @@ class SherpaParakeetSttEngine implements DisposableSttEngine {
     }
     final loadStopwatch = Stopwatch()..start();
     final readyPort = ReceivePort();
+    // The worker can die without ever sending a reply — an uncaught error
+    // outside its try, or the OS killing it while mapping 620 MB of
+    // weights on a memory-tight phone. Without these ports that death
+    // would leave prepare() (and the "Preparing speech engine" UI)
+    // waiting forever; with them, whichever signal arrives first wins.
+    final deathPort = ReceivePort();
     final isolate = await Isolate.spawn(
       _workerMain,
       _WorkerInit(
@@ -88,10 +94,24 @@ class SherpaParakeetSttEngine implements DisposableSttEngine {
         modelDirectoryPath: modelDirectoryPath,
         numThreads: numThreads,
       ),
+      onError: deathPort.sendPort,
+      onExit: deathPort.sendPort,
       debugName: 'sherpa-parakeet-stt',
     );
-    final ready = await readyPort.first;
+    final ready = await Future.any([
+      readyPort.first,
+      deathPort.first.then(
+        // onExit sends null; onError sends [error, stackTrace].
+        (message) => _WorkerFailure(
+          message == null
+              ? 'the model loader exited before the model finished loading '
+                    '(possibly out of memory)'
+              : (message as List).first.toString(),
+        ),
+      ),
+    ]);
     readyPort.close();
+    deathPort.close();
     if (ready is! SendPort) {
       isolate.kill(priority: Isolate.immediate);
       throw SttRuntimeException('Speech model failed to load: $ready');
