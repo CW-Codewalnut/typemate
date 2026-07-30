@@ -6,6 +6,8 @@ import '../../core/dictation_history_controller.dart';
 import '../../core/hold_shortcut_controller.dart';
 import '../../core/microphone_settings_controller.dart';
 import '../../core/speech_settings_controller.dart';
+import '../../core/stt/stt_model_provisioner.dart';
+import '../dictation/dictation_page.dart';
 import '../history/history_page.dart';
 import '../insights/insights_page.dart';
 import '../settings/settings_page.dart';
@@ -23,6 +25,11 @@ class HomeScreen extends StatefulWidget {
     this.telemetryController,
     this.logsDirectoryPath,
     this.onQuitRequested,
+    this.showDictationTab = false,
+    this.modelProvisioner,
+    this.microphonePermissionWarmUp,
+    this.languageOptions = speechLanguageOptions,
+    this.showNoiseSuppression = true,
   });
 
   final DictationController controller;
@@ -34,6 +41,21 @@ class HomeScreen extends StatefulWidget {
   final String? logsDirectoryPath;
   final Future<void> Function()? onQuitRequested;
 
+  /// Mobile: dictation runs from an in-app hold-to-talk tab instead of a
+  /// global shortcut.
+  final bool showDictationTab;
+
+  /// First-run speech model download state for the dictation tab.
+  final SttModelProvisioner? modelProvisioner;
+
+  /// Pre-shows the OS microphone permission prompt on the dictation tab.
+  final Future<void> Function()? microphonePermissionWarmUp;
+
+  /// Languages this platform's engines serve.
+  final List<SpeechLanguageOption> languageOptions;
+
+  final bool showNoiseSuppression;
+
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -44,7 +66,11 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    widget.controller.prepare();
+    // With a dictation tab the engine prepares from there, after the model
+    // provisioner confirms the files exist (fresh installs have none yet).
+    if (!widget.showDictationTab) {
+      widget.controller.prepare();
+    }
     widget.microphoneController.loadMicrophones();
     widget.historyController.load();
     widget.speechSettingsController.load();
@@ -61,22 +87,31 @@ class _HomeScreenState extends State<HomeScreen> {
         if (widget.shortcutController != null) widget.shortcutController!,
       ]),
       builder: (context, _) {
-        final page = switch (_selectedIndex) {
-          0 => HistoryPage(
+        final pages = [
+          if (widget.showDictationTab)
+            DictationPage(
+              controller: widget.controller,
+              modelProvisioner: widget.modelProvisioner,
+              microphonePermissionWarmUp: widget.microphonePermissionWarmUp,
+            ),
+          HistoryPage(
             historyController: widget.historyController,
             dictationController: widget.controller,
             shortcutController: widget.shortcutController,
           ),
-          1 => InsightsPage(historyController: widget.historyController),
-          _ => SettingsPage(
+          InsightsPage(historyController: widget.historyController),
+          SettingsPage(
             microphoneController: widget.microphoneController,
             speechSettingsController: widget.speechSettingsController,
             shortcutController: widget.shortcutController,
             telemetryController: widget.telemetryController,
             logsDirectoryPath: widget.logsDirectoryPath,
             onQuitRequested: widget.onQuitRequested,
+            languageOptions: widget.languageOptions,
+            showNoiseSuppression: widget.showNoiseSuppression,
           ),
-        };
+        ];
+        final page = pages[_selectedIndex.clamp(0, pages.length - 1)];
 
         return LayoutBuilder(
           builder: (context, constraints) {
@@ -92,7 +127,16 @@ class _HomeScreenState extends State<HomeScreen> {
                             selectedIndex: _selectedIndex,
                             onDestinationSelected: _selectDestination,
                             labelType: NavigationRailLabelType.all,
-                            destinations: _railDestinations,
+                            destinations: [
+                              for (final destination in _destinations(
+                                widget.showDictationTab,
+                              ))
+                                NavigationRailDestination(
+                                  icon: destination.icon,
+                                  selectedIcon: destination.selectedIcon,
+                                  label: Text(destination.label),
+                                ),
+                            ],
                           ),
                           const VerticalDivider(width: 1),
                           Expanded(child: page),
@@ -103,7 +147,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   ? NavigationBar(
                       selectedIndex: _selectedIndex,
                       onDestinationSelected: _selectDestination,
-                      destinations: _barDestinations,
+                      destinations: [
+                        for (final destination in _destinations(
+                          widget.showDictationTab,
+                        ))
+                          NavigationDestination(
+                            icon: destination.icon,
+                            selectedIcon: destination.selectedIcon,
+                            label: destination.label,
+                          ),
+                      ],
                     )
                   : null,
             );
@@ -118,36 +171,36 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-const _railDestinations = [
-  NavigationRailDestination(
-    icon: Icon(Icons.history),
-    selectedIcon: Icon(Icons.history_toggle_off),
-    label: Text('History'),
-  ),
-  NavigationRailDestination(
-    icon: Icon(Icons.insights_outlined),
-    selectedIcon: Icon(Icons.insights),
-    label: Text('Insights'),
-  ),
-  NavigationRailDestination(
-    icon: Icon(Icons.settings_outlined),
-    selectedIcon: Icon(Icons.settings),
-    label: Text('Settings'),
-  ),
-];
+class _Destination {
+  const _Destination({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+  });
 
-const _barDestinations = [
-  NavigationDestination(
+  final Icon icon;
+  final Icon selectedIcon;
+  final String label;
+}
+
+List<_Destination> _destinations(bool showDictationTab) => [
+  if (showDictationTab)
+    const _Destination(
+      icon: Icon(Icons.mic_none),
+      selectedIcon: Icon(Icons.mic),
+      label: 'Dictate',
+    ),
+  const _Destination(
     icon: Icon(Icons.history),
     selectedIcon: Icon(Icons.history_toggle_off),
     label: 'History',
   ),
-  NavigationDestination(
+  const _Destination(
     icon: Icon(Icons.insights_outlined),
     selectedIcon: Icon(Icons.insights),
     label: 'Insights',
   ),
-  NavigationDestination(
+  const _Destination(
     icon: Icon(Icons.settings_outlined),
     selectedIcon: Icon(Icons.settings),
     label: 'Settings',

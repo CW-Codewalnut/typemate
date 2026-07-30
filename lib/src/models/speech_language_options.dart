@@ -58,6 +58,14 @@ const speechLanguageOptions = [
   SpeechLanguageOption(code: 'uk', label: 'Ukrainian'),
 ];
 
+/// The subset offered on Android: only the Parakeet languages. Hindi,
+/// Hinglish, and Tamil run on whisper.cpp server processes that Android
+/// cannot spawn; they return once an on-device whisper path is validated.
+final androidSpeechLanguageOptions = [
+  for (final option in speechLanguageOptions)
+    if (!const {'hi', 'hinglish', 'ta'}.contains(option.code)) option,
+];
+
 SpeechLanguageOption? speechLanguageOptionForCode(String code) {
   final normalizedCode = code.trim().toLowerCase();
   for (final option in speechLanguageOptions) {

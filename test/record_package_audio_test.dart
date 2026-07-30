@@ -6,18 +6,30 @@ import 'package:typemate/src/core/audio/microphone_discovery.dart';
 import 'package:typemate/src/core/audio/record_package_audio.dart';
 
 class FakeRecordBackend implements RecordBackend {
-  FakeRecordBackend({this.devices = const [], this.stopPath});
+  FakeRecordBackend({
+    this.devices = const [],
+    this.stopPath,
+    this.permissionGranted = true,
+  });
 
   final List<record_pkg.InputDevice> devices;
   final String? stopPath;
+  final bool permissionGranted;
 
   record_pkg.RecordConfig? startedConfig;
   String? startedPath;
   bool stopped = false;
   bool disposed = false;
+  int permissionChecks = 0;
 
   @override
   Future<List<record_pkg.InputDevice>> listInputDevices() async => devices;
+
+  @override
+  Future<bool> hasPermission() async {
+    permissionChecks += 1;
+    return permissionGranted;
+  }
 
   @override
   Future<void> start(
@@ -116,5 +128,49 @@ void main() {
     await recorder.start();
 
     expect(backend.startedConfig?.device?.id, '{id}');
+    expect(
+      backend.permissionChecks,
+      0,
+      reason: 'Desktop keeps its existing no-permission-request behavior.',
+    );
+  });
+
+  test('system-default mode records without a device id (Android)', () async {
+    final backend = FakeRecordBackend();
+    final directory = Directory.systemTemp.createTempSync('typemate-rec-and');
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final factory = RecordPackageAudioRecorderFactory(
+      outputDirectory: directory,
+      backendFactory: () => backend,
+      useSystemDefaultDevice: true,
+      requestPermission: true,
+    );
+
+    final recorder = factory.create(
+      const MicrophoneDevice(name: 'System default microphone'),
+    );
+    await recorder.start();
+
+    expect(backend.startedConfig?.device, isNull);
+    expect(backend.permissionChecks, 1);
+  });
+
+  test('denied microphone permission fails the start cleanly', () async {
+    final backend = FakeRecordBackend(permissionGranted: false);
+    final directory = Directory.systemTemp.createTempSync('typemate-rec-per');
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final recorder = RecordPackageAudioRecorder(
+      microphone: const MicrophoneDevice(name: 'System default microphone'),
+      outputDirectory: directory,
+      backendFactory: () => backend,
+      requestPermission: true,
+    );
+
+    await expectLater(recorder.start(), throwsStateError);
+    expect(backend.startedConfig, isNull);
+    expect(backend.disposed, isTrue);
+
+    final recording = await recorder.stop();
+    expect(recording.path, isEmpty);
   });
 }

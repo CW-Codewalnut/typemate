@@ -23,11 +23,21 @@ class SettingsPage extends StatelessWidget {
     this.logsDirectoryPath,
     this.onOpenLogsFolder,
     this.onQuitRequested,
+    this.languageOptions = speechLanguageOptions,
+    this.showNoiseSuppression = true,
   });
 
   final MicrophoneSettingsController microphoneController;
   final SpeechSettingsController speechSettingsController;
   final HoldShortcutController? shortcutController;
+
+  /// Languages the current platform's engines serve (Android offers the
+  /// Parakeet subset only).
+  final List<SpeechLanguageOption> languageOptions;
+
+  /// Hidden on Android: the noise-suppression runtime is a desktop helper
+  /// binary, and a visible toggle must work.
+  final bool showNoiseSuppression;
 
   /// Anonymous error-reporting consent; null or unavailable hides the
   /// toggle (tests and builds without a telemetry DSN).
@@ -60,11 +70,16 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          SpeechSettingsPanel(controller: speechSettingsController),
+          SpeechSettingsPanel(
+            controller: speechSettingsController,
+            options: languageOptions,
+          ),
           const SizedBox(height: 24),
           MicrophoneSelectionPanel(controller: microphoneController),
-          const SizedBox(height: 24),
-          NoiseSuppressionPanel(controller: speechSettingsController),
+          if (showNoiseSuppression) ...[
+            const SizedBox(height: 24),
+            NoiseSuppressionPanel(controller: speechSettingsController),
+          ],
           if (shortcutController != null) ...[
             const SizedBox(height: 24),
             ShortcutSettingsPanel(controller: shortcutController!),
