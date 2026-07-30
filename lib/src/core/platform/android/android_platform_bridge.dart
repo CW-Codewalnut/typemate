@@ -1,21 +1,11 @@
-import 'package:flutter/services.dart';
-
 import '../platform_bridge.dart';
 
-typedef ClipboardWriter = Future<void> Function(ClipboardData data);
-
-/// Android dictation happens inside the app: there is no system-wide
-/// overlay, no global shortcut, and no focused field in another app to
-/// type into (that needs the Phase 2 keyboard/IME). The bridge therefore
-/// maps the desktop contract onto mobile equivalents: the dictation
-/// screen replaces the overlay, failures surface in-app, and "insertion"
-/// copies the transcript to the clipboard so it can be pasted anywhere.
+/// The in-app dictation bridge on Android. In-app dictation is a quick
+/// capture: the transcript is saved to History (by the controller) and
+/// nothing else — it does not touch the clipboard or type anywhere. The
+/// floating mic (accessibility overlay) is the surface that inserts text
+/// straight into another app's focused field.
 class AndroidPlatformBridge implements PlatformBridge {
-  AndroidPlatformBridge({ClipboardWriter? clipboardWriter})
-    : _clipboardWriter = clipboardWriter ?? Clipboard.setData;
-
-  final ClipboardWriter _clipboardWriter;
-
   @override
   Future<bool> isGlobalShortcutAvailable() async => false;
 
@@ -35,8 +25,10 @@ class AndroidPlatformBridge implements PlatformBridge {
   }
 
   @override
-  Future<void> insertTextIntoFocusedField(String text) =>
-      _clipboardWriter(ClipboardData(text: text));
+  Future<void> insertTextIntoFocusedField(String text) async {
+    // In-app dictation lands in History only; there is no focused field
+    // to type into and the clipboard is left untouched.
+  }
 
   @override
   Future<void> ensureLaunchAtStartup() async {

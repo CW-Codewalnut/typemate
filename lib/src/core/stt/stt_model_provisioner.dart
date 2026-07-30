@@ -1,22 +1,32 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:background_downloader/background_downloader.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 /// One file of a speech model that must exist locally before the engine
 /// can load. [relativePath] is resolved inside the provisioner's model
-/// directory. [expectedBytes] is the exact size at the pinned revision;
-/// a download only counts as complete when the bytes on disk match.
+/// directory. [expectedBytes] is the exact size at the pinned revision,
+/// and [expectedSha256] the exact content hash; a download only counts
+/// as complete when both match — a corrupt model file crashes the native
+/// loader (an uncatchable process abort), so nothing unverified may ever
+/// reach it.
 class SttModelFile {
   const SttModelFile({
     required this.url,
     required this.relativePath,
     required this.expectedBytes,
+    this.expectedSha256,
   });
 
   final String url;
   final String relativePath;
   final int expectedBytes;
+
+  /// Lowercase hex SHA-256 of the file at the pinned revision; null
+  /// skips the hash gate (tests).
+  final String? expectedSha256;
 }
 
 /// Streams [file] to [target]. [resumeFromBytes] > 0 asks the server for
@@ -61,12 +71,32 @@ class SttModelProvisioner extends ChangeNotifier {
     required this.modelDirectory,
     required this.files,
     SttModelFileDownloader? downloader,
-  }) : _downloader = downloader ?? _httpDownloader;
+    Future<void> Function()? ensureNotificationPermission,
+    Future<bool> Function()? hasActiveDownload,
+  }) : _downloader = downloader ?? _packageDownloader,
+       // The real package integrations (notification permission, download
+       // manager query) only apply when using the real downloader; an
+       // injected downloader (tests) skips them unless it opts in.
+       _ensureNotificationPermission =
+           ensureNotificationPermission ??
+           (downloader == null ? _requestNotificationPermission : null),
+       _hasActiveDownload =
+           hasActiveDownload ??
+           (downloader == null ? null : (() async => false));
 
   final Directory modelDirectory;
   final List<SttModelFile> files;
 
   final SttModelFileDownloader _downloader;
+
+  /// Asks for the foreground-service notification permission before a
+  /// download; null (tests) skips it.
+  final Future<void> Function()? _ensureNotificationPermission;
+
+  /// Whether a download is already running on the OS download manager
+  /// (a foreground-service download survives the app being killed); null
+  /// defaults to querying the real download manager.
+  final Future<bool> Function()? _hasActiveDownload;
 
   /// Exact size of the full download, summed from the per-file sizes.
   int get expectedTotalBytes =>
@@ -102,14 +132,46 @@ class SttModelProvisioner extends ChangeNotifier {
   /// Checks which files already exist (at their exact pinned size) and
   /// lands in [SttModelProvisionPhase.ready] or
   /// [SttModelProvisionPhase.downloadRequired].
+  ///
+  /// A refresh must never hide an active download: the provisioner is a
+  /// long-lived singleton, and every return to the dictation surface
+  /// re-checks it while a download may be running.
   Future<void> refresh() async {
+    if (_phase == SttModelProvisionPhase.downloading) {
+      return;
+    }
     _setPhase(SttModelProvisionPhase.checking);
-    final complete = files.every(_isIntact);
-    _setPhase(
-      complete
-          ? SttModelProvisionPhase.ready
-          : SttModelProvisionPhase.downloadRequired,
-    );
+    if (files.every(_isIntact)) {
+      _setPhase(SttModelProvisionPhase.ready);
+      return;
+    }
+    // A download from a previous launch may still be running on the OS
+    // download manager (a foreground-service download outlives the app).
+    // Adopt it — show live "downloading" and drive it to completion —
+    // instead of offering a Download button the user could double-tap
+    // into a second, racing download.
+    if (await (_hasActiveDownload?.call() ?? _queryDownloadManager())) {
+      await download();
+      return;
+    }
+    _setPhase(SttModelProvisionPhase.downloadRequired);
+  }
+
+  /// Asks the real download manager whether any of this model's files is
+  /// still being downloaded (from a previous, possibly killed, launch).
+  Future<bool> _queryDownloadManager() async {
+    for (final file in files) {
+      final taskId = 'typemate-model-${_partFor(file).uri.pathSegments.last}';
+      final record = await FileDownloader().database.recordForId(taskId);
+      if (record != null &&
+          (record.status == TaskStatus.running ||
+              record.status == TaskStatus.enqueued ||
+              record.status == TaskStatus.waitingToRetry ||
+              record.status == TaskStatus.paused)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// Downloads every missing file. Safe to call again after a failure;
@@ -121,6 +183,11 @@ class SttModelProvisioner extends ChangeNotifier {
     }
     _errorMessage = null;
     _setPhase(SttModelProvisionPhase.downloading);
+    // The download runs on a foreground service whose notification needs
+    // the Android 13+ runtime permission; without it the OS suppresses
+    // the notification AND kills the job the moment the app is minimized.
+    // Best-effort: the download still tries if the user declines.
+    await _ensureNotificationPermission?.call();
     // Synchronous on purpose: async file IO never completes inside the
     // widget-test fake-async zone.
     modelDirectory.createSync(recursive: true);
@@ -162,8 +229,34 @@ class SttModelProvisioner extends ChangeNotifier {
             'expected ${file.expectedBytes}',
           );
         }
+        final expectedHash = file.expectedSha256;
+        if (expectedHash != null) {
+          // Hash the (up to 622 MB) file in a background isolate so it
+          // does not jank the UI at download completion.
+          final digest = await compute(_sha256OfFile, part.path);
+          if (digest != expectedHash) {
+            part.deleteSync();
+            throw StateError(
+              '${file.relativePath} failed its checksum: the content does '
+              'not match the pinned revision',
+            );
+          }
+        }
         part.renameSync(target.path);
         completedBytes = baseBytes + file.expectedBytes;
+      } on SttDownloadCanceled {
+        // The user tapped Cancel on the download notification. That is a
+        // deliberate stop, not a failure: drop any partials and return to
+        // the Download button so a later tap starts fresh.
+        _progress = 0;
+        for (final f in files) {
+          final p = _partFor(f);
+          if (p.existsSync()) {
+            p.deleteSync();
+          }
+        }
+        _setPhase(SttModelProvisionPhase.downloadRequired);
+        return;
       } catch (error) {
         _errorMessage =
             'Download interrupted. Check your connection and try again.';
@@ -192,55 +285,160 @@ class SttModelProvisioner extends ChangeNotifier {
   }
 }
 
-/// A dead-but-open connection on flaky mobile networks would otherwise
-/// leave the download UI stuck mid-progress forever; when no bytes arrive
-/// for this long the download fails into the retry/resume flow instead.
-const _downloadIdleTimeout = Duration(seconds: 30);
+/// Requests the notification permission through the same package that
+/// owns the download, so no extra permission plugin is pulled in. A
+/// granted (or not-applicable) result needs no action; a denial just
+/// means the download runs without its foreground notification.
+Future<void> _requestNotificationPermission() async {
+  final status = await FileDownloader().permissions.status(
+    PermissionType.notifications,
+  );
+  if (status != PermissionStatus.granted) {
+    await FileDownloader().permissions.request(PermissionType.notifications);
+  }
+}
 
-/// Default downloader: dart:io HttpClient streaming to disk with an HTTP
-/// Range request when resuming. Hugging Face and GitHub release hosts both
-/// honor ranges and redirects.
-Future<void> _httpDownloader(
+/// Default downloader: the background_downloader package, one Dart API
+/// over every platform's native download machinery (retries, pause and
+/// resume, keeps going while the app is backgrounded, progress
+/// notification when configured). Downloads land in the package's temp
+/// area and are moved into the caller's target so the size and checksum
+/// gates above always run before a file can look complete.
+Future<void> _packageDownloader(
   SttModelFile file,
   File target, {
   required int resumeFromBytes,
   required void Function(int fileBytes) onProgress,
 }) async {
-  final client = HttpClient();
-  try {
-    final request = await client
-        .getUrl(Uri.parse(file.url))
-        .timeout(_downloadIdleTimeout);
-    if (resumeFromBytes > 0) {
-      request.headers.add(HttpHeaders.rangeHeader, 'bytes=$resumeFromBytes-');
+  // resumeFromBytes is unused: the package keeps its own resume data.
+  final task = DownloadTask(
+    // Deterministic id: one task identity per model file, so a file
+    // WorkManager finished after the app process died is found again.
+    taskId: 'typemate-model-${target.uri.pathSegments.last}',
+    url: file.url,
+    baseDirectory: BaseDirectory.temporary,
+    directory: 'typemate_model_download',
+    filename: target.uri.pathSegments.last,
+    updates: Updates.statusAndProgress,
+    retries: 5,
+    allowPause: true,
+  );
+
+  // The foreground-service download keeps going even after the app is
+  // killed. On reopen the same file may already be finished, or still
+  // running — adopt either instead of starting a second copy that races
+  // the first (the "two downloads, progress bouncing" bug). Only adopt
+  // a genuinely live or complete task; a canceled/failed record is stale
+  // and must be cleared, or a fresh Download would re-adopt it and
+  // immediately re-cancel ("tapping Download does nothing").
+  final previous = await FileDownloader().database.recordForId(task.taskId);
+  const adoptable = {
+    TaskStatus.running,
+    TaskStatus.enqueued,
+    TaskStatus.waitingToRetry,
+    TaskStatus.paused,
+    TaskStatus.complete,
+  };
+  if (previous != null && adoptable.contains(previous.status)) {
+    if (await _adoptRunningDownload(task, file, onProgress)) {
+      _moveIntoPlace(File(await task.filePath()), target);
+      return;
     }
-    final response = await request.close().timeout(_downloadIdleTimeout);
-    final resumed =
-        resumeFromBytes > 0 && response.statusCode == HttpStatus.partialContent;
-    if (response.statusCode != HttpStatus.ok &&
-        response.statusCode != HttpStatus.partialContent) {
-      throw HttpException(
-        'HTTP ${response.statusCode} for ${file.url}',
-        uri: Uri.parse(file.url),
-      );
-    }
-    final sink = target.openWrite(
-      mode: resumed ? FileMode.append : FileMode.write,
-    );
-    var fileBytes = resumed ? resumeFromBytes : 0;
-    try {
-      // Stream.timeout throws when the gap BETWEEN chunks exceeds the
-      // idle window — a stall detector, not a cap on total duration.
-      await for (final chunk in response.timeout(_downloadIdleTimeout)) {
-        sink.add(chunk);
-        fileBytes += chunk.length;
-        onProgress(fileBytes);
+  } else if (previous != null) {
+    // Stale terminal record (canceled/failed) from a prior attempt. Cancel
+    // the underlying WorkManager job AND drop the record, so the fresh
+    // enqueue below is not shadowed by a still-clearing job — otherwise
+    // the first Download tap silently no-ops and only the second works.
+    await FileDownloader().cancelTaskWithId(task.taskId);
+    await FileDownloader().database.deleteRecordWithId(task.taskId);
+  }
+
+  // The foreground service keeps the download alive across backgrounding
+  // and app kills, so a cancellation now means one thing: the user tapped
+  // Cancel on the notification. That is terminal, not a retry.
+  final result = await FileDownloader().download(
+    task,
+    onProgress: (fraction) {
+      if (fraction > 0) {
+        onProgress((fraction * file.expectedBytes).round());
       }
-      await sink.flush();
-    } finally {
-      await sink.close();
+    },
+  );
+  if (result.status == TaskStatus.complete) {
+    _moveIntoPlace(File(await task.filePath()), target);
+    return;
+  }
+  if (result.status == TaskStatus.canceled) {
+    throw const SttDownloadCanceled();
+  }
+  throw StateError(
+    'download of ${file.relativePath} ended as ${result.status}'
+    '${result.exception == null ? '' : ': ${result.exception}'}',
+  );
+}
+
+/// Lowercase hex SHA-256 of a file, computed in a background isolate via
+/// `compute` so hashing a large model file never janks the UI.
+Future<String> _sha256OfFile(String path) async {
+  final digest = await sha256.bind(File(path).openRead()).first;
+  return digest.toString();
+}
+
+/// A [SttModelFileDownloader] throws this when the user cancels the
+/// download (e.g. from its notification), so the provisioner returns to
+/// the Download button rather than treating the deliberate stop as a
+/// failure.
+class SttDownloadCanceled implements Exception {
+  const SttDownloadCanceled();
+}
+
+/// Waits on a download that a previous app launch started and left
+/// running on the foreground service. Returns true if it reached the
+/// cache file (caller moves it into place), false if it is not actually
+/// in flight (or ended without a file), so the caller downloads fresh.
+///
+/// Polls the persisted task record rather than the updates stream: after
+/// an app restart the stream can miss events that already fired, but the
+/// record is durable and race-free.
+Future<bool> _adoptRunningDownload(
+  DownloadTask task,
+  SttModelFile file,
+  void Function(int fileBytes) onProgress,
+) async {
+  final cacheFile = File(await task.filePath());
+  while (true) {
+    final record = await FileDownloader().database.recordForId(task.taskId);
+    if (record == null) {
+      return false;
     }
-  } finally {
-    client.close();
+    if (record.progress > 0) {
+      onProgress((record.progress * file.expectedBytes).round());
+    }
+    if (record.status == TaskStatus.complete) {
+      return cacheFile.existsSync();
+    }
+    if (record.status == TaskStatus.canceled) {
+      // The user canceled the adopted download from its notification.
+      throw const SttDownloadCanceled();
+    }
+    if (record.status == TaskStatus.enqueued ||
+        record.status == TaskStatus.running ||
+        record.status == TaskStatus.waitingToRetry ||
+        record.status == TaskStatus.paused) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      continue;
+    }
+    // failed / notFound: not adoptable, download fresh.
+    return false;
+  }
+}
+
+void _moveIntoPlace(File downloaded, File target) {
+  try {
+    downloaded.renameSync(target.path);
+  } on FileSystemException {
+    // Temp and data can live on different volumes; copy instead.
+    downloaded.copySync(target.path);
+    downloaded.deleteSync();
   }
 }

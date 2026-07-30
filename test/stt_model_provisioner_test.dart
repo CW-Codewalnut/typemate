@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -181,6 +182,179 @@ void main() {
     expect(
       File('${directory.path}/encoder.onnx').readAsStringSync(),
       '0123456789',
+    );
+  });
+
+  test('reopening while a background download runs adopts it, not a new '
+      'one', () async {
+    var downloadCalls = 0;
+    final sut = SttModelProvisioner(
+      modelDirectory: directory,
+      files: _files,
+      // The download manager reports an in-flight download (app was
+      // killed mid-download and reopened).
+      hasActiveDownload: () async => true,
+      downloader:
+          (
+            file,
+            target, {
+            required resumeFromBytes,
+            required onProgress,
+          }) async {
+            downloadCalls += 1;
+            target.writeAsStringSync('0123456789');
+          },
+    );
+
+    await sut.refresh();
+
+    // refresh() adopted the running download and drove it to completion
+    // itself — the user never saw a Download button to double-tap.
+    expect(sut.isReady, isTrue);
+    expect(
+      downloadCalls,
+      _files.length,
+      reason: 'Adopts by resuming the download, one pass per file.',
+    );
+  });
+
+  test('a refresh during an active download leaves it untouched', () async {
+    final gate = Completer<void>();
+    final sut = provisioner(
+      downloader:
+          (
+            file,
+            target, {
+            required resumeFromBytes,
+            required onProgress,
+          }) async {
+            await gate.future;
+            target.writeAsStringSync('0123456789');
+          },
+    );
+    await sut.refresh();
+    final downloading = sut.download();
+
+    // Tab switches re-check the provisioner mid-download; that must not
+    // hide the download behind the Download button again (which invited
+    // a second concurrent download and a corrupted model).
+    await sut.refresh();
+    expect(sut.phase, SttModelProvisionPhase.downloading);
+
+    await sut.download();
+    expect(
+      sut.phase,
+      SttModelProvisionPhase.downloading,
+      reason: 'A second download() while one runs is a no-op.',
+    );
+
+    gate.complete();
+    await downloading;
+    expect(sut.isReady, isTrue);
+  });
+
+  test('canceling from the notification returns to the Download button, '
+      'not failed', () async {
+    File('${directory.path}/encoder.onnx.part').writeAsStringSync('012');
+    final sut = provisioner(
+      downloader:
+          (
+            file,
+            target, {
+            required resumeFromBytes,
+            required onProgress,
+          }) async {
+            // Mimics the package after the user taps Cancel on the
+            // notification: a deliberate, terminal cancellation.
+            throw const SttDownloadCanceled();
+          },
+    );
+    await sut.refresh();
+
+    await sut.download();
+
+    expect(
+      sut.phase,
+      SttModelProvisionPhase.downloadRequired,
+      reason: 'A user cancel is not a failure; offer Download again.',
+    );
+    expect(sut.errorMessage, isNull);
+    expect(
+      File('${directory.path}/encoder.onnx.part').existsSync(),
+      isFalse,
+      reason: 'Partial from the canceled attempt is discarded.',
+    );
+
+    // Tapping Download again after a cancel must actually download, not
+    // silently do nothing.
+    var secondAttempt = 0;
+    final resumed = SttModelProvisioner(
+      modelDirectory: directory,
+      files: _files,
+      downloader:
+          (
+            file,
+            target, {
+            required resumeFromBytes,
+            required onProgress,
+          }) async {
+            secondAttempt += 1;
+            target.writeAsStringSync('0123456789');
+          },
+    );
+    await resumed.download();
+    expect(resumed.isReady, isTrue);
+    expect(secondAttempt, _files.length);
+  });
+
+  test('a checksum mismatch fails and discards the file', () async {
+    // sha256 of the ten bytes '0123456789' that the fake writes.
+    const rightHash =
+        '84d89877f0d4041efb6bf91a16f0248f2fd573e6af05c19f96bedb9f882f7882';
+    final files = [
+      const SttModelFile(
+        url: 'https://example.test/encoder.onnx',
+        relativePath: 'encoder.onnx',
+        expectedBytes: 10,
+        expectedSha256: rightHash,
+      ),
+      const SttModelFile(
+        url: 'https://example.test/tokens.txt',
+        relativePath: 'tokens.txt',
+        expectedBytes: 10,
+        // Right size, wrong content hash: the corrupt-model case that
+        // crashes the native loader if it ever gets through.
+        expectedSha256: 'deadbeef',
+      ),
+    ];
+    final sut = SttModelProvisioner(
+      modelDirectory: directory,
+      files: files,
+      downloader:
+          (
+            file,
+            target, {
+            required resumeFromBytes,
+            required onProgress,
+          }) async {
+            target.writeAsStringSync('0123456789');
+          },
+    );
+    await sut.refresh();
+
+    await sut.download();
+
+    expect(sut.phase, SttModelProvisionPhase.failed);
+    expect(
+      File('${directory.path}/encoder.onnx').existsSync(),
+      isTrue,
+      reason: 'The file with the matching hash completed normally.',
+    );
+    expect(File('${directory.path}/tokens.txt').existsSync(), isFalse);
+    expect(
+      File('${directory.path}/tokens.txt.part').existsSync(),
+      isFalse,
+      reason: 'A hash-mismatched file is discarded entirely.',
     );
   });
 

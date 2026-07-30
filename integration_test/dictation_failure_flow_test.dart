@@ -76,7 +76,9 @@ void main() {
           platformBridge: bridge,
           audioRecorderFactory: recorderFactory,
           dataDirectory: dataDirectory,
-          splashDuration: Duration.zero,
+          // Desktop hold-shortcut flow; force the desktop shell so it runs
+          // identically on the Android emulator.
+          useMobileShell: false,
         ),
       );
       await tester.pumpAndSettle();
@@ -92,12 +94,9 @@ void main() {
 
       expect(bridge.overlayVisible, isFalse);
       expect(bridge.lastInsertedText, isEmpty);
-      // The failed history entry is the ONLY in-app surface carrying the
-      // reason (no separate banner; the overlay just closes)...
-      expect(
-        find.textContaining('Transcription took too long'),
-        findsOneWidget,
-      );
+      // The failure reason is visible in-app: the failed history entry
+      // (every platform) and, on mobile, the mic tile's status line too.
+      expect(find.textContaining('Transcription took too long'), findsWidgets);
       // ...and the OS notification (read outside the app, persists in the
       // tray) is the one place that points back at History.
       expect(
@@ -164,7 +163,7 @@ void main() {
           platformBridge: bridge,
           audioRecorderFactory: recorderFactory,
           dataDirectory: dataDirectory,
-          splashDuration: Duration.zero,
+          useMobileShell: false,
         ),
       );
       await tester.pumpAndSettle();

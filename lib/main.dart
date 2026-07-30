@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_single_instance/flutter_single_instance.dart';
 import 'package:local_notifier/local_notifier.dart';
@@ -7,8 +8,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'src/app.dart';
+import 'src/core/audio/record_package_audio.dart';
 import 'src/core/diagnostics/diagnostic_log.dart';
 import 'src/core/diagnostics/diagnostic_reporter.dart';
+import 'src/core/dictation_history_controller.dart';
+import 'src/core/platform/android/native_dictation_channel.dart';
+import 'src/core/stt/android_speech_runtime.dart';
 import 'src/core/diagnostics/sentry_telemetry.dart';
 import 'src/core/diagnostics/telemetry_controller.dart';
 import 'src/models/app_identity.dart';
@@ -99,6 +104,22 @@ Future<void> main() async {
 /// APPDATA/XDG environment to derive it from.
 Future<void> _runAndroidApp() async {
   final dataDirectory = await getApplicationSupportDirectory();
+  // The one-time model download keeps going while the app is in the
+  // background; the notification is how the user sees that. The task
+  // must run as a FOREGROUND service: a plain background job gets
+  // stopped by the OS seconds after the app leaves the foreground
+  // (JobScheduler onStopJob, observed on Android 16).
+  await FileDownloader().configure(
+    androidConfig: [(Config.runInForegroundIfFileLargerThan, 0)],
+  );
+  // Persist task records: if the process dies mid-download (swiped from
+  // recents), WorkManager finishes the file anyway and the next attempt
+  // finds and reuses it instead of starting over.
+  await FileDownloader().trackTasks();
+  FileDownloader().configureNotification(
+    running: speechModelDownloadNotification,
+    progressBar: true,
+  );
   // No local log file on Android: the Settings surface that lets a user
   // find and share it is desktop-only, and a log nobody can see should
   // not be written. Opt-in Sentry telemetry remains the diagnostics path.
@@ -132,6 +153,48 @@ Future<void> _runAndroidApp() async {
       diagnosticReporter: diagnosticReporter,
       telemetryController: telemetryController,
       dataDirectory: dataDirectory,
+    ),
+  );
+}
+
+/// Entry point for the native Android dictation surfaces (the floating
+/// mic overlay and the physical-keyboard shortcut). The accessibility
+/// service hosts a headless Flutter engine running this instead of the
+/// app UI: no widgets, just the dictation channel wired to the same
+/// on-device speech stack the app uses. The model must already be
+/// provisioned by the app; the overlay only reports that, it never
+/// downloads.
+@pragma('vm:entry-point')
+Future<void> dictationServiceMain() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final dataDirectory = await getApplicationSupportDirectory();
+  final speechRuntime = createAndroidSpeechRuntime(
+    dataDirectory: dataDirectory,
+  );
+  // Unlike the app path, this must NOT route through the record plugin's
+  // permission request: that needs a foreground Activity, and a headless
+  // engine has none. The Kotlin service preflights the permission before
+  // every dictation instead.
+  final recorderFactory = RecordPackageAudioRecorderFactory(
+    outputDirectory: createDefaultRecordingsDirectory(directory: dataDirectory),
+    useSystemDefaultDevice: true,
+  );
+  // Floating-mic dictations land in the same history file the app reads
+  // (reloaded there on resume). Reload before each write: the app engine
+  // writes the same file (retry, clear), and appending onto a stale copy
+  // would resurrect deleted entries.
+  final historyController = DictationHistoryController(
+    store: createDefaultDictationHistoryStore(directory: dataDirectory),
+  );
+  registerNativeDictationChannel(
+    NativeDictationHandler(
+      engine: speechRuntime.engine,
+      recorderFactory: recorderFactory,
+      provisioner: speechRuntime.provisioner,
+      onTranscriptGenerated: (transcript, {required duration}) async {
+        await historyController.load();
+        await historyController.addTranscript(transcript, duration: duration);
+      },
     ),
   );
 }

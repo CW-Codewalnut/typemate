@@ -37,12 +37,18 @@ void main() {
         platformBridge: bridge,
         audioRecorderFactory: recorderFactory,
         dataDirectory: dataDirectory,
-        splashDuration: Duration.zero,
+        // This exercises the desktop hold-shortcut loop; force the desktop
+        // shell so it runs the same way on the Android emulator (where the
+        // mobile shell would null the shortcut and lazy-load the engine).
+        useMobileShell: false,
       ),
     );
     await tester.pumpAndSettle();
 
     expect(registrar.isRegistered, isTrue);
+    // The desktop shell prepares the engine during init; wait for it
+    // rather than racing the first frame.
+    await pumpUntil(tester, () => sttEngine.prepared);
     expect(sttEngine.prepared, isTrue);
 
     // Hold the shortcut: the overlay shows and recording starts.
@@ -91,7 +97,7 @@ void main() {
         platformBridge: bridge,
         audioRecorderFactory: recorderFactory,
         dataDirectory: dataDirectory,
-        splashDuration: Duration.zero,
+        useMobileShell: false,
       ),
     );
     await tester.pumpAndSettle();

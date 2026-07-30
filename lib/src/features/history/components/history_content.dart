@@ -14,11 +14,21 @@ class HistoryContent extends StatelessWidget {
     required this.historyController,
     this.dictationController,
     this.shortcutController,
+    this.dictationSurface,
+    this.title = 'Speech history',
   });
 
   final DictationHistoryController historyController;
   final DictationController? dictationController;
   final HoldShortcutController? shortcutController;
+
+  /// Replaces the shortcut instruction card. Mobile puts its hold-to-talk
+  /// mic (and the first-run model download) in this slot, so both
+  /// platforms share one page: how-to-dictate on top, history below.
+  final Widget? dictationSurface;
+
+  /// Mobile titles the page after its tab ("Dictate").
+  final String title;
 
   @override
   Widget build(BuildContext context) {
@@ -28,13 +38,15 @@ class HistoryContent extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Speech history',
+          title,
           style: theme.textTheme.displaySmall?.copyWith(
             fontWeight: FontWeight.w800,
           ),
         ),
         const SizedBox(height: 16),
-        if (dictationController?.phase == DictationPhase.preparing)
+        if (dictationSurface != null)
+          dictationSurface!
+        else if (dictationController?.phase == DictationPhase.preparing)
           const ShortcutInstructionCard(
             instruction: 'Starting the speech engine… one moment.',
             busy: true,
@@ -52,7 +64,13 @@ class HistoryContent extends StatelessWidget {
         if (historyController.isLoading)
           const Center(child: CircularProgressIndicator())
         else if (historyController.entries.isEmpty)
-          const EmptyHistoryCard()
+          EmptyHistoryCard(
+            hint: dictationSurface == null
+                ? 'Hold the shortcut, speak, and your generated text will '
+                      'appear here.'
+                : 'Hold the mic above or the floating mic in any app, and '
+                      'your dictations will appear here.',
+          )
         else
           for (final entry in historyController.entries)
             HistoryEntryCard(

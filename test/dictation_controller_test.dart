@@ -26,6 +26,25 @@ void main() {
     expect(controller.statusMessage, contains('Ready'));
   });
 
+  test('markReady shows ready without loading the engine', () async {
+    final engine = FakeSttEngine();
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: engine,
+      audioRecorder: FakeAudioRecorder(),
+    );
+
+    controller.markReady();
+
+    expect(controller.phase, DictationPhase.idle);
+    expect(controller.statusMessage, contains('Ready'));
+    expect(
+      engine.ready,
+      isFalse,
+      reason: 'The engine loads lazily on first use, not on markReady.',
+    );
+  });
+
   test('recovers when preparing the local speech engine fails', () async {
     final controller = DictationController(
       platformBridge: MockPlatformBridge(),

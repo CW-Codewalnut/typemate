@@ -51,14 +51,15 @@ jobs:
       contents: read
       security-events: write
 
-  # The Android app has no e2e harness yet (no emulator in CI); a release
-  # build catches Gradle/Kotlin/plugin breakage, which is where every
-  # Android failure so far has lived. Runs alongside the test matrix.
+  # Android runs the same e2e suite as the desktop matrix, on a real
+  # emulator (GitHub's ubuntu runners have KVM). The release build comes
+  # first: Gradle/Kotlin/plugin breakage is where every Android failure
+  # so far has lived, and the e2e run only exercises debug.
   build-android:
-    name: Android build
+    name: Tests and e2e (Android)
     needs: security
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -76,11 +77,77 @@ jobs:
           channel: stable
           cache: true
 
+      # Gradle re-resolves and re-compiles from scratch on a cold runner;
+      # caching the dependency/build caches cuts both the release build and
+      # the per-test debug builds substantially.
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
       - name: Install dependencies
         run: flutter pub get
 
+      # No --no-pub on the builds: each `flutter build` re-runs pub to
+      # regenerate GeneratedPluginRegistrant for its mode (release drops the
+      # integration_test plugin; debug keeps it). Skipping that here makes
+      # the release build compile a dev-inclusive registrant and fail on the
+      # missing integration_test package. --no-pub is applied only to the
+      # per-file e2e loop below, which is where the repeated pub-get lived.
       - name: Build release APK
         run: flutter build apk --release
+
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # Cache the AVD + a warm snapshot so runs boot from a saved state
+      # instead of cold-booting and provisioning the system image every time.
+      - name: Cache AVD snapshot
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-x86_64
+
+      - name: Create AVD and generate snapshot for caching
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Generated AVD snapshot."
+
+      # One `flutter test` invocation per file, mirroring the desktop
+      # matrix (multiple e2e files from one invocation flakes there).
+      - name: End-to-end tests on the Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          # The emulator-runner executes each script line as its own
+          # `sh -c`, so the whole loop must be one line (a multi-line
+          # for/do/done gets split and fails with "unexpected EOF").
+          script: |
+            flutter build apk --debug
+            adb install -r build/app/outputs/flutter-apk/app-debug.apk
+            adb shell pm grant com.codewalnut.typemate android.permission.RECORD_AUDIO
+            for f in integration_test/*_test.dart; do flutter test "$f" -d emulator-5554 --no-pub || exit 1; done
 
   test:
     name: Tests and e2e (${{ matrix.name }})

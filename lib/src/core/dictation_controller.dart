@@ -144,7 +144,21 @@ class DictationController extends ChangeNotifier {
 
   bool get isBusy => _phase != DictationPhase.idle;
 
+  /// Shows the ready state without loading the engine. Mobile uses this so
+  /// opening the app is instant: the ~1 GB model (which Android reclaims
+  /// between launches) loads lazily on the first dictation instead of
+  /// flashing "Preparing..." on every open.
+  void markReady() {
+    _setPhase(DictationPhase.idle, _readyStatusMessage);
+  }
+
   Future<void> prepare() async {
+    // Already warm (process still alive from the background): go straight
+    // to ready, no "Preparing..." flash.
+    if (await _sttEngine.isReady()) {
+      _setPhase(DictationPhase.idle, _readyStatusMessage);
+      return;
+    }
     _setPhase(DictationPhase.preparing, 'Preparing local speech engine...');
     try {
       await _sttEngine.prepare();
