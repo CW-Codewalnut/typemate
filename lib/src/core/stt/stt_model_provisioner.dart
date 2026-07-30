@@ -91,12 +91,20 @@ class SttModelProvisioner extends ChangeNotifier {
   File _partFor(SttModelFile file) =>
       File('${modelDirectory.path}/${file.relativePath}.part');
 
-  /// Checks which files already exist and lands in
-  /// [SttModelProvisionPhase.ready] or
+  /// A completed file must also still have the pinned revision's exact
+  /// size: the validated rename guarantees it was right once, but this
+  /// additionally catches outside interference with app storage.
+  bool _isIntact(SttModelFile file) {
+    final target = _targetFor(file);
+    return target.existsSync() && target.lengthSync() == file.expectedBytes;
+  }
+
+  /// Checks which files already exist (at their exact pinned size) and
+  /// lands in [SttModelProvisionPhase.ready] or
   /// [SttModelProvisionPhase.downloadRequired].
   Future<void> refresh() async {
     _setPhase(SttModelProvisionPhase.checking);
-    final complete = files.every((file) => _targetFor(file).existsSync());
+    final complete = files.every(_isIntact);
     _setPhase(
       complete
           ? SttModelProvisionPhase.ready
@@ -120,10 +128,15 @@ class SttModelProvisioner extends ChangeNotifier {
     var completedBytes = 0;
     for (final file in files) {
       final target = _targetFor(file);
-      if (target.existsSync()) {
+      // Same intactness bar as refresh(): a completed file that lost its
+      // exact size is re-downloaded, not skipped by existence alone.
+      if (_isIntact(file)) {
         completedBytes += file.expectedBytes;
         _reportProgress(completedBytes);
         continue;
+      }
+      if (target.existsSync()) {
+        target.deleteSync();
       }
       final part = _partFor(file);
       final resumeFromBytes = part.existsSync() ? part.lengthSync() : 0;

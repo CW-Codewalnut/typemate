@@ -148,6 +148,42 @@ void main() {
     );
   });
 
+  test('a tampered completed file is detected and re-downloaded', () async {
+    // A file at its final name but the wrong size (outside interference
+    // with app storage — the validated rename can't produce this).
+    File('${directory.path}/encoder.onnx').writeAsStringSync('0123');
+    File('${directory.path}/tokens.txt').writeAsStringSync('0123456789');
+    final downloaded = <String>[];
+    final sut = provisioner(
+      downloader:
+          (
+            file,
+            target, {
+            required resumeFromBytes,
+            required onProgress,
+          }) async {
+            downloaded.add(file.relativePath);
+            target.writeAsStringSync('0123456789');
+          },
+    );
+    await sut.refresh();
+
+    expect(
+      sut.phase,
+      SttModelProvisionPhase.downloadRequired,
+      reason: 'Existence alone is not enough; the size must match.',
+    );
+
+    await sut.download();
+
+    expect(sut.isReady, isTrue);
+    expect(downloaded, ['encoder.onnx']);
+    expect(
+      File('${directory.path}/encoder.onnx').readAsStringSync(),
+      '0123456789',
+    );
+  });
+
   test('a wrong-sized download fails and discards the partial file', () async {
     final sut = provisioner(
       downloader:
