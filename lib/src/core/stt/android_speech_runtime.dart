@@ -7,7 +7,7 @@ import 'package:background_downloader/background_downloader.dart';
 /// (it fires once per file, stacking a "ready" notification per file).
 ///
 /// The speech stack itself is the same on every platform now — see
-/// `createDesktopSpeechRuntime` — so this file only keeps the
+/// `createSpeechRuntime` — so this file only keeps the
 /// Android-specific download-notification wording.
 const speechModelDownloadNotification = TaskNotification(
   'Downloading speech model',

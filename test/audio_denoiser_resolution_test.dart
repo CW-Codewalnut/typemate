@@ -9,7 +9,7 @@ void main() {
     required bool Function(String path) pathExists,
     Map<String, String> environment = const {},
   }) {
-    final runtime = createDesktopSpeechRuntime(
+    final runtime = createSpeechRuntime(
       dataDirectoryPath: dataDirectory,
       environment: environment,
       pathExists: pathExists,
@@ -34,7 +34,7 @@ void main() {
     );
 
     // And the Parakeet download carries the denoiser model with it.
-    final runtime = createDesktopSpeechRuntime(
+    final runtime = createSpeechRuntime(
       dataDirectoryPath: dataDirectory,
       environment: const {},
       pathExists: (_) => false,

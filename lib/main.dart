@@ -45,8 +45,10 @@ Future<void> main() async {
   };
 
   // Desktop speech models download on demand (slim installs). Persist
-  // task records so a download interrupted by an app restart is found
-  // and resumed instead of started over.
+  // task records so a relaunch can tell a COMPLETE download (killed
+  // between finish and rename) from a stale one: desktop downloads die
+  // with the app, so anything still marked running is cleared and
+  // restarted, never adopted (that wedged the progress bar before).
   await FileDownloader().trackTasks();
 
   final diagnosticLog = createDefaultDiagnosticLog();
@@ -182,7 +184,7 @@ Future<void> dictationServiceMain() async {
   }
 
   await refreshLanguage();
-  final speechRuntime = createDesktopSpeechRuntime(
+  final speechRuntime = createSpeechRuntime(
     dataDirectoryPath: dataDirectory.path,
     languageCodeProvider: () => languageCode,
   );
