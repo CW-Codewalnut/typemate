@@ -40,7 +40,6 @@ dependencies:
   window_manager: ^0.5.2
   flutter_single_instance: ^1.7.0
   package_info_plus: ^10.2.1
-  local_notifier: ^0.1.6
   sentry_flutter: ^8.14.2
   sentry: ^8.14.2
   sherpa_onnx: ^1.13.4

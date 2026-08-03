@@ -33,6 +33,9 @@ test -f "$RELEASE_DIR/typemate.exe"
 rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR" "$DIST_DIR"
 cp -R "$RELEASE_DIR"/. "$STAGING_DIR"/
+# Slim install: the large speech models download on first use for the
+# selected language instead of shipping in every artifact.
+bash scripts/slim-speech-models.sh "$STAGING_DIR"
 
 cat > "$STAGING_DIR/README.txt" <<'README'
 TypeMate Windows x64

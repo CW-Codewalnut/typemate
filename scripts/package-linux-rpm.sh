@@ -44,6 +44,8 @@ mkdir -p %{buildroot}/opt/typemate \\
          %{buildroot}%{_datadir}/applications \\
          %{buildroot}%{_datadir}/pixmaps
 cp -r $PWD/$BUNDLE/. %{buildroot}/opt/typemate/
+# Slim install: the large speech models download on first use.
+bash $PWD/scripts/slim-speech-models.sh %{buildroot}/opt/typemate
 cp $PWD/assets/typemate_icon_1024.png %{buildroot}%{_datadir}/pixmaps/typemate.png
 cat > %{buildroot}%{_datadir}/applications/typemate.desktop <<DESK
 [Desktop Entry]

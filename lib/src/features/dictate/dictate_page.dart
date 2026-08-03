@@ -6,13 +6,14 @@ import '../../core/dictation_history_controller.dart';
 import '../../core/hold_shortcut_controller.dart';
 import 'components/history_content.dart';
 
-class HistoryPage extends StatelessWidget {
-  const HistoryPage({
+class DictatePage extends StatelessWidget {
+  const DictatePage({
     super.key,
     required this.historyController,
     this.dictationController,
     this.shortcutController,
     this.dictationSurface,
+    this.mobileSurface = false,
     this.title = 'Speech history',
   });
 
@@ -20,9 +21,13 @@ class HistoryPage extends StatelessWidget {
   final DictationController? dictationController;
   final HoldShortcutController? shortcutController;
 
-  /// Mobile's hold-to-talk mic (and model download), shown where desktop
-  /// shows its shortcut instruction card.
+  /// Replaces the shortcut instruction card: mobile's hold-to-talk mic,
+  /// or desktop's model-download-aware instruction card.
   final Widget? dictationSurface;
+
+  /// Whether [dictationSurface] is the mobile mic (words the
+  /// empty-history hint accordingly).
+  final bool mobileSurface;
 
   final String title;
 
@@ -35,6 +40,7 @@ class HistoryPage extends StatelessWidget {
         dictationController: dictationController,
         shortcutController: shortcutController,
         dictationSurface: dictationSurface,
+        mobileSurface: mobileSurface,
         title: title,
       ),
     );

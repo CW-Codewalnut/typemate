@@ -179,12 +179,13 @@ void main() {
     expect(infoPlist, contains('NSAppleEventsUsageDescription'));
 
     // The fetch script must serve macOS its own runtime, never the Linux
-    // binaries or Linux-only helper tools.
+    // binaries or Linux-only helper tools. (Sherpa needs no binaries on
+    // any platform: everything sherpa runs in-process via the plugin.)
     final fetchScript = File(
       'tool/fetch_whisper_runtime.dart',
     ).readAsStringSync();
     expect(fetchScript, contains('whisper-v1.9.1-macos-universal.tar.gz'));
-    expect(fetchScript, contains('sherpa-onnx-v1.13.4-osx-universal2-static'));
+    expect(fetchScript, isNot(contains('sherpa-onnx-v1.13.4')));
     expect(fetchScript, contains('if (Platform.isLinux) {'));
   });
 
@@ -206,7 +207,7 @@ void main() {
       expect(source, contains('tickSeconds: TimeInterval = 0.07'));
       // Rounded capsule bars and pill.
       expect(source, contains('xRadius: barWidth / 2'));
-      expect(source, contains('xRadius: overlayHeight / 2'));
+      expect(source, contains('xRadius: bounds.height / 2'));
       // Never steals focus from the field being dictated into.
       expect(source, contains('.nonactivatingPanel'));
       expect(source, contains('orderFrontRegardless'));

@@ -18,7 +18,8 @@ class MainFlutterWindow: NSWindow {
       case "showOverlay":
         let arguments = call.arguments as? [String: Any]
         let state = arguments?["state"] as? String ?? "listening"
-        self?.overlay.show(state: state)
+        let message = arguments?["message"] as? String ?? ""
+        self?.overlay.show(state: state, message: message)
         result(nil)
       case "hideOverlay":
         self?.overlay.hide()

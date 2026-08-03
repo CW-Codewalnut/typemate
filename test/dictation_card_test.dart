@@ -8,7 +8,7 @@ import 'package:typemate/src/core/dictation_controller.dart';
 import 'package:typemate/src/core/platform/mock_platform_bridge.dart';
 import 'package:typemate/src/core/stt/stt_engine.dart';
 import 'package:typemate/src/core/stt/stt_model_provisioner.dart';
-import 'package:typemate/src/features/history/components/mobile_dictation_card.dart';
+import 'package:typemate/src/features/dictate/components/dictation_card.dart';
 
 class FixedTranscriptSttEngine implements SttEngine {
   FixedTranscriptSttEngine(this.transcript);
@@ -44,7 +44,7 @@ void main() {
     );
     addTearDown(controller.dispose);
 
-    await tester.pumpWidget(wrap(MobileDictationCard(controller: controller)));
+    await tester.pumpWidget(wrap(DictationCard(controller: controller)));
     await tester.pump();
 
     final button = find.byKey(const Key('hold-to-dictate-button'));
@@ -100,7 +100,7 @@ void main() {
     var permissionWarmUps = 0;
     await tester.pumpWidget(
       wrap(
-        MobileDictationCard(
+        DictationCard(
           controller: controller,
           modelProvisioner: provisioner,
           microphonePermissionWarmUp: () async => permissionWarmUps += 1,
@@ -166,7 +166,7 @@ void main() {
     var permissionWarmUps = 0;
     await tester.pumpWidget(
       wrap(
-        MobileDictationCard(
+        DictationCard(
           controller: controller,
           modelProvisioner: provisioner,
           microphonePermissionWarmUp: () async => permissionWarmUps += 1,
@@ -182,5 +182,90 @@ void main() {
       reason: 'Engine loads lazily on first dictation, not on model ready.',
     );
     expect(permissionWarmUps, 1);
+  });
+
+  testWidgets('desktop slim install offers the download, then shows the '
+      'mic tile, shortcut card, and warms the engine', (tester) async {
+    final directory = Directory.systemTemp.createTempSync('typemate-desk');
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final provisioner = SttModelProvisioner(
+      modelDirectory: directory,
+      files: const [
+        SttModelFile(
+          url: 'https://example.test/a',
+          relativePath: 'a.onnx',
+          expectedBytes: 10,
+        ),
+      ],
+      downloader:
+          (
+            file,
+            target, {
+            required resumeFromBytes,
+            required onProgress,
+          }) async {
+            target.writeAsStringSync('0123456789');
+            onProgress(10);
+          },
+    );
+    addTearDown(provisioner.dispose);
+    final engine = FixedTranscriptSttEngine('hello');
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: engine,
+      audioRecorder: MockAudioRecorder(),
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      wrap(
+        DictationCard(
+          controller: controller,
+          desktop: true,
+          modelProvisioner: provisioner,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('start-model-download')), findsOneWidget);
+    // Desktop wording, sized from the actual files (10 bytes rounds to 0).
+    expect(find.textContaining('on this computer'), findsOneWidget);
+    expect(find.byKey(const Key('hold-to-dictate-button')), findsNothing);
+    expect(engine.prepared, isFalse);
+
+    await tester.tap(find.byKey(const Key('start-model-download')));
+    await tester.pumpAndSettle();
+
+    expect(provisioner.isReady, isTrue);
+    expect(find.byKey(const Key('hold-to-dictate-button')), findsOneWidget);
+    expect(
+      engine.prepared,
+      isTrue,
+      reason: 'Desktop keeps the selected model warm once it exists.',
+    );
+  });
+
+  testWidgets('desktop with nothing to download goes straight to the mic '
+      'tile and warms the engine', (tester) async {
+    final engine = FixedTranscriptSttEngine('hello');
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: engine,
+      audioRecorder: MockAudioRecorder(),
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      wrap(DictationCard(controller: controller, desktop: true)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('hold-to-dictate-button')), findsOneWidget);
+    expect(
+      engine.prepared,
+      isTrue,
+      reason: 'Desktop prepares eagerly even with nothing to download.',
+    );
   });
 }

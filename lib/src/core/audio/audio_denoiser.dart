@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
+import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa_onnx;
 
-import '../stt/whisper_cli_stt_engine.dart'
-    show DartSttProcessRunner, SttProcessRunner;
 import 'audio_recorder.dart';
 
 /// Cleans steady background noise out of a finished recording before it is
@@ -15,28 +15,28 @@ abstract interface class AudioDenoiser {
   Future<AudioRecording> denoise(AudioRecording recording);
 }
 
-/// Denoises a WAV in place with the bundled sherpa-onnx offline denoiser
-/// running the GTCRN speech-enhancement model (16 kHz, matching the
-/// recorder's capture format).
+/// Denoises a WAV in place with the GTCRN speech-enhancement model through
+/// the sherpa_onnx plugin — the same in-process FFI route the English
+/// engine uses; no helper executable involved.
 ///
 /// The cleaned audio replaces the original file at the same path, so
 /// everything downstream — transcription, the failed-recording keep/retry
 /// flow, and cleanup — keeps operating on the single recording path.
+///
+/// The blocking FFI work (model load + inference) runs in a short-lived
+/// isolate so it never janks the UI; GTCRN is ~0.5 MB, so the per-call
+/// load costs milliseconds.
 class SherpaGtcrnAudioDenoiser implements AudioDenoiser {
   SherpaGtcrnAudioDenoiser({
-    required this.executable,
     required this.modelPath,
-    SttProcessRunner? processRunner,
     this.timeout = defaultTimeout,
-  }) : processRunner = processRunner ?? const DartSttProcessRunner();
+  });
 
   /// GTCRN runs at well under 0.1x realtime, so even a two-minute dictation
   /// finishes in seconds; a run that hits this bound is hung.
   static const defaultTimeout = Duration(seconds: 15);
 
-  final String executable;
   final String modelPath;
-  final SttProcessRunner processRunner;
   final Duration timeout;
 
   @override
@@ -44,33 +44,17 @@ class SherpaGtcrnAudioDenoiser implements AudioDenoiser {
     if (recording.path.isEmpty) {
       return recording;
     }
-    final outputPath = '${recording.path}.denoised.wav';
+    final model = modelPath;
+    final wavPath = recording.path;
     try {
-      final result = await processRunner
-          .run(executable, [
-            '--speech-denoiser-gtcrn-model=$modelPath',
-            '--input-wav=${recording.path}',
-            '--output-wav=$outputPath',
-          ])
-          .timeout(timeout);
-      final output = File(outputPath);
-      if (result.exitCode != 0 || !output.existsSync()) {
-        debugPrint(
-          'TypeMate: noise suppression exited with ${result.exitCode}; '
-          'using the raw recording. ${result.diagnostics}',
-        );
-        _deleteQuietly(output);
-        return recording;
-      }
-      output.renameSync(recording.path);
-      return recording;
+      await Isolate.run(() => _denoiseInPlace(model, wavPath)).timeout(timeout);
     } catch (error) {
       debugPrint(
         'TypeMate: noise suppression failed, using the raw recording: $error',
       );
-      _deleteQuietly(File(outputPath));
-      return recording;
+      _deleteQuietly(File(_denoisedPathFor(wavPath)));
     }
+    return recording;
   }
 
   void _deleteQuietly(File file) {
@@ -81,5 +65,44 @@ class SherpaGtcrnAudioDenoiser implements AudioDenoiser {
     } catch (_) {
       // A stray temp file is swept by the startup recordings purge.
     }
+  }
+}
+
+String _denoisedPathFor(String wavPath) => '$wavPath.denoised.wav';
+
+/// Isolate entry: loads GTCRN, denoises the WAV, and atomically replaces
+/// the original. Any throw is reported back to [SherpaGtcrnAudioDenoiser]
+/// as the isolate error and handled there.
+void _denoiseInPlace(String modelPath, String wavPath) {
+  sherpa_onnx.initBindings();
+  final denoiser = sherpa_onnx.OfflineSpeechDenoiser(
+    sherpa_onnx.OfflineSpeechDenoiserConfig(
+      model: sherpa_onnx.OfflineSpeechDenoiserModelConfig(
+        gtcrn: sherpa_onnx.OfflineSpeechDenoiserGtcrnModelConfig(
+          model: modelPath,
+        ),
+      ),
+    ),
+  );
+  try {
+    final wave = sherpa_onnx.readWave(wavPath);
+    final denoised = denoiser.run(
+      samples: wave.samples,
+      sampleRate: wave.sampleRate,
+    );
+    if (denoised.samples.isEmpty) {
+      throw StateError('the denoiser produced no audio');
+    }
+    final outputPath = _denoisedPathFor(wavPath);
+    if (!sherpa_onnx.writeWave(
+      filename: outputPath,
+      samples: denoised.samples,
+      sampleRate: denoised.sampleRate,
+    )) {
+      throw StateError('could not write the denoised WAV');
+    }
+    File(outputPath).renameSync(wavPath);
+  } finally {
+    denoiser.free();
   }
 }

@@ -19,14 +19,14 @@ const sherpaParakeetModelFileNames = [
 ];
 
 /// On-device English/European transcription with NVIDIA Parakeet TDT 0.6B
-/// v3 through the sherpa-onnx FFI bindings — the same model the desktop
-/// resident server runs, minus the server process (Android cannot spawn
-/// bundled executables).
+/// v3 through the sherpa-onnx FFI bindings, on every platform. No server
+/// process, no port, no startup handshake: the model loads in this
+/// process, so a load failure surfaces as a real exception instead of a
+/// connection timeout.
 ///
 /// The recognizer lives in a dedicated long-lived isolate: loading ~620 MB
 /// of weights and decoding a clip are blocking FFI calls that would freeze
-/// the UI thread. The isolate is the mobile equivalent of the desktop's
-/// resident server — one cold load, then every utterance decodes quickly
+/// the UI thread. One cold load, then every utterance decodes quickly
 /// against the warm recognizer.
 class SherpaParakeetSttEngine implements DisposableSttEngine {
   SherpaParakeetSttEngine({
@@ -75,7 +75,7 @@ class SherpaParakeetSttEngine implements DisposableSttEngine {
       if (!File(path).existsSync()) {
         throw SttRuntimeException(
           'Speech model file is missing: $path. '
-          'Download the model from the dictation screen first.',
+          'Download the speech model in the app first.',
         );
       }
     }

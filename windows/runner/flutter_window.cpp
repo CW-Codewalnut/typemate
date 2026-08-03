@@ -101,6 +101,7 @@ bool FlutterWindow::OnCreate() {
                  result) {
         if (call.method_name() == "showOverlay") {
           std::wstring state = L"listening";
+          std::wstring overlay_message;
           const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
           if (arguments) {
             auto state_it = arguments->find(flutter::EncodableValue("state"));
@@ -110,8 +111,23 @@ bool FlutterWindow::OnCreate() {
                 state = std::wstring(state_string->begin(), state_string->end());
               }
             }
+            auto message_it =
+                arguments->find(flutter::EncodableValue("message"));
+            if (message_it != arguments->end()) {
+              if (const auto* message_string =
+                      std::get_if<std::string>(&message_it->second)) {
+                // Proper UTF-8 decode: failure copy may not stay ASCII.
+                const int length = MultiByteToWideChar(
+                    CP_UTF8, 0, message_string->c_str(), -1, nullptr, 0);
+                if (length > 0) {
+                  overlay_message.resize(length - 1);
+                  MultiByteToWideChar(CP_UTF8, 0, message_string->c_str(), -1,
+                                      overlay_message.data(), length);
+                }
+              }
+            }
           }
-          overlay_.Show(state);
+          overlay_.Show(state, overlay_message);
           result->Success();
           return;
         }

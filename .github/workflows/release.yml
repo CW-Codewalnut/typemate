@@ -140,6 +140,8 @@ jobs:
           VERSION="$(sed -n 's/^version: \([0-9.]*\)+.*/\1/p' pubspec.yaml)"
           mkdir -p build/package/tar dist
           cp -r build/linux/x64/release/bundle build/package/tar/TypeMate
+          # Slim install: large speech models download on first use.
+          bash scripts/slim-speech-models.sh build/package/tar/TypeMate
           tar -C build/package/tar -czf "dist/TypeMate-v$VERSION-linux-x64.tar.gz" TypeMate
           ls -la dist
 
@@ -188,8 +190,8 @@ jobs:
           key: speech-runtime-macOS-${{ hashFiles('tool/fetch_whisper_runtime.dart') }}
 
       # Requires whisper-v1.9.1-macos-universal.tar.gz on the models-v1
-      # release (built by build-macos-whisper.yml); sherpa comes from the
-      # upstream osx-universal2 archive.
+      # release (built by build-macos-whisper.yml); sherpa runs in-process
+      # via the plugin, so no sherpa binaries are fetched.
       - name: Fetch speech runtimes
         run: dart tool/fetch_whisper_runtime.dart
         env:
@@ -206,6 +208,8 @@ jobs:
           APP="build/macos/Build/Products/Release/Type Mate.app"
           cp -R models "$APP/Contents/MacOS/models"
           cp -R bin "$APP/Contents/MacOS/bin"
+          # Slim install: large speech models download on first use.
+          bash scripts/slim-speech-models.sh "$APP/Contents/MacOS"
 
       # Developer preview: unsigned, so Gatekeeper needs a right-click
       # open; dictation-ready once the Mac grants the Input Monitoring

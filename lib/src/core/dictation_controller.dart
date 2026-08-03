@@ -14,6 +14,12 @@ import 'stt/stt_engine.dart';
 
 typedef AudioRecorderProvider = AudioRecorder? Function();
 
+/// Consulted right before listening starts. A non-null return is the
+/// user-facing reason dictation cannot begin (e.g. the speech model is not
+/// downloaded yet); the attempt is refused and the reason surfaces as the
+/// error state instead of a doomed recording.
+typedef DictationStartBlocker = String? Function();
+
 /// Returns the denoiser to run on the finished recording, or null when
 /// noise suppression is off (or its runtime is unavailable).
 typedef AudioDenoiserProvider = AudioDenoiser? Function();
@@ -41,6 +47,7 @@ class DictationController extends ChangeNotifier {
     DictationSoundPlayer? startSoundPlayer,
     DictationSoundPlayer? failureSoundPlayer,
     String readyStatusMessage = defaultReadyStatusMessage,
+    DictationStartBlocker? dictationBlocker,
   }) {
     assert(
       audioRecorder != null || audioRecorderProvider != null,
@@ -60,6 +67,7 @@ class DictationController extends ChangeNotifier {
       startSoundPlayer ?? playDictationStartSound,
       failureSoundPlayer ?? playDictationFailureSound,
       readyStatusMessage,
+      dictationBlocker,
     );
   }
 
@@ -76,6 +84,7 @@ class DictationController extends ChangeNotifier {
     this._startSoundPlayer,
     this._failureSoundPlayer,
     this._readyStatusMessage,
+    this._dictationBlocker,
   );
 
   /// Desktop wording; the mobile shell passes its own (there is no
@@ -111,10 +120,10 @@ class DictationController extends ChangeNotifier {
   final DictationSoundPlayer _startSoundPlayer;
   final DictationSoundPlayer _failureSoundPlayer;
   final String _readyStatusMessage;
+  final DictationStartBlocker? _dictationBlocker;
 
   /// User-facing failure copy: plain words, no runtime internals. The
-  /// History pointer is appended only to the OS notification — inside the
-  /// app the user is already looking at History.
+  /// in-app snackbar and the failed History entry carry the reason.
   static const failedToStartRecordingMessage =
       'Couldn\'t start recording. Check that your microphone is connected and allowed, then try again.';
   static const failedToFinishRecordingMessage =
@@ -123,7 +132,6 @@ class DictationController extends ChangeNotifier {
       'Couldn\'t turn your speech into text.';
   static const transcriptionTimeoutMessage =
       'Transcription took too long and was stopped.';
-  static const retryFromHistoryHint = ' You can retry it from History.';
   static const insertionFailedMessage =
       'Your text is ready but couldn\'t be typed into the app you were using. Copy it from History.';
 
@@ -184,6 +192,27 @@ class DictationController extends ChangeNotifier {
 
     _latestTranscript = '';
     _errorMessage = null;
+    // Refuse before any recording starts when dictation cannot possibly
+    // succeed (e.g. the speech model is not downloaded yet) — recording
+    // anyway would burn the user's speech on a guaranteed failure.
+    final blocked = _dictationBlocker?.call();
+    if (blocked != null) {
+      _errorMessage = blocked;
+      try {
+        await _failureSoundPlayer();
+      } catch (_) {
+        // Sound is a garnish; never let it strand the phase.
+      }
+      try {
+        // The refusal must be visible where the user is dictating from —
+        // usually another app entirely.
+        await _platformBridge.showDictationFailureOverlay(blocked);
+      } catch (_) {
+        // Best effort; a broken overlay must never strand the phase.
+      }
+      _setPhase(DictationPhase.idle, blocked);
+      return;
+    }
     final recorder = _audioRecorderProvider();
     if (recorder == null) {
       _statusMessage = 'Select a microphone before dictating.';
@@ -351,14 +380,11 @@ class DictationController extends ChangeNotifier {
     return scaled > maxTranscribeTimeout ? maxTranscribeTimeout : scaled;
   }
 
-  /// Single funnel for every failed dictation: hide the overlay, post an
-  /// OS notification (readable later from the Action Center), land back in
-  /// idle. The overlay shows no error state of its own — the notification
-  /// and the failed History entry carry it.
-  Future<void> _failDictation(
-    String message, {
-    String? notificationMessage,
-  }) async {
+  /// Single funnel for every failed dictation: hide the overlay, then show
+  /// the failure toast in its place — visible in whatever app the user was
+  /// dictating into, auto-hiding on its own. The failed History entry
+  /// keeps the reason for later; no OS notification is sent.
+  Future<void> _failDictation(String message) async {
     _errorMessage = message;
     await _hideOverlayQuietly();
     try {
@@ -369,11 +395,9 @@ class DictationController extends ChangeNotifier {
       // Sound is a garnish; never let it strand the phase.
     }
     try {
-      await _platformBridge.showDictationFailureNotification(
-        notificationMessage ?? message,
-      );
+      await _platformBridge.showDictationFailureOverlay(message);
     } catch (_) {
-      // Best effort; a broken notifier must never strand the phase.
+      // Best effort; a broken overlay must never strand the phase.
     }
     _setPhase(DictationPhase.idle, message);
   }
@@ -413,14 +437,7 @@ class DictationController extends ChangeNotifier {
     } catch (error) {
       debugPrint('TypeMate: unable to record failed dictation: $error');
     }
-    // The toast is read outside the app, so it points at History — the
-    // in-app surfaces are already there.
-    await _failDictation(
-      message,
-      notificationMessage: keptPath == null
-          ? message
-          : '$message$retryFromHistoryHint',
-    );
+    await _failDictation(message);
   }
 
   /// Re-transcribes a recording kept from a failed dictation. Returns the

@@ -8,8 +8,8 @@ import '../../core/microphone_settings_controller.dart';
 import '../../core/platform/android/floating_mic_controller.dart';
 import '../../core/speech_settings_controller.dart';
 import '../../core/stt/stt_model_provisioner.dart';
-import '../history/components/mobile_dictation_card.dart';
-import '../history/history_page.dart';
+import '../dictate/components/dictation_card.dart';
+import '../dictate/dictate_page.dart';
 import '../insights/insights_page.dart';
 import '../settings/settings_page.dart';
 
@@ -43,12 +43,14 @@ class HomeScreen extends StatefulWidget {
   final String? logsDirectoryPath;
   final Future<void> Function()? onQuitRequested;
 
-  /// Mobile: the first tab is Dictate — the history page with a
-  /// hold-to-talk mic card where desktop shows its shortcut instruction.
+  /// Selects the mobile flavor of the shared Dictate surface (floating
+  /// mic invitation, permission warm-up, lazy engine load) over the
+  /// desktop one (shortcut card, eager engine warm-up).
   final bool useMobileDictationSurface;
 
-  /// First-run speech model download state for the mobile mic card.
-  final SttModelProvisioner? modelProvisioner;
+  /// Speech model download state: the mobile mic card's first-run
+  /// download, and the desktop on-demand download for unbundled models.
+  final SpeechModelProvisioner? modelProvisioner;
 
   /// Pre-shows the OS microphone permission prompt once dictation
   /// becomes possible.
@@ -73,11 +75,9 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // On mobile the mic card prepares the engine itself, after the model
-    // provisioner confirms the files exist (fresh installs have none yet).
-    if (!widget.useMobileDictationSurface) {
-      widget.controller.prepare();
-    }
+    // Engine preparation is owned by the DictationCard on every platform:
+    // it waits for the model provisioner (fresh installs have no model
+    // yet), then warms the engine (desktop) or marks ready (mobile).
     widget.microphoneController.loadMicrophones();
     widget.historyController.load();
     widget.speechSettingsController.load();
@@ -107,24 +107,25 @@ class _HomeScreenState extends State<HomeScreen> {
       ]),
       builder: (context, _) {
         final pages = [
-          HistoryPage(
+          DictatePage(
             historyController: widget.historyController,
             dictationController: widget.controller,
             shortcutController: widget.shortcutController,
-            // Mobile: the same page desktop has, but the instruction slot
-            // holds the hold-to-talk mic and the tab is called Dictate.
-            title: widget.useMobileDictationSurface
-                ? 'Dictate'
-                : 'Speech history',
-            dictationSurface: widget.useMobileDictationSurface
-                ? MobileDictationCard(
-                    controller: widget.controller,
-                    modelProvisioner: widget.modelProvisioner,
-                    microphonePermissionWarmUp:
-                        widget.microphonePermissionWarmUp,
-                    floatingMicController: widget.floatingMicController,
-                  )
-                : null,
+            // One page on every platform: the dictation surface on top
+            // (mic tile, model download, platform capability card), the
+            // history of dictations below.
+            title: 'Dictate',
+            dictationSurface: DictationCard(
+              controller: widget.controller,
+              modelProvisioner: widget.modelProvisioner,
+              microphonePermissionWarmUp: widget.microphonePermissionWarmUp,
+              floatingMicController: widget.floatingMicController,
+              shortcutController: widget.useMobileDictationSurface
+                  ? null
+                  : widget.shortcutController,
+              desktop: !widget.useMobileDictationSurface,
+            ),
+            mobileSurface: widget.useMobileDictationSurface,
           ),
           InsightsPage(historyController: widget.historyController),
           SettingsPage(
@@ -155,9 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             onDestinationSelected: _selectDestination,
                             labelType: NavigationRailLabelType.all,
                             destinations: [
-                              for (final destination in _destinations(
-                                widget.useMobileDictationSurface,
-                              ))
+                              for (final destination in _destinations)
                                 NavigationRailDestination(
                                   icon: destination.icon,
                                   selectedIcon: destination.selectedIcon,
@@ -175,9 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       selectedIndex: _selectedIndex,
                       onDestinationSelected: _selectDestination,
                       destinations: [
-                        for (final destination in _destinations(
-                          widget.useMobileDictationSurface,
-                        ))
+                        for (final destination in _destinations)
                           NavigationDestination(
                             icon: destination.icon,
                             selectedIcon: destination.selectedIcon,
@@ -210,27 +207,20 @@ class _Destination {
   final String label;
 }
 
-List<_Destination> _destinations(bool useMobileDictationSurface) => [
-  // One first tab on every platform: dictation how-to plus history. On
-  // mobile it leads with the mic, so it is named for what you do there.
-  if (useMobileDictationSurface)
-    const _Destination(
-      icon: Icon(Icons.mic_none),
-      selectedIcon: Icon(Icons.mic),
-      label: 'Dictate',
-    )
-  else
-    const _Destination(
-      icon: Icon(Icons.history),
-      selectedIcon: Icon(Icons.history_toggle_off),
-      label: 'History',
-    ),
-  const _Destination(
+const List<_Destination> _destinations = [
+  // One first tab on every platform: the dictation surface plus history,
+  // named for what you do there.
+  _Destination(
+    icon: Icon(Icons.mic_none),
+    selectedIcon: Icon(Icons.mic),
+    label: 'Dictate',
+  ),
+  _Destination(
     icon: Icon(Icons.insights_outlined),
     selectedIcon: Icon(Icons.insights),
     label: 'Insights',
   ),
-  const _Destination(
+  _Destination(
     icon: Icon(Icons.settings_outlined),
     selectedIcon: Icon(Icons.settings),
     label: 'Settings',

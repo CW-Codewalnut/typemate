@@ -69,14 +69,23 @@ void main() {
     );
   });
 
-  testWidgets('desktop keeps History with the shortcut instruction', (
+  testWidgets('desktop leads with the same Dictate page as mobile', (
     tester,
   ) async {
     await pumpHome(tester, mobile: false);
 
-    expect(find.text('Dictate'), findsNothing);
-    expect(find.text('History'), findsWidgets);
-    expect(find.byKey(const Key('hold-to-dictate-button')), findsNothing);
+    expect(find.text('Dictate'), findsWidgets);
+    expect(
+      find.text('History'),
+      findsNothing,
+      reason: 'One shell everywhere: Dictate replaces the History tab.',
+    );
+    expect(find.byKey(const Key('hold-to-dictate-button')), findsOneWidget);
+    expect(
+      find.byKey(const Key('history-main-column')),
+      findsOneWidget,
+      reason: 'History renders below the mic on the same page.',
+    );
   });
 
   testWidgets('mobile settings hide the desktop-only panels', (tester) async {

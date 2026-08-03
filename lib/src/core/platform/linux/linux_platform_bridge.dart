@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../../models/app_identity.dart';
-import '../desktop_notification_sender.dart';
 import '../platform_bridge.dart';
 
 typedef LinuxProcessRunner =
@@ -47,18 +46,15 @@ class LinuxPlatformBridge implements PlatformBridge {
     this.xdotoolLibraryDirectory,
     this.overlayExecutable = '',
     OverlayStarter? overlayStarter,
-    DesktopNotificationSender? notificationSender,
   }) : _processRunner = processRunner ?? _runProcess,
        _environment = environment ?? Platform.environment,
        _executablePath = executablePath ?? Platform.resolvedExecutable,
-       notificationSender = notificationSender ?? showDesktopNotification,
        // ignore: prefer_initializing_formals
        _overlayStarter = overlayStarter;
 
   final LinuxProcessRunner _processRunner;
   final Map<String, String> _environment;
   final String _executablePath;
-  final DesktopNotificationSender notificationSender;
 
   /// Bundled xdotool ships with a private libxdo; its directory goes on
   /// LD_LIBRARY_PATH so no system install is needed.
@@ -125,12 +121,22 @@ class LinuxPlatformBridge implements PlatformBridge {
   }
 
   @override
-  Future<void> showDictationFailureNotification(String message) async {
+  Future<void> showDictationFailureOverlay(String message) async {
+    if (overlayExecutable.isEmpty) {
+      return;
+    }
     try {
-      await notificationSender('Dictation failed', message);
-    } catch (_) {
-      // Notifications are best effort (headless sessions have no daemon);
-      // the in-app history banner still carries the reason.
+      // One-shot toast process: the helper renders the error pill and
+      // exits on its own after a few seconds — no stdin protocol needed.
+      final process = await Process.start(overlayExecutable, [
+        'error',
+        message,
+      ]);
+      unawaited(process.stdout.drain<void>());
+      unawaited(process.stderr.drain<void>());
+    } on ProcessException {
+      // The toast is best effort; the in-app error state still carries
+      // the reason.
     }
   }
 

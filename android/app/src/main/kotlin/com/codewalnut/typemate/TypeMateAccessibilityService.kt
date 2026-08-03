@@ -91,6 +91,9 @@ class TypeMateAccessibilityService : AccessibilityService() {
         val OVERLAY_DARK = Color.parseColor("#F21F1F2A")
         val OVERLAY_TEXT = Color.parseColor("#E8E8F0")
         val OVERLAY_BAR = Color.parseColor("#7B86F8")
+        // The desktop failure toast's red pill; same auto-hide.
+        val ERROR_PILL = Color.parseColor("#601C22")
+        const val ERROR_PILL_MS = 4_500L
         const val BAR_COUNT = 7
         const val BUBBLE_SIZE_DP = 56
         const val BUBBLE_MARGIN_DP = 8
@@ -103,6 +106,7 @@ class TypeMateAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         hideBubble()
+        removeErrorPill()
         channel = null
         SpeechEngineHolder.release()
         super.onDestroy()
@@ -196,6 +200,9 @@ class TypeMateAccessibilityService : AccessibilityService() {
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             setTextColor(OVERLAY_TEXT)
             maxLines = 1
+            // Centered like every other platform's overlay text.
+            gravity = Gravity.CENTER
+            textAlignment = View.TEXT_ALIGNMENT_CENTER
         }
         val barsRow = LinearLayout(overlayContext).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -613,8 +620,74 @@ class TypeMateAccessibilityService : AccessibilityService() {
         }
     }
 
+    private var errorPill: View? = null
+    private var errorPillWindowManager: WindowManager? = null
+    private val hideErrorPillRunnable = Runnable { removeErrorPill() }
+
+    /// Failure feedback as an accessibility-overlay pill (the same red
+    /// toast the desktop shows at its overlay position). A plain Toast is
+    /// silently dropped for background accessibility services on newer
+    /// Android — the user sees nothing — so the service draws its own.
     private fun toast(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        removeErrorPill()
+        val overlayContext = overlayContextFor(
+            if (bubbleShown) bubbleDisplayId else Display.DEFAULT_DISPLAY,
+        )
+        val density = overlayContext.resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
+        val pill = TextView(overlayContext).apply {
+            text = message
+            textSize = 13f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setTextColor(OVERLAY_TEXT)
+            // Centered like every other platform's overlay text.
+            gravity = Gravity.CENTER
+            textAlignment = View.TEXT_ALIGNMENT_CENTER
+            maxLines = 2
+            maxWidth = dp(320)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(24).toFloat()
+                setColor(ERROR_PILL)
+            }
+            setPadding(dp(20), dp(12), dp(20), dp(12))
+        }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            y = dp(96)
+        }
+        val windowManager =
+            overlayContext.getSystemService(WINDOW_SERVICE) as WindowManager
+        try {
+            windowManager.addView(pill, params)
+        } catch (_: Exception) {
+            // Last resort: the classic toast, in case the overlay window
+            // is rejected (should not happen for an accessibility service).
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+            return
+        }
+        errorPill = pill
+        errorPillWindowManager = windowManager
+        mainHandler.postDelayed(hideErrorPillRunnable, ERROR_PILL_MS)
+    }
+
+    private fun removeErrorPill() {
+        mainHandler.removeCallbacks(hideErrorPillRunnable)
+        val pill = errorPill ?: return
+        errorPill = null
+        try {
+            errorPillWindowManager?.removeView(pill)
+        } catch (_: IllegalArgumentException) {
+            // Already detached (service torn down while hiding).
+        }
+        errorPillWindowManager = null
     }
 
     /// Start-of-listening gets the firmer click, stop a light tick.

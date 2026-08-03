@@ -56,6 +56,28 @@ enum SttModelProvisionPhase {
   failed,
 }
 
+/// The surface the download UI binds to. [SttModelProvisioner] is the one
+/// real implementation for a single model; the desktop wraps several of
+/// them behind this same surface so the UI shows whichever model the
+/// selected language needs.
+abstract class SpeechModelProvisioner extends ChangeNotifier {
+  SttModelProvisionPhase get phase;
+
+  /// 0..1 while downloading.
+  double get progress;
+
+  String? get errorMessage;
+
+  bool get isReady;
+
+  /// Exact size of the full download in bytes.
+  int get expectedTotalBytes;
+
+  Future<void> refresh();
+
+  Future<void> download();
+}
+
 /// Owns the first-run download of the on-device speech model (Android).
 /// The model is too large to bundle in the app package, so it streams into
 /// the app's private data directory once; every later launch finds it
@@ -66,7 +88,7 @@ enum SttModelProvisionPhase {
 /// a killed app, a truncated stream, or a server serving different bytes
 /// can never leave a corrupt file that looks complete. An existing
 /// `.part` resumes where it stopped.
-class SttModelProvisioner extends ChangeNotifier {
+class SttModelProvisioner extends SpeechModelProvisioner {
   SttModelProvisioner({
     required this.modelDirectory,
     required this.files,
@@ -99,6 +121,7 @@ class SttModelProvisioner extends ChangeNotifier {
   final Future<bool> Function()? _hasActiveDownload;
 
   /// Exact size of the full download, summed from the per-file sizes.
+  @override
   int get expectedTotalBytes =>
       files.fold(0, (sum, file) => sum + file.expectedBytes);
 
@@ -106,13 +129,17 @@ class SttModelProvisioner extends ChangeNotifier {
   double _progress = 0;
   String? _errorMessage;
 
+  @override
   SttModelProvisionPhase get phase => _phase;
 
   /// 0..1 while downloading.
+  @override
   double get progress => _progress;
 
+  @override
   String? get errorMessage => _errorMessage;
 
+  @override
   bool get isReady => _phase == SttModelProvisionPhase.ready;
 
   File _targetFor(SttModelFile file) =>
@@ -136,6 +163,7 @@ class SttModelProvisioner extends ChangeNotifier {
   /// A refresh must never hide an active download: the provisioner is a
   /// long-lived singleton, and every return to the dictation surface
   /// re-checks it while a download may be running.
+  @override
   Future<void> refresh() async {
     if (_phase == SttModelProvisionPhase.downloading) {
       return;
@@ -159,7 +187,17 @@ class SttModelProvisioner extends ChangeNotifier {
 
   /// Asks the real download manager whether any of this model's files is
   /// still being downloaded (from a previous, possibly killed, launch).
+  ///
+  /// Android only: WorkManager keeps a foreground-service download running
+  /// after the app process dies, so a live record there is a real
+  /// download to adopt. On desktop the download dies with the app, so a
+  /// "running" record found at startup is stale by definition — adopting
+  /// it would poll a record nothing will ever update again, showing a
+  /// download bar frozen at its last progress forever.
   Future<bool> _queryDownloadManager() async {
+    if (!Platform.isAndroid) {
+      return false;
+    }
     for (final file in files) {
       final taskId = 'typemate-model-${_partFor(file).uri.pathSegments.last}';
       final record = await FileDownloader().database.recordForId(taskId);
@@ -176,6 +214,7 @@ class SttModelProvisioner extends ChangeNotifier {
 
   /// Downloads every missing file. Safe to call again after a failure;
   /// finished files are skipped and a partial file resumes.
+  @override
   Future<void> download() async {
     if (_phase == SttModelProvisionPhase.downloading ||
         _phase == SttModelProvisionPhase.ready) {
@@ -324,20 +363,27 @@ Future<void> _packageDownloader(
     allowPause: true,
   );
 
-  // The foreground-service download keeps going even after the app is
-  // killed. On reopen the same file may already be finished, or still
-  // running — adopt either instead of starting a second copy that races
-  // the first (the "two downloads, progress bouncing" bug). Only adopt
-  // a genuinely live or complete task; a canceled/failed record is stale
-  // and must be cleared, or a fresh Download would re-adopt it and
+  // Android: the foreground-service download keeps going even after the
+  // app is killed. On reopen the same file may already be finished, or
+  // still running — adopt either instead of starting a second copy that
+  // races the first (the "two downloads, progress bouncing" bug). Only
+  // adopt a genuinely live or complete task; a canceled/failed record is
+  // stale and must be cleared, or a fresh Download would re-adopt it and
   // immediately re-cancel ("tapping Download does nothing").
+  //
+  // Desktop: the download dies with the app, so only a COMPLETE record
+  // (killed between finish and rename) is adoptable; a "running" record
+  // from a previous launch is stale and is cleared like any other —
+  // adopting it would poll forever against a dead download.
   final previous = await FileDownloader().database.recordForId(task.taskId);
-  const adoptable = {
-    TaskStatus.running,
-    TaskStatus.enqueued,
-    TaskStatus.waitingToRetry,
-    TaskStatus.paused,
+  final adoptable = <TaskStatus>{
     TaskStatus.complete,
+    if (Platform.isAndroid) ...{
+      TaskStatus.running,
+      TaskStatus.enqueued,
+      TaskStatus.waitingToRetry,
+      TaskStatus.paused,
+    },
   };
   if (previous != null && adoptable.contains(previous.status)) {
     if (await _adoptRunningDownload(task, file, onProgress)) {
@@ -345,10 +391,11 @@ Future<void> _packageDownloader(
       return;
     }
   } else if (previous != null) {
-    // Stale terminal record (canceled/failed) from a prior attempt. Cancel
-    // the underlying WorkManager job AND drop the record, so the fresh
-    // enqueue below is not shadowed by a still-clearing job — otherwise
-    // the first Download tap silently no-ops and only the second works.
+    // Stale record (canceled/failed anywhere; also killed-mid-run on
+    // desktop). Cancel the underlying job AND drop the record, so the
+    // fresh enqueue below is not shadowed by a still-clearing job —
+    // otherwise the first Download tap silently no-ops and only the
+    // second works.
     await FileDownloader().cancelTaskWithId(task.taskId);
     await FileDownloader().database.deleteRecordWithId(task.taskId);
   }

@@ -207,7 +207,7 @@ jobs:
         run: flutter test
 
       # The Windows and Linux desktop builds fetch the bundled speech
-      # runtimes (models + whisper/sherpa binaries) via CMake; cache them
+      # runtimes (models + whisper binaries) via CMake; cache them
       # so e2e runs do not re-download gigabytes every time.
       - name: Cache speech runtimes
         if: runner.os != 'macOS'
