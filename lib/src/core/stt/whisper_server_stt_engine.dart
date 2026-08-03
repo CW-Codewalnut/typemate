@@ -6,9 +6,12 @@ import 'dart:typed_data';
 import '../audio/audio_recorder.dart';
 import '../diagnostics/diagnostic_log.dart';
 import '../diagnostics/diagnostic_reporter.dart';
-import 'parakeet_server_stt_engine.dart' show ServerProcessStarter;
 import 'stt_engine.dart';
 import 'whisper_cli_stt_engine.dart' show SttRuntimeException;
+
+/// Starts a resident speech server process; injectable for tests.
+typedef ServerProcessStarter =
+    Future<Process> Function(String executable, List<String> arguments);
 
 /// Posts a multipart inference request; returns the response body.
 typedef WhisperInferenceClient =
@@ -25,6 +28,8 @@ Future<Process> _startServerProcess(
   String executable,
   List<String> arguments,
 ) => Process.start(executable, arguments);
+
+bool _modelFileExists(String path) => File(path).existsSync();
 
 Future<bool> _probeTcpPort(int port) async {
   try {
@@ -119,8 +124,10 @@ class WhisperServerSttEngine implements DisposableSttEngine {
     ServerProcessStarter? processStarter,
     ServerConnectionProbe? connectionProbe,
     WhisperInferenceClient? inferenceClient,
+    bool Function(String path)? modelFileExists,
   }) : processStarter = processStarter ?? _startServerProcess,
        connectionProbe = connectionProbe ?? _probeTcpPort,
+       modelFileExists = modelFileExists ?? _modelFileExists,
        _injectedInferenceClient = inferenceClient;
 
   final String serverExecutable;
@@ -146,6 +153,11 @@ class WhisperServerSttEngine implements DisposableSttEngine {
 
   final ServerProcessStarter processStarter;
   final ServerConnectionProbe connectionProbe;
+
+  /// Whether the model file exists on disk; injectable so tests with fake
+  /// paths can bypass the real filesystem.
+  final bool Function(String path) modelFileExists;
+
   final WhisperInferenceClient? _injectedInferenceClient;
 
   /// Records server lifecycle events and startup failures (with a stderr
@@ -226,6 +238,16 @@ class WhisperServerSttEngine implements DisposableSttEngine {
     // from an unclean exit) instead of spawning a duplicate.
     if (await connectionProbe(port)) {
       return;
+    }
+
+    // Fail fast with the real reason when the model is not on disk yet
+    // (desktop downloads models on demand); spawning the server anyway
+    // would burn the full startup timeout on a doomed process.
+    if (!modelFileExists(modelPath)) {
+      throw SttRuntimeException(
+        'The speech model for this language is not downloaded yet '
+        '($modelPath). Download it in the app first.',
+      );
     }
 
     _serverProcess?.kill();

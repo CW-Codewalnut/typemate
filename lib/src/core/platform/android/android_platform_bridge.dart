@@ -19,9 +19,9 @@ class AndroidPlatformBridge implements PlatformBridge {
   Future<void> hideListeningOverlay() async {}
 
   @override
-  Future<void> showDictationFailureNotification(String message) async {
-    // The user is looking at the dictation screen, which shows the same
-    // failure through the controller's error state.
+  Future<void> showDictationFailureOverlay(String message) async {
+    // In-app dictation shows the failure on the mic tile; the floating
+    // mic's native bubble carries its own error state.
   }
 
   @override

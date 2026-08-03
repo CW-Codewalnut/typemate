@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_single_instance/flutter_single_instance.dart';
-import 'package:local_notifier/local_notifier.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -45,6 +44,11 @@ Future<void> main() async {
     await windowManager.focus();
   };
 
+  // Desktop speech models download on demand (slim installs). Persist
+  // task records so a download interrupted by an app restart is found
+  // and resumed instead of started over.
+  await FileDownloader().trackTasks();
+
   final diagnosticLog = createDefaultDiagnosticLog();
   final telemetryController = TelemetryController(
     store: createDefaultTelemetrySettingsStore(),
@@ -79,13 +83,6 @@ Future<void> main() async {
   // Flutter bar (white, Windows-style) so the chrome is identical on all
   // OSes instead of following each window manager's theme.
   await windowManager.ensureInitialized();
-  // OS notifications for dictation failures: they must reach the user even
-  // while the app sits in the tray. Windows toasts require a Start Menu
-  // shortcut with the app's identity, which setup ensures.
-  await localNotifier.setup(
-    appName: appDisplayName,
-    shortcutPolicy: ShortcutPolicy.requireCreate,
-  );
   await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
   // The OS-visible window title (taskbar, alt-tab) derives from the same
   // constant as every in-app surface.

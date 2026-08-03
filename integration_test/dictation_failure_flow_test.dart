@@ -6,7 +6,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:typemate/src/app.dart';
 import 'package:typemate/src/core/dictation_controller.dart';
 import 'package:typemate/src/core/platform/mock_platform_bridge.dart';
-import 'package:typemate/src/core/stt/parakeet_server_stt_engine.dart';
+import 'package:typemate/src/core/stt/whisper_server_stt_engine.dart';
 
 import 'support/fakes.dart';
 
@@ -15,14 +15,14 @@ import 'support/fakes.dart';
 /// transcribing overlay. The app has to surface the failure (error overlay,
 /// no inserted text) and accept the very next dictation, which succeeds once
 /// the server answers again — all through the production engine, controller,
-/// state machine, and UI, over a real loopback websocket.
+/// state machine, and UI, over a real loopback HTTP server.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
     'a hung speech server surfaces an error and the next dictation recovers',
     (tester) async {
-      // Real websocket server; whether it answers is the test's dial.
+      // Real HTTP server; whether it answers is the test's dial.
       var serverAnswers = false;
       final speechServer = await HttpServer.bind(
         InternetAddress.loopbackIPv4,
@@ -30,18 +30,14 @@ void main() {
       );
       addTearDown(() async => speechServer.close(force: true));
       speechServer.listen((request) async {
-        if (!WebSocketTransformer.isUpgradeRequest(request)) {
-          request.response.statusCode = HttpStatus.badRequest;
+        // Drain the multipart upload either way; only answer when healthy.
+        await request.drain<void>();
+        if (serverAnswers) {
+          request.response.headers.contentType = ContentType.json;
+          request.response.write('{"text": "recovered after the outage"}');
           await request.response.close();
-          return;
         }
-        final socket = await WebSocketTransformer.upgrade(request);
-        socket.listen((message) {
-          if (serverAnswers) {
-            socket.add('{"text": "recovered after the outage"}');
-          }
-          // else: swallow the audio and never reply — the hang under test.
-        });
+        // else: swallow the audio and never reply — the hang under test.
       });
 
       final dataDirectory = Directory.systemTemp.createTempSync(
@@ -54,18 +50,18 @@ void main() {
       final recorderFactory = WavWritingAudioRecorderFactory(
         outputDirectory: dataDirectory,
       );
-      // The production English engine, adopting the test server on its port.
-      // Short timeouts keep the test fast; the production defaults differ
-      // only in duration.
-      final sttEngine = ParakeetServerSttEngine(
+      // The production resident-server engine, adopting the test server on
+      // its port. Short timeouts keep the test fast; the production
+      // defaults differ only in duration.
+      final sttEngine = WhisperServerSttEngine(
         serverExecutable: 'unused: the server is already reachable',
-        encoderPath: 'unused',
-        decoderPath: 'unused',
-        joinerPath: 'unused',
-        tokensPath: 'unused',
+        modelPath: 'unused',
+        vadModelPath: 'unused',
+        cliLanguage: 'en',
         port: speechServer.port,
         responseTimeout: const Duration(seconds: 2),
-        socketCloseTimeout: const Duration(seconds: 1),
+        bodyReadTimeout: const Duration(seconds: 1),
+        modelFileExists: (_) => true,
       );
 
       await tester.pumpWidget(
@@ -97,12 +93,11 @@ void main() {
       // The failure reason is visible in-app: the failed history entry
       // (every platform) and, on mobile, the mic tile's status line too.
       expect(find.textContaining('Transcription took too long'), findsWidgets);
-      // ...and the OS notification (read outside the app, persists in the
-      // tray) is the one place that points back at History.
+      // ...and the failure toast (shown at the overlay position, visible
+      // outside the app) carries the same reason.
       expect(
-        bridge.lastFailureNotification,
-        '${DictationController.transcriptionTimeoutMessage}'
-        '${DictationController.retryFromHistoryHint}',
+        bridge.lastFailureOverlayMessage,
+        DictationController.transcriptionTimeoutMessage,
       );
       // The failed dictation kept its recording and offers a retry.
       final retryButton = find.byKey(const Key('history-retry-button'));
@@ -180,7 +175,7 @@ void main() {
       expect(sttEngine.transcribeCalls, 2);
       expect(bridge.lastInsertedText, 'typed despite history');
       expect(bridge.overlayVisible, isFalse);
-      expect(bridge.lastFailureNotification, isEmpty);
+      expect(bridge.lastFailureOverlayMessage, isEmpty);
     },
   );
 }

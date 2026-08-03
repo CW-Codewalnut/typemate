@@ -10,7 +10,7 @@ class TypeMateOverlay {
   TypeMateOverlay();
   ~TypeMateOverlay();
 
-  void Show(const std::wstring& state);
+  void Show(const std::wstring& state, const std::wstring& message = L"");
   void Hide();
 
  private:
@@ -20,9 +20,16 @@ class TypeMateOverlay {
   void RegisterWindowClass();
   void EnsureWindow();
   void Paint(HDC hdc);
+  void MeasureErrorMessage();
+  bool IsError() const { return state_ == L"error"; }
+  int Width() const;
+  int Height() const;
 
   HWND hwnd_ = nullptr;
   std::wstring state_ = L"listening";
+  std::wstring message_;
+  int error_text_width_ = 0;
+  int error_text_height_ = 0;
   int tick_ = 0;
 };
 

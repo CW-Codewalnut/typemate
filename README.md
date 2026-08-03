@@ -113,7 +113,7 @@ flutter test
 flutter run -d windows
 ```
 
-The Windows build auto-fetches all speech runtimes (models, whisper.cpp, sherpa-onnx) via `tool/fetch_whisper_runtime.dart`, so a fresh clone builds without manual setup.
+The Windows build auto-fetches all speech runtimes (models, whisper.cpp) via `tool/fetch_whisper_runtime.dart`, so a fresh clone builds without manual setup; sherpa-onnx runs in-process through the Flutter plugin. Release installers ship without the large models — the app downloads the selected language's model on first use.
 
 Install local git hooks once per clone:
 

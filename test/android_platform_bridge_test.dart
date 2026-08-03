@@ -16,13 +16,13 @@ void main() {
     expect(await bridge.isGlobalShortcutAvailable(), isFalse);
   });
 
-  test('overlay, notification, and startup calls are safe no-ops', () async {
+  test('overlay, failure toast, and startup calls are safe no-ops', () async {
     final bridge = AndroidPlatformBridge();
 
     await bridge.showListeningOverlay();
     await bridge.showTranscribingOverlay();
     await bridge.hideListeningOverlay();
-    await bridge.showDictationFailureNotification('failed');
+    await bridge.showDictationFailureOverlay('failed');
     await bridge.ensureLaunchAtStartup();
   });
 }

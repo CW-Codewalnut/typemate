@@ -28,12 +28,18 @@ void main() {
       );
 
       expect(await sttEngine.isReady(), isTrue);
-      expect(find.text('Speech history'), findsOneWidget);
+      // Tab label and page title: the same Dictate page as mobile.
+      expect(find.text('Dictate'), findsWidgets);
+      // Under the tile: a quiet plain-text reminder of the shortcut, with
+      // the configured combo — not a second card.
       expect(
-        find.text('Press and hold Ctrl+Win and start speaking.'),
+        find.text(
+          'You can also press and hold Ctrl+Win in any app to dictate there.',
+        ),
         findsOneWidget,
       );
-      expect(find.text('Ready. Hold the shortcut and speak.'), findsNothing);
+      // The mic tile shows the ready state once the engine is warm.
+      expect(find.text('Ready. Hold the shortcut and speak.'), findsOneWidget);
     },
   );
 
@@ -96,17 +102,20 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 250));
 
-    // The hotkey does nothing while the engine loads; the page says so
-    // instead of showing a dictation instruction that will not work.
-    expect(find.textContaining('Starting the speech engine'), findsOneWidget);
-    expect(find.textContaining('Press and hold'), findsNothing);
+    // The hotkey does nothing while the engine loads; the mic tile says so
+    // instead of showing a ready state that will not work.
+    expect(
+      find.textContaining('Preparing local speech engine'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Ready. Hold the shortcut'), findsNothing);
 
     engine.completePrepare();
     await tester.pump();
     await tester.pump();
 
-    expect(find.textContaining('Starting the speech engine'), findsNothing);
-    expect(find.textContaining('Press and hold'), findsOneWidget);
+    expect(find.textContaining('Preparing local speech engine'), findsNothing);
+    expect(find.textContaining('Ready. Hold the shortcut'), findsOneWidget);
   });
 
   testWidgets(
@@ -218,9 +227,16 @@ void main() {
     await tester.tap(retryButtons.first);
     await tester.pump();
 
-    // The tapped retry shows progress; every other retry is disabled
-    // because only one transcription can run at a time.
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    // The tapped retry shows progress (the mic tile spins too — the
+    // controller is transcribing); every other retry is disabled because
+    // only one transcription can run at a time.
+    expect(
+      find.descendant(
+        of: retryButtons,
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsOneWidget,
+    );
     final innerButtons = find.descendant(
       of: retryButtons,
       matching: find.byWidgetPredicate((widget) => widget is TextButton),
@@ -529,7 +545,9 @@ void main() {
     await tester.pumpHome();
     await tester.pump();
 
-    final titleTop = tester.getTopLeft(find.text('Speech history')).dy;
+    // 'Dictate' appears as both the rail label and the page title; the
+    // page title is the last one in the tree.
+    final titleTop = tester.getTopLeft(find.text('Dictate').last).dy;
 
     expect(titleTop, lessThan(80));
   });

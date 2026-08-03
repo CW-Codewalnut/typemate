@@ -31,15 +31,14 @@ import 'core/platform/platform_bridge.dart';
 import 'core/platform/windows/windows_platform_bridge.dart';
 import 'core/platform/windows/windows_polling_hold_shortcut_registrar.dart';
 import 'core/stt/android_speech_runtime.dart';
-import 'core/stt/language_routing_stt_engine.dart';
-import 'core/stt/parakeet_server_stt_engine.dart';
+import 'core/stt/desktop_speech_runtime.dart';
 import 'core/stt/stt_engine.dart';
 import 'core/stt/stt_model_provisioner.dart';
-import 'core/stt/whisper_cli_stt_engine.dart';
-import 'core/stt/whisper_server_stt_engine.dart';
 import 'features/home/home_screen.dart';
 import 'models/app_identity.dart';
 import 'theme/app_theme.dart';
+
+export 'core/stt/desktop_speech_runtime.dart';
 
 class TypeMateApp extends StatefulWidget {
   const TypeMateApp({
@@ -82,7 +81,7 @@ class TypeMateApp extends StatefulWidget {
 
   /// Overrides the speech model download state; tests pair it with a mock
   /// [sttEngine].
-  final SttModelProvisioner? modelProvisioner;
+  final SpeechModelProvisioner? modelProvisioner;
 
   @override
   State<TypeMateApp> createState() => _TypeMateAppState();
@@ -98,7 +97,7 @@ class _TypeMateAppState extends State<TypeMateApp> {
   late final SttEngine _sttEngine;
   late final DiagnosticReporter _diagnostics;
   late final bool _useMobileShell;
-  SttModelProvisioner? _modelProvisioner;
+  SpeechModelProvisioner? _modelProvisioner;
   FloatingMicController? _floatingMicController;
   late String _lastPreparedLanguageCode;
   AudioDenoiser? _audioDenoiser;
@@ -165,10 +164,17 @@ class _TypeMateAppState extends State<TypeMateApp> {
       _sttEngine = speechRuntime.engine;
       _modelProvisioner = speechRuntime.provisioner;
     } else {
-      _sttEngine = createDefaultSttEngine(
+      // Desktop: in-process Parakeet plus per-language whisper servers.
+      // Models the install did not bundle download on demand into the
+      // per-user data directory.
+      final runtime = createDesktopSpeechRuntime(
+        dataDirectoryPath:
+            (widget.dataDirectory ?? _typeMateDataDirectory()).path,
         languageCodeProvider: () => speechSettingsController.languageCode,
         diagnostics: _diagnostics,
       );
+      _sttEngine = runtime.engine;
+      _modelProvisioner = runtime.provisioner;
     }
     if (platformBridge case final QuitRequestSource quitSource) {
       quitSource.onQuitRequested = _shutDownAndExit;
@@ -180,6 +186,16 @@ class _TypeMateAppState extends State<TypeMateApp> {
       readyStatusMessage: _useMobileShell
           ? 'Ready. Hold the mic button and speak.'
           : DictationController.defaultReadyStatusMessage,
+      // A dictation cannot succeed before the selected language's model is
+      // downloaded; refuse the attempt (hotkey or mic tile) with the
+      // reason instead of recording into a guaranteed failure.
+      dictationBlocker: () {
+        final provisioner = _modelProvisioner;
+        if (provisioner != null && !provisioner.isReady) {
+          return 'Download the speech model in the TypeMate window first.';
+        }
+        return null;
+      },
       onTranscriptGenerated: historyController.addTranscript,
       onTranscriptionFailed: historyController.addFailure,
       audioRecorderProvider: () {
@@ -230,12 +246,26 @@ class _TypeMateAppState extends State<TypeMateApp> {
       return;
     }
     _lastPreparedLanguageCode = speechSettingsController.languageCode;
-    unawaited(
-      _sttEngine.prepare().catchError((_) {
-        // Preloading is best-effort; a failure surfaces on the next
-        // dictation with a proper error state.
-      }),
-    );
+    unawaited(_prepareForSelectedLanguage());
+  }
+
+  /// Warms the newly selected language's engine — unless its model is not
+  /// downloaded yet, in which case the dictation surface offers the
+  /// download and preparation happens once it completes.
+  Future<void> _prepareForSelectedLanguage() async {
+    final provisioner = _modelProvisioner;
+    if (provisioner != null) {
+      await provisioner.refresh();
+      if (!provisioner.isReady) {
+        return;
+      }
+    }
+    try {
+      await _sttEngine.prepare();
+    } catch (_) {
+      // Preloading is best-effort; a failure surfaces on the next
+      // dictation with a proper error state.
+    }
   }
 
   /// Answers the tray's Quit request: stop the resident speech server, then
@@ -517,186 +547,15 @@ Directory _typeMateDataDirectory({Map<String, String>? environment}) {
   return Directory('build/settings/TypeMate');
 }
 
-typedef PathExists = bool Function(String path);
-
-/// Appends the Windows executable suffix; Linux binaries have none.
-String platformExecutablePath(String path, {bool? isWindows}) =>
-    (isWindows ?? Platform.isWindows) ? '$path.exe' : path;
-
-final bundledWhisperCliRelativePath = platformExecutablePath(
-  'bin/whisper/whisper-cli',
-);
-final bundledWhisperServerRelativePath = platformExecutablePath(
-  'bin/whisper/whisper-server',
-);
-const hindiServerPort = 43008;
-const hinglishServerPort = 43009;
-const _hindiDevanagariPrompt =
-    'हिंदी भाषण को देवनागरी लिपि में ठीक-ठीक लिखें। '
-    'अंग्रेज़ी में अनुवाद न करें।';
-
-/// A language served by its own resident whisper.cpp HTTP server. Only the
-/// selected language's server is kept loaded (RAM policy). Ports are fixed
-/// per language so an orphaned server from an unclean exit is adopted
-/// rather than duplicated.
-class WhisperServerLanguage {
-  const WhisperServerLanguage({
-    required this.code,
-    required this.modelRelativePath,
-    required this.port,
-    this.cliLanguage,
-    this.prompt,
-  });
-
-  final String code;
-  final String modelRelativePath;
-  final int port;
-
-  /// Whisper's language flag when it differs from [code] (e.g. Hinglish
-  /// decodes as Hindi and romanizes on its own).
-  final String? cliLanguage;
-  final String? prompt;
-}
-
-const whisperServerLanguages = [
-  // Vaani small fine-tune, noise-robust Devanagari output.
-  WhisperServerLanguage(
-    code: 'hi',
-    modelRelativePath: 'models/ggml-small-vaani-hindi-q6.bin',
-    port: hindiServerPort,
-    prompt: _hindiDevanagariPrompt,
-  ),
-  // Oriserve Swift fine-tune, base-sized, romanized output; a script
-  // prompt would fight it.
-  WhisperServerLanguage(
-    code: 'hinglish',
-    modelRelativePath: 'models/ggml-hindi2hinglish-swift.bin',
-    port: hinglishServerPort,
-    cliLanguage: 'hi',
-  ),
-  // Vistaar (AI4Bharat) per-language fine-tunes, small-sized, quantized to
-  // q5_0 by this repo (hosted on the models-v1 GitHub release).
-  WhisperServerLanguage(
-    code: 'ta',
-    modelRelativePath: 'models/ggml-vistaar-tamil-small-q5_0.bin',
-    port: 43011,
-  ),
-  // Telugu, Kannada, and Gujarati are intentionally absent: their Vistaar
-  // checkpoints decode non-deterministically (thin logit margins flip
-  // tokens into hallucinations run-to-run, at any quantization level and
-  // even fp16), failing the "visible languages must work" bar. Marathi
-  // validated cleanly but was cut for install size: its only checkpoint is
-  // medium-sized (~514 MB, kept at R:/Models/whisper and on the models-v1
-  // release for an easy re-add).
-];
-// Silero VAD trims hold-to-talk silence before decoding; without it whisper
-// loops and repeats sentences while decoding the silent tail.
-const bundledVadModelRelativePath = 'models/ggml-silero-v5.1.2.bin';
-// English runs on a resident sherpa-onnx server with NVIDIA Parakeet TDT
-// 0.6B v3: the model loads once at app start, then each utterance decodes
-// in about a second with the best accuracy of every model benchmarked.
-final bundledSherpaServerRelativePath = platformExecutablePath(
-  'bin/sherpa/sherpa-onnx-offline-websocket-server',
-);
-const bundledParakeetDirRelativePath = 'models/parakeet-tdt-0.6b-v3-int8';
-// Optional noise suppression: the sherpa-onnx offline denoiser (from the
-// same archive as the websocket server) running the GTCRN
-// speech-enhancement model, applied per recording when the Settings toggle
-// is on.
-final bundledDenoiserRelativePath = platformExecutablePath(
-  'bin/sherpa/sherpa-onnx-offline-denoiser',
-);
+// Optional noise suppression: the GTCRN speech-enhancement model, run
+// in-process through the sherpa_onnx plugin per recording when the
+// Settings toggle is on.
 const bundledGtcrnModelRelativePath = 'models/gtcrn_simple.onnx';
-// The 25 languages Parakeet TDT 0.6B v3 transcribes, with automatic
-// language detection — every one routes to the same resident server.
-const parakeetLanguageCodes = [
-  'en', 'bg', 'hr', 'cs', 'da', 'nl', 'et', 'fi', 'fr', 'de', 'el', 'hu', //
-  'it', 'lv', 'lt', 'mt', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'es', 'sv',
-  'uk',
-];
 
-/// Creates the production STT engine backed by the runtimes that ship with
-/// the app. Every file is required: a missing binary or model is an
-/// installation defect and throws instead of degrading silently.
-SttEngine createDefaultSttEngine({
-  Map<String, String>? environment,
-  PathExists? pathExists,
-  SttLanguageCodeProvider? languageCodeProvider,
-  DiagnosticReporter? diagnostics,
-  String? currentDirectoryPath,
-  String? executableDirectoryPath,
-}) {
-  final values = environment ?? Platform.environment;
-  final exists = pathExists ?? (path) => File(path).existsSync();
-  final searchDirectories = [
-    currentDirectoryPath ?? Directory.current.path,
-    executableDirectoryPath ?? File(Platform.resolvedExecutable).parent.path,
-  ];
-
-  String resolve(String relativePath, {String? environmentValue}) =>
-      _resolveRuntimeFile(
-        environmentValue: environmentValue,
-        relativePath: relativePath,
-        searchDirectories: searchDirectories,
-        exists: exists,
-      );
-
-  final whisperCli = resolve(
-    bundledWhisperCliRelativePath,
-    environmentValue: values['TYPEMATE_WHISPER_CLI'],
-  );
-
-  // An explicit model override applies to every language and bypasses the
-  // Parakeet server entirely (power-user escape hatch).
-  final envModelPath = values['TYPEMATE_WHISPER_MODEL']?.trim() ?? '';
-  if (envModelPath.isNotEmpty) {
-    return WhisperCliSttEngine(
-      executable: whisperCli,
-      modelPath: envModelPath,
-      vadModelPath: resolve(bundledVadModelRelativePath),
-      languageCodeProvider: languageCodeProvider,
-    );
-  }
-
-  final whisperServer = resolve(bundledWhisperServerRelativePath);
-  final vadModel = resolve(bundledVadModelRelativePath);
-
-  final whisperEnginesByCode = {
-    for (final language in whisperServerLanguages)
-      language.code: WhisperServerSttEngine(
-        serverExecutable: whisperServer,
-        modelPath: resolve(language.modelRelativePath),
-        vadModelPath: vadModel,
-        cliLanguage: language.cliLanguage ?? language.code,
-        prompt: language.prompt,
-        port: language.port,
-        diagnostics: diagnostics,
-      ),
-  };
-
-  final parakeet = ParakeetServerSttEngine(
-    serverExecutable: resolve(bundledSherpaServerRelativePath),
-    encoderPath: resolve('$bundledParakeetDirRelativePath/encoder.int8.onnx'),
-    decoderPath: resolve('$bundledParakeetDirRelativePath/decoder.int8.onnx'),
-    joinerPath: resolve('$bundledParakeetDirRelativePath/joiner.int8.onnx'),
-    tokensPath: resolve('$bundledParakeetDirRelativePath/tokens.txt'),
-    diagnostics: diagnostics,
-  );
-
-  return LanguageRoutingSttEngine(
-    routes: {
-      for (final code in parakeetLanguageCodes) code: parakeet,
-      ...whisperEnginesByCode,
-    },
-    fallback: whisperEnginesByCode['hi']!,
-    languageCodeProvider: languageCodeProvider ?? (() => 'en'),
-  );
-}
-
-/// Creates the noise-suppression step, or null when its runtime is not
+/// Creates the noise-suppression step, or null when its model is not
 /// present. Unlike the speech runtimes this never throws: noise
 /// suppression is an enhancement, and dictation must keep working on the
-/// raw recording when the optional denoiser is missing.
+/// raw recording when the optional GTCRN model is missing.
 AudioDenoiser? createDefaultAudioDenoiser({
   Map<String, String>? environment,
   PathExists? pathExists,
@@ -724,22 +583,18 @@ AudioDenoiser? createDefaultAudioDenoiser({
     return null;
   }
 
-  final executable = resolveOptional(
-    bundledDenoiserRelativePath,
-    values['TYPEMATE_DENOISER'],
-  );
   final modelPath = resolveOptional(
     bundledGtcrnModelRelativePath,
     values['TYPEMATE_DENOISER_MODEL'],
   );
-  if (executable == null || modelPath == null) {
+  if (modelPath == null) {
     debugPrint(
-      'TypeMate: noise suppression runtime is missing; recordings are '
+      'TypeMate: noise suppression model is missing; recordings are '
       'transcribed as captured. Run: dart run tool/fetch_whisper_runtime.dart',
     );
     return null;
   }
-  return SherpaGtcrnAudioDenoiser(executable: executable, modelPath: modelPath);
+  return SherpaGtcrnAudioDenoiser(modelPath: modelPath);
 }
 
 /// Resolves a helper tool: env override, then the copy bundled next to the
@@ -817,32 +672,4 @@ String resolveFfmpegExecutable({
   }
   final libraryDirectory = executable.substring(0, executable.lastIndexOf('/'));
   return (executable: executable, libraryDirectory: libraryDirectory);
-}
-
-String _resolveRuntimeFile({
-  required String? environmentValue,
-  required String relativePath,
-  required List<String> searchDirectories,
-  required PathExists exists,
-}) {
-  final override = environmentValue?.trim() ?? '';
-  if (override.isNotEmpty) {
-    return override;
-  }
-
-  final candidates = [
-    for (final directory in searchDirectories)
-      '${directory.replaceAll('\\', '/')}/$relativePath',
-  ];
-  for (final candidate in candidates) {
-    if (exists(candidate)) {
-      return candidate;
-    }
-  }
-
-  throw SttRuntimeException(
-    'TypeMate installation is broken: $relativePath was not found. '
-    'Searched: ${candidates.join(', ')}. '
-    'Reinstall the app or run: dart run tool/fetch_whisper_runtime.dart',
-  );
 }

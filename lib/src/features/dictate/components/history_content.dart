@@ -15,6 +15,7 @@ class HistoryContent extends StatelessWidget {
     this.dictationController,
     this.shortcutController,
     this.dictationSurface,
+    this.mobileSurface = false,
     this.title = 'Speech history',
   });
 
@@ -23,9 +24,15 @@ class HistoryContent extends StatelessWidget {
   final HoldShortcutController? shortcutController;
 
   /// Replaces the shortcut instruction card. Mobile puts its hold-to-talk
-  /// mic (and the first-run model download) in this slot, so both
-  /// platforms share one page: how-to-dictate on top, history below.
+  /// mic in this slot; desktop puts its model-download-aware instruction
+  /// card there. Both platforms share one page: how-to-dictate on top,
+  /// history below.
   final Widget? dictationSurface;
+
+  /// Whether [dictationSurface] is the mobile hold-to-talk mic, which
+  /// words the empty-history hint around the mic instead of the desktop
+  /// shortcut.
+  final bool mobileSurface;
 
   /// Mobile titles the page after its tab ("Dictate").
   final String title;
@@ -53,7 +60,7 @@ class HistoryContent extends StatelessWidget {
           )
         else
           ShortcutInstructionCard(
-            instruction: _shortcutInstruction(shortcutController),
+            instruction: shortcutInstruction(shortcutController),
           ),
         if (historyController.entries.isNotEmpty) ...[
           const SizedBox(height: 34),
@@ -65,11 +72,14 @@ class HistoryContent extends StatelessWidget {
           const Center(child: CircularProgressIndicator())
         else if (historyController.entries.isEmpty)
           EmptyHistoryCard(
-            hint: dictationSurface == null
-                ? 'Hold the shortcut, speak, and your generated text will '
-                      'appear here.'
-                : 'Hold the mic above or the floating mic in any app, and '
-                      'your dictations will appear here.',
+            hint: mobileSurface
+                ? 'Hold the mic above or the floating mic in any app, and '
+                      'your dictations will appear here.'
+                : dictationSurface != null
+                ? 'Hold the mic above or the shortcut in any app, and '
+                      'your generated text will appear here.'
+                : 'Hold the shortcut, speak, and your generated text will '
+                      'appear here.',
           )
         else
           for (final entry in historyController.entries)
@@ -149,7 +159,10 @@ class _TodayHeader extends StatelessWidget {
   }
 }
 
-String _shortcutInstruction(HoldShortcutController? shortcutController) {
+/// The hold-to-dictate how-to line, with the user's configured shortcut
+/// once known. Shared with the desktop dictation surface so both render
+/// the identical instruction.
+String shortcutInstruction(HoldShortcutController? shortcutController) {
   final shortcut = shortcutController?.shortcut;
   if (shortcut == null) {
     return 'Press and hold your shortcut and start speaking.';

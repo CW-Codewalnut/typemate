@@ -200,6 +200,35 @@ void main() {
       throwsA(isA<TimeoutException>()),
     );
   });
+
+  test(
+    'fails fast with a download hint when the model is not on disk',
+    () async {
+      // No modelFileExists stub: the real filesystem check runs against a
+      // path that does not exist (the slim-install case before download).
+      final engine = WhisperServerSttEngine(
+        serverExecutable: 'bin/whisper/whisper-server.exe',
+        modelPath: 'models/never-downloaded.bin',
+        vadModelPath: 'models/vad.bin',
+        cliLanguage: 'hi',
+        port: 43008,
+        processStarter: (_, _) async =>
+            throw StateError('must not spawn a doomed server'),
+        connectionProbe: (_) async => false,
+      );
+
+      await expectLater(
+        engine.prepare(),
+        throwsA(
+          isA<SttRuntimeException>().having(
+            (error) => error.message,
+            'message',
+            contains('not downloaded yet'),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 WhisperServerSttEngine buildEngine(
@@ -220,6 +249,9 @@ WhisperServerSttEngine buildEngine(
     processStarter: transport.startProcess,
     connectionProbe: transport.probe,
     inferenceClient: transport.infer,
+    // Fake paths never exist on disk; the missing-model fast-fail is
+    // covered by its own test with this check left real.
+    modelFileExists: (_) => true,
   );
 }
 

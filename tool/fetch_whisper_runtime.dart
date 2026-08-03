@@ -1,25 +1,24 @@
 import 'dart:io';
 
 /// Provisions the speech runtimes that ship with TypeMate:
-/// - models/parakeet-tdt-0.6b-v3-int8/ (English, resident sherpa server)
+/// - models/parakeet-tdt-0.6b-v3-int8/ (English, in-process engine)
 /// - models/ggml-small-vaani-hindi-q6.bin (Hindi, Vaani fine-tune)
 /// - models/ggml-hindi2hinglish-swift.bin (Hinglish, Oriserve Swift)
 /// - models/ggml-silero-v5.1.2.bin (VAD)
 /// - models/gtcrn_simple.onnx (optional noise suppression, GTCRN)
 /// - bin/whisper/ (whisper-cli and its DLLs, OpenBLAS build)
-/// - bin/sherpa/ (sherpa-onnx websocket server for the Parakeet model,
-///   plus the offline denoiser that runs the GTCRN model)
 ///
 /// All are gitignored because they exceed practical git limits, so a fresh
 /// clone runs this once. Release bundles copy both folders next to the
-/// executable.
+/// executable, then scripts/slim-speech-models.sh strips the large models
+/// (they download on first use per selected language); dev builds keep
+/// everything bundled so nothing downloads at runtime.
 ///
-/// Runtime revision 2026-07-28b — CI caches models/ and bin/ keyed on this
+/// Runtime revision 2026-07-31b — CI caches models/ and bin/ keyed on this
 /// file's hash, so bump this line whenever a hosted binary is replaced
-/// under the same asset name (this revision: the Linux overlay is now
-/// compiled from linux/overlay/typemate_overlay.c instead of fetched, so
-/// there is no hosted overlay binary to keep in sync — the source is the
-/// single source of truth).
+/// under the same asset name (this revision: bin/sherpa is gone entirely —
+/// English, and now the GTCRN denoiser too, run in-process via the
+/// sherpa_onnx plugin).
 
 class _ModelSpec {
   const _ModelSpec(this.fileName, this.url, this.expectedSizeBytes);
@@ -125,10 +124,6 @@ Future<void> main(List<String> arguments) async {
       }
     }
     await _fetchCli(client, force: force);
-    if (exitCode != 0) {
-      return;
-    }
-    await _fetchSherpaServer(client, force: force);
     if (exitCode != 0) {
       return;
     }
@@ -288,78 +283,6 @@ Future<void> _compileLinuxOverlay({required bool force}) async {
     if (inCi) {
       exitCode = 1;
     }
-  }
-}
-
-final _sherpaArchiveName = _isWindows
-    ? 'sherpa-onnx-v1.13.4-win-x64-static-MD-MinSizeRel-no-tts'
-    : _isMacOS
-    ? 'sherpa-onnx-v1.13.4-osx-universal2-static-no-tts'
-    : 'sherpa-onnx-v1.13.4-linux-x64-static-no-tts';
-final _sherpaArchiveUrl =
-    'https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.4/'
-    '$_sherpaArchiveName.tar.bz2';
-// The websocket server keeps Parakeet resident; the offline denoiser runs
-// the GTCRN model for the optional noise-suppression toggle. Both come out
-// of the same archive.
-final _sherpaBinaryFileNames = _isWindows
-    ? const [
-        'sherpa-onnx-offline-websocket-server.exe',
-        'sherpa-onnx-offline-denoiser.exe',
-      ]
-    : const [
-        'sherpa-onnx-offline-websocket-server',
-        'sherpa-onnx-offline-denoiser',
-      ];
-
-Future<void> _fetchSherpaServer(
-  HttpClient client, {
-  required bool force,
-}) async {
-  final targetDirectory = Directory('bin/sherpa');
-  final missing = _sherpaBinaryFileNames
-      .where((name) => !File('${targetDirectory.path}/$name').existsSync())
-      .toList();
-  if (!force && missing.isEmpty) {
-    stdout.writeln('sherpa_ready=${targetDirectory.absolute.path}');
-    return;
-  }
-
-  stdout.writeln('downloading=$_sherpaArchiveUrl');
-  final stagingDirectory = await Directory.systemTemp.createTemp(
-    'typemate-sherpa',
-  );
-  try {
-    final archive = File('${stagingDirectory.path}/sherpa.tar.bz2');
-    if (!await _download(client, _sherpaArchiveUrl, archive)) {
-      exitCode = 1;
-      return;
-    }
-
-    final extract = await Process.run('tar', [
-      '-xf',
-      archive.path,
-      '-C',
-      stagingDirectory.path,
-      for (final name in _sherpaBinaryFileNames)
-        '$_sherpaArchiveName/bin/$name',
-    ]);
-    if (extract.exitCode != 0) {
-      stderr.writeln('sherpa_extract_failed=${extract.stderr}');
-      exitCode = 1;
-      return;
-    }
-
-    await targetDirectory.create(recursive: true);
-    for (final name in _sherpaBinaryFileNames) {
-      final installed = await File(
-        '${stagingDirectory.path}/$_sherpaArchiveName/bin/$name',
-      ).copy('${targetDirectory.path}/$name');
-      await _markExecutable(installed);
-    }
-    stdout.writeln('sherpa_ready=${targetDirectory.absolute.path}');
-  } finally {
-    await stagingDirectory.delete(recursive: true);
   }
 }
 

@@ -3,30 +3,19 @@ import 'package:typemate/src/app.dart';
 import 'package:typemate/src/core/audio/audio_denoiser.dart';
 
 void main() {
-  // The bundled binary name depends on the host OS the suite runs on
-  // (.exe suffix on Windows, none on Linux), matching production behavior.
-  final denoiserBinary = bundledDenoiserRelativePath.split('/').last;
+  test('resolves the bundled GTCRN model from the current directory', () {
+    final denoiser =
+        createDefaultAudioDenoiser(
+              environment: const {},
+              pathExists: (_) => true,
+              currentDirectoryPath: 'C:/apps/typemate',
+              executableDirectoryPath: 'C:/apps/typemate/build/runner',
+            )
+            as SherpaGtcrnAudioDenoiser?;
 
-  test(
-    'resolves the bundled denoiser and model from the current directory',
-    () {
-      final denoiser =
-          createDefaultAudioDenoiser(
-                environment: const {},
-                pathExists: (_) => true,
-                currentDirectoryPath: 'C:/apps/typemate',
-                executableDirectoryPath: 'C:/apps/typemate/build/runner',
-              )
-              as SherpaGtcrnAudioDenoiser?;
-
-      expect(denoiser, isNotNull);
-      expect(
-        denoiser!.executable,
-        'C:/apps/typemate/bin/sherpa/$denoiserBinary',
-      );
-      expect(denoiser.modelPath, 'C:/apps/typemate/models/gtcrn_simple.onnx');
-    },
-  );
+    expect(denoiser, isNotNull);
+    expect(denoiser!.modelPath, 'C:/apps/typemate/models/gtcrn_simple.onnx');
+  });
 
   test('falls back to the executable directory', () {
     const executableDirectory = 'C:/apps/typemate/build/runner';
@@ -41,17 +30,15 @@ void main() {
 
     expect(denoiser, isNotNull);
     expect(
-      denoiser!.executable,
-      '$executableDirectory/bin/sherpa/$denoiserBinary',
+      denoiser!.modelPath,
+      '$executableDirectory/models/gtcrn_simple.onnx',
     );
-    expect(denoiser.modelPath, '$executableDirectory/models/gtcrn_simple.onnx');
   });
 
-  test('environment overrides win over bundled paths', () {
+  test('environment override wins over the bundled model path', () {
     final denoiser =
         createDefaultAudioDenoiser(
               environment: const {
-                'TYPEMATE_DENOISER': 'D:/tools/denoiser.exe',
                 'TYPEMATE_DENOISER_MODEL': 'D:/models/gtcrn.onnx',
               },
               pathExists: (_) => false,
@@ -61,11 +48,10 @@ void main() {
             as SherpaGtcrnAudioDenoiser?;
 
     expect(denoiser, isNotNull);
-    expect(denoiser!.executable, 'D:/tools/denoiser.exe');
-    expect(denoiser.modelPath, 'D:/models/gtcrn.onnx');
+    expect(denoiser!.modelPath, 'D:/models/gtcrn.onnx');
   });
 
-  test('returns null instead of throwing when the runtime is missing', () {
+  test('returns null instead of throwing when the model is missing', () {
     final denoiser = createDefaultAudioDenoiser(
       environment: const {},
       pathExists: (_) => false,

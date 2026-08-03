@@ -191,7 +191,7 @@
   <g font-size="12.5" fill="#1F2230">
     <rect x="678" y="238" width="232" height="132" rx="8" fill="#FFFFFF" stroke="#E0E2EE"/>
     <use href="#i-bolt" x="690" y="247"/>
-    <text x="716" y="262" font-weight="600">sherpa-onnx server</text>
+    <text x="716" y="262" font-weight="600">sherpa-onnx engine</text>
     <text x="690" y="287" fill="#5A5F73">NVIDIA Parakeet TDT 0.6B v3</text>
     <text x="690" y="305" fill="#5A5F73">English + 24 European</text>
     <text x="690" y="323" fill="#5A5F73">languages, auto-detected</text>

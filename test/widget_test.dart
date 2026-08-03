@@ -19,7 +19,7 @@ void main() {
 
     // The native OS splash covers startup; the shell is the first Flutter
     // frame, with no manufactured splash in between.
-    expect(find.text('Speech history'), findsOneWidget);
+    expect(find.text('Dictate'), findsWidgets);
 
     // Let the engine-prepare timer fire so none is left pending.
     await tester.pump(const Duration(milliseconds: 200));
@@ -53,11 +53,11 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 200));
 
-    expect(find.text('Speech history'), findsOneWidget);
+    expect(find.text('Dictate'), findsWidgets);
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Prepare local engine'), findsNothing);
 
-    final context = tester.element(find.text('Speech history'));
+    final context = tester.element(find.text('Dictate').last);
     expect(
       Theme.of(context).textTheme.bodyMedium?.fontFamilyFallback,
       contains('Nirmala UI'),
