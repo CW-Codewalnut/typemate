@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:background_downloader/background_downloader.dart';
 
+import '../audio/audio_denoiser.dart';
 import '../diagnostics/diagnostic_reporter.dart';
 import 'sherpa_parakeet_stt_engine.dart';
 import 'speech_model_catalog.dart';
@@ -17,10 +18,15 @@ const speechModelDownloadNotification = TaskNotification(
   '{progress}',
 );
 
-/// The Android speech stack: the on-device Parakeet engine plus the
-/// first-run downloader for its model files. Both point at the same
-/// directory under the app's private data directory.
-({SherpaParakeetSttEngine engine, SttModelProvisioner provisioner})
+/// The Android speech stack: the on-device Parakeet engine, the first-run
+/// downloader for its model files (plus the tiny GTCRN noise-suppression
+/// model), and the in-process denoiser behind the Settings toggle. All
+/// point at the same directory under the app's private data directory.
+({
+  SherpaParakeetSttEngine engine,
+  SttModelProvisioner provisioner,
+  AudioDenoiser denoiser,
+})
 createAndroidSpeechRuntime({
   required Directory dataDirectory,
   DiagnosticReporter? diagnostics,
@@ -35,7 +41,10 @@ createAndroidSpeechRuntime({
     ),
     provisioner: SttModelProvisioner(
       modelDirectory: modelDirectory,
-      files: parakeetModelFiles,
+      files: [...parakeetModelFiles, gtcrnModelFile],
+    ),
+    denoiser: SherpaGtcrnAudioDenoiser(
+      modelPath: '${modelDirectory.path}/${gtcrnModelFile.relativePath}',
     ),
   );
 }

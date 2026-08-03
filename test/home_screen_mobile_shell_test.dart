@@ -38,7 +38,6 @@ void main() {
           languageOptions: mobile
               ? androidSpeechLanguageOptions
               : speechLanguageOptions,
-          showNoiseSuppression: !mobile,
         ),
       ),
     );
@@ -98,7 +97,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.byType(ShortcutSettingsPanel), findsNothing);
-    expect(find.byType(NoiseSuppressionPanel), findsNothing);
+    // Noise suppression runs in-process on every platform now.
+    expect(find.byType(NoiseSuppressionPanel), findsOneWidget);
     expect(find.byKey(const Key('quit-typemate')), findsNothing);
   });
 }

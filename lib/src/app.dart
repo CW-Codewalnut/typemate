@@ -163,6 +163,9 @@ class _TypeMateAppState extends State<TypeMateApp> {
       );
       _sttEngine = speechRuntime.engine;
       _modelProvisioner = speechRuntime.provisioner;
+      // In-process GTCRN denoiser, same as desktop; its tiny model rides
+      // the first-run download.
+      _audioDenoiser = speechRuntime.denoiser;
     } else {
       // Desktop: in-process Parakeet plus per-language whisper servers.
       // Models the install did not bundle download on demand into the
@@ -333,7 +336,8 @@ class _TypeMateAppState extends State<TypeMateApp> {
               languageOptions: _useMobileShell
                   ? androidSpeechLanguageOptions
                   : speechLanguageOptions,
-              showNoiseSuppression: !_useMobileShell,
+              // Noise suppression runs in-process on every platform now.
+              showNoiseSuppression: true,
             ),
           ),
         ],
