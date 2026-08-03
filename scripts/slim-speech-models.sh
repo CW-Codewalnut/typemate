@@ -6,16 +6,19 @@
 # always-needed files stay bundled: Silero VAD, the GTCRN denoiser model,
 # and the whisper binaries.
 #
-# Also drops the retired bin/sherpa executables if a cached runtime still
-# carries them: English and the GTCRN denoiser now run in-process through
-# the sherpa_onnx plugin.
+# Also drops the retired bin/sherpa and bin/whisper executables if a
+# cached runtime still carries them: every speech engine (Parakeet, the
+# whisper fine-tunes, the GTCRN denoiser) runs in-process through plugins
+# now. Linux keeps bin/ffmpeg, bin/xdotool, and bin/overlay — capture and
+# typing tools, not speech engines.
 set -euo pipefail
 
 BUNDLE_DIR="${1:?usage: slim-speech-models.sh <bundle-dir>}"
 test -d "$BUNDLE_DIR" || { echo "not a directory: $BUNDLE_DIR" >&2; exit 1; }
 
 rm -rf "$BUNDLE_DIR/models/parakeet-tdt-0.6b-v3-int8" \
-       "$BUNDLE_DIR/bin/sherpa"
+       "$BUNDLE_DIR/bin/sherpa" \
+       "$BUNDLE_DIR/bin/whisper"
 rm -f "$BUNDLE_DIR/models/ggml-small-vaani-hindi-q6.bin" \
       "$BUNDLE_DIR/models/ggml-hindi2hinglish-swift.bin" \
       "$BUNDLE_DIR/models/ggml-vistaar-tamil-small-q5_0.bin"

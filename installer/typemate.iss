@@ -37,12 +37,12 @@ Source: "..\build\package\typemate-windows-x64\*"; DestDir: "{app}"; \
   Flags: recursesubdirs ignoreversion
 
 [InstallDelete]
-; Retired in 1.4.x: English and the GTCRN denoiser run in-process now
-; (sherpa_onnx plugin); the whole bin\sherpa folder is dead weight from
-; older installs. The large model files from fat installs are
-; deliberately KEPT on upgrade — they keep working offline and spare the
-; user a re-download.
-Type: filesandordirs; Name: "{app}\bin\sherpa"
+; Retired in 1.4.x: every speech engine (Parakeet, the whisper
+; fine-tunes, the GTCRN denoiser) runs in-process now; the whole bin
+; folder is dead weight from older installs on Windows. The large model
+; files from fat installs are deliberately KEPT on upgrade — they keep
+; working offline and spare the user a re-download.
+Type: filesandordirs; Name: "{app}\bin"
 
 [Icons]
 Name: "{userprograms}\Type Mate"; Filename: "{app}\typemate.exe"

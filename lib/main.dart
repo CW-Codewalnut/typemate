@@ -170,8 +170,21 @@ Future<void> _runAndroidApp() async {
 Future<void> dictationServiceMain() async {
   WidgetsFlutterBinding.ensureInitialized();
   final dataDirectory = await getApplicationSupportDirectory();
-  final speechRuntime = createAndroidSpeechRuntime(
-    dataDirectory: dataDirectory,
+  // The floating mic follows the language selected in the app. The
+  // headless engine has no settings controller, so the persisted setting
+  // is re-read before every dictation (beforeDictation below).
+  final speechSettingsStore = createDefaultSpeechSettingsStore(
+    directory: dataDirectory,
+  );
+  var languageCode = 'en';
+  Future<void> refreshLanguage() async {
+    languageCode = (await speechSettingsStore.load()).languageCode;
+  }
+
+  await refreshLanguage();
+  final speechRuntime = createDesktopSpeechRuntime(
+    dataDirectoryPath: dataDirectory.path,
+    languageCodeProvider: () => languageCode,
   );
   // Unlike the app path, this must NOT route through the record plugin's
   // permission request: that needs a foreground Activity, and a headless
@@ -193,6 +206,7 @@ Future<void> dictationServiceMain() async {
       engine: speechRuntime.engine,
       recorderFactory: recorderFactory,
       provisioner: speechRuntime.provisioner,
+      beforeDictation: refreshLanguage,
       onTranscriptGenerated: (transcript, {required duration}) async {
         await historyController.load();
         await historyController.addTranscript(transcript, duration: duration);

@@ -38,6 +38,7 @@ class NativeDictationHandler {
     required this.engine,
     required this.recorderFactory,
     this.provisioner,
+    this.beforeDictation,
     this.onTranscriptGenerated,
   });
 
@@ -46,7 +47,12 @@ class NativeDictationHandler {
 
   /// Model presence gate; null means the engine needs no provisioning
   /// (tests).
-  final SttModelProvisioner? provisioner;
+  final SpeechModelProvisioner? provisioner;
+
+  /// Runs before each warm-up and dictation — the headless engine has no
+  /// settings controller, so this re-reads the persisted language
+  /// selection to keep the floating mic in sync with the app.
+  final Future<void> Function()? beforeDictation;
 
   /// Lands successful dictations in the app's history, so the floating
   /// mic feeds the same list (and Insights) as in-app dictation.
@@ -64,6 +70,7 @@ class NativeDictationHandler {
   /// dictation skips the cold load. Quietly does nothing when the model
   /// is not provisioned; that surfaces properly on the first hold.
   Future<void> warmUp() async {
+    await beforeDictation?.call();
     final provisioner = this.provisioner;
     if (provisioner != null && !provisioner.isReady) {
       await provisioner.refresh();
@@ -82,6 +89,7 @@ class NativeDictationHandler {
     if (_activeRecorder != null) {
       return;
     }
+    await beforeDictation?.call();
     final provisioner = this.provisioner;
     if (provisioner != null && !provisioner.isReady) {
       await provisioner.refresh();
