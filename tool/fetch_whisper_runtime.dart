@@ -13,19 +13,34 @@ import 'dart:io';
 /// (they download on first use per selected language); dev builds keep
 /// everything bundled so nothing downloads at runtime.
 ///
-/// Runtime revision 2026-08-03 — CI caches models/ and bin/ keyed on this
+/// Runtime revision 2026-08-03b — CI caches models/ and bin/ keyed on this
 /// file's hash, so bump this line whenever a hosted binary is replaced
 /// under the same asset name (this revision: no speech binaries are
 /// fetched at all — Parakeet, the whisper fine-tunes, and the GTCRN
 /// denoiser all run in-process via plugins; bin/ only remains on Linux
 /// for ffmpeg/xdotool/overlay).
+///
+/// TYPEMATE_FETCH_SKIP_LARGE_MODELS=1 skips the multi-hundred-MB models
+/// that only real dictation needs. CI e2e sets it: those runs inject mock
+/// engines, and fetching ~1.2 GB per job was most of their wall time.
+/// Release and dev builds must never set it.
 
 class _ModelSpec {
-  const _ModelSpec(this.fileName, this.url, this.expectedSizeBytes);
+  const _ModelSpec(
+    this.fileName,
+    this.url,
+    this.expectedSizeBytes, {
+    this.large = false,
+  });
 
   final String fileName;
   final String url;
   final int expectedSizeBytes;
+
+  /// Large models download on first use in production (see
+  /// speech_model_catalog.dart) and are skippable in CI; the small
+  /// always-bundled files (Silero VAD, GTCRN) are not.
+  final bool large;
 }
 
 const _parakeetBaseUrl =
@@ -36,26 +51,31 @@ const _models = [
     'parakeet-tdt-0.6b-v3-int8/encoder.int8.onnx',
     '$_parakeetBaseUrl/encoder.int8.onnx',
     652184281,
+    large: true,
   ),
   _ModelSpec(
     'parakeet-tdt-0.6b-v3-int8/decoder.int8.onnx',
     '$_parakeetBaseUrl/decoder.int8.onnx',
     11845275,
+    large: true,
   ),
   _ModelSpec(
     'parakeet-tdt-0.6b-v3-int8/joiner.int8.onnx',
     '$_parakeetBaseUrl/joiner.int8.onnx',
     6355277,
+    large: true,
   ),
   _ModelSpec(
     'parakeet-tdt-0.6b-v3-int8/tokens.txt',
     '$_parakeetBaseUrl/tokens.txt',
     93939,
+    large: true,
   ),
   _ModelSpec(
     'ggml-small-vaani-hindi-q6.bin',
     'https://huggingface.co/skaturanus/whisper-vaani-hindi-ggml/resolve/main/whisper-small-vaani-ggml-q6.bin',
     206820806,
+    large: true,
   ),
   _ModelSpec(
     // GGML conversion of Oriserve/Whisper-Hindi2Hinglish-Swift (Apache-2.0),
@@ -63,6 +83,7 @@ const _models = [
     'ggml-hindi2hinglish-swift.bin',
     'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/ggml-hindi2hinglish-swift.bin',
     147951465,
+    large: true,
   ),
   // GGML q5_0 quantization of the AI4Bharat Vistaar Tamil fine-tune (MIT),
   // hosted on this repo's releases because no public GGML exists.
@@ -70,6 +91,7 @@ const _models = [
     'ggml-vistaar-tamil-small-q5_0.bin',
     'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/ggml-vistaar-tamil-small-q5_0.bin',
     175209663,
+    large: true,
   ),
   _ModelSpec(
     'ggml-silero-v5.1.2.bin',
@@ -87,12 +109,18 @@ const _models = [
 
 Future<void> main(List<String> arguments) async {
   final force = arguments.contains('--force');
+  final skipLarge =
+      Platform.environment['TYPEMATE_FETCH_SKIP_LARGE_MODELS'] == '1';
   final client = HttpClient();
   try {
     // Fail fast: a broken download means the build cannot ship anyway, so
     // stop at the first error instead of burning time on the remaining
     // multi-hundred-MB fetches.
     for (final model in _models) {
+      if (skipLarge && model.large) {
+        stdout.writeln('model_skipped_large=${model.fileName}');
+        continue;
+      }
       await _fetchModel(client, model, force: force);
       if (exitCode != 0) {
         return;
