@@ -8,7 +8,7 @@ void main() {
   const dataDirectory = 'C:/users/me/AppData/Roaming/TypeMate';
 
   test('bundled install routes every language with nothing to download', () {
-    final runtime = createDesktopSpeechRuntime(
+    final runtime = createSpeechRuntime(
       dataDirectoryPath: dataDirectory,
       environment: const {},
       pathExists: (_) => true,
@@ -36,7 +36,7 @@ void main() {
 
     // Every whisper language runs in-process on its own fine-tune, with
     // the bundled Silero VAD trimming hold-to-talk silence.
-    for (final language in whisperServerLanguages) {
+    for (final language in whisperLanguages) {
       final engine = routing.routes[language.code] as WhisperGgmlSttEngine;
       expect(
         engine.modelPath,
@@ -67,7 +67,7 @@ void main() {
 
   test('falls back to executable directory paths', () {
     const executableDirectory = 'C:/apps/typemate/build/runner';
-    final runtime = createDesktopSpeechRuntime(
+    final runtime = createSpeechRuntime(
       dataDirectoryPath: dataDirectory,
       environment: const {},
       pathExists: (path) => path.startsWith(executableDirectory),
@@ -93,7 +93,7 @@ void main() {
     // slim installer case).
     bool bundled(String path) => path.contains('ggml-silero');
     var languageCode = 'en';
-    final runtime = createDesktopSpeechRuntime(
+    final runtime = createSpeechRuntime(
       dataDirectoryPath: dataDirectory,
       environment: const {},
       pathExists: bundled,
@@ -143,7 +143,7 @@ void main() {
   test('an unbundled VAD model rides the whisper download (Android)', () {
     // Nothing bundled at all — the Android case.
     var languageCode = 'hi';
-    final runtime = createDesktopSpeechRuntime(
+    final runtime = createSpeechRuntime(
       dataDirectoryPath: dataDirectory,
       environment: const {},
       pathExists: (_) => false,
@@ -170,7 +170,7 @@ void main() {
         path.contains('ggml-silero') ||
         path.contains('ggml-small-vaani-hindi-q6.bin');
     var languageCode = 'hi';
-    final runtime = createDesktopSpeechRuntime(
+    final runtime = createSpeechRuntime(
       dataDirectoryPath: dataDirectory,
       environment: const {},
       pathExists: bundled,
@@ -195,7 +195,7 @@ void main() {
   });
 
   test('environment model override routes every language in-process', () {
-    final runtime = createDesktopSpeechRuntime(
+    final runtime = createSpeechRuntime(
       dataDirectoryPath: dataDirectory,
       environment: const {
         'TYPEMATE_WHISPER_MODEL': 'R:/Models/whisper/ggml-large-v3.bin',

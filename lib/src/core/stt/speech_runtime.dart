@@ -21,8 +21,8 @@ String platformExecutablePath(String path, {bool? isWindows}) =>
 
 /// A language served by its own in-process whisper fine-tune. Only the
 /// selected language's model is kept resident (RAM policy).
-class WhisperServerLanguage {
-  const WhisperServerLanguage({
+class WhisperLanguage {
+  const WhisperLanguage({
     required this.code,
     required this.modelFile,
     this.cliLanguage,
@@ -43,22 +43,22 @@ class WhisperServerLanguage {
   String get modelRelativePath => 'models/${modelFile.relativePath}';
 }
 
-const whisperServerLanguages = [
+const whisperLanguages = [
   // Vaani small fine-tune, noise-robust Devanagari output. No script
   // prompt: the fine-tune writes Devanagari natively, and on the
   // in-process path a prompt bleeds its own characters into the
   // transcript and slows decoding (corpus-verified).
-  WhisperServerLanguage(code: 'hi', modelFile: vaaniHindiModelFile),
+  WhisperLanguage(code: 'hi', modelFile: vaaniHindiModelFile),
   // Oriserve Swift fine-tune, base-sized, romanized output; a script
   // prompt would fight it.
-  WhisperServerLanguage(
+  WhisperLanguage(
     code: 'hinglish',
     modelFile: hinglishSwiftModelFile,
     cliLanguage: 'hi',
   ),
   // Vistaar (AI4Bharat) per-language fine-tunes, small-sized, quantized to
   // q5_0 by this repo (hosted on the models-v1 GitHub release).
-  WhisperServerLanguage(code: 'ta', modelFile: vistaarTamilModelFile),
+  WhisperLanguage(code: 'ta', modelFile: vistaarTamilModelFile),
   // Telugu, Kannada, and Gujarati are intentionally absent: their Vistaar
   // checkpoints decode non-deterministically (thin logit margins flip
   // tokens into hallucinations run-to-run, at any quantization level and
@@ -83,8 +83,8 @@ const desktopParakeetNumThreads = 4;
 /// bundle. [provisioner] is null when every model is bundled — nothing to
 /// download. Desktop resolves bundled copies first; Android has no
 /// bundled models, so everything downloads.
-class DesktopSpeechRuntime {
-  const DesktopSpeechRuntime({
+class SpeechRuntime {
+  const SpeechRuntime({
     required this.engine,
     required this.denoiser,
     this.provisioner,
@@ -105,7 +105,7 @@ class DesktopSpeechRuntime {
 /// checkout); unbundled models download on demand into
 /// `<dataDirectory>/models/`. The small always-needed files (Silero VAD)
 /// ride a language's download when not bundled.
-DesktopSpeechRuntime createDesktopSpeechRuntime({
+SpeechRuntime createSpeechRuntime({
   required String dataDirectoryPath,
   Map<String, String>? environment,
   PathExists? pathExists,
@@ -179,7 +179,7 @@ DesktopSpeechRuntime createDesktopSpeechRuntime({
           diagnostics: diagnostics,
         ),
     };
-    return DesktopSpeechRuntime(
+    return SpeechRuntime(
       engine: LanguageRoutingSttEngine(
         routes: overrideEngines,
         fallback: overrideEngines['en']!,
@@ -222,7 +222,7 @@ DesktopSpeechRuntime createDesktopSpeechRuntime({
   );
 
   final whisperEnginesByCode = <String, WhisperGgmlSttEngine>{};
-  for (final language in whisperServerLanguages) {
+  for (final language in whisperLanguages) {
     final bundledModel = findBundled(language.modelRelativePath);
     final modelPath =
         bundledModel ??
@@ -246,7 +246,7 @@ DesktopSpeechRuntime createDesktopSpeechRuntime({
   }
 
   final codeProvider = languageCodeProvider ?? (() => 'en');
-  return DesktopSpeechRuntime(
+  return SpeechRuntime(
     engine: LanguageRoutingSttEngine(
       routes: {
         for (final code in parakeetLanguageCodes) code: parakeet,

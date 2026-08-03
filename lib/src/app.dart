@@ -30,14 +30,14 @@ import 'core/platform/mock_platform_bridge.dart';
 import 'core/platform/platform_bridge.dart';
 import 'core/platform/windows/windows_platform_bridge.dart';
 import 'core/platform/windows/windows_polling_hold_shortcut_registrar.dart';
-import 'core/stt/desktop_speech_runtime.dart';
+import 'core/stt/speech_runtime.dart';
 import 'core/stt/stt_engine.dart';
 import 'core/stt/stt_model_provisioner.dart';
 import 'features/home/home_screen.dart';
 import 'models/app_identity.dart';
 import 'theme/app_theme.dart';
 
-export 'core/stt/desktop_speech_runtime.dart';
+export 'core/stt/speech_runtime.dart';
 
 class TypeMateApp extends StatefulWidget {
   const TypeMateApp({
@@ -157,7 +157,7 @@ class _TypeMateAppState extends State<TypeMateApp> {
           'Android bootstrap must provide dataDirectory (see main.dart).',
         );
       }
-      final runtime = createDesktopSpeechRuntime(
+      final runtime = createSpeechRuntime(
         dataDirectoryPath:
             (widget.dataDirectory ?? _typeMateDataDirectory()).path,
         languageCodeProvider: () => speechSettingsController.languageCode,

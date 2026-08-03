@@ -32,11 +32,11 @@ void main() {
       expect(codes, containsAll(parakeetLanguageCodes));
       expect(
         codes,
-        containsAll(whisperServerLanguages.map((language) => language.code)),
+        containsAll(whisperLanguages.map((language) => language.code)),
       );
       expect(
         codes,
-        hasLength(parakeetLanguageCodes.length + whisperServerLanguages.length),
+        hasLength(parakeetLanguageCodes.length + whisperLanguages.length),
         reason: 'every visible language must have a validated model',
       );
     });
