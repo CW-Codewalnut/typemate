@@ -45,9 +45,12 @@ Future<void> main(List<String> arguments) async {
     'no_context': true,
     'suppress_non_speech_tokens': false,
     'progress_callback': null,
-    // Patched fork: resident model; audio_ctx from argv (0 = full window).
+    // Patched fork: resident model; audio_ctx from argv (0 = full window);
+    // Silero VAD with the production 100ms pad (same as the servers).
     'keep_model_loaded': true,
     'audio_ctx': arguments.length > 3 ? int.parse(arguments[3]) : 0,
+    'vad_model': '$root/models/ggml-silero-v5.1.2.bin',
+    'vad_speech_pad_ms': 100,
   });
 
   stdout.writeln('probe_start model=$model');

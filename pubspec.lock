@@ -849,7 +849,7 @@ packages:
     description:
       path: "."
       ref: "feat/resident-model-and-audio-ctx"
-      resolved-ref: "103a069094f41cbb246e3be25c50654400967414"
+      resolved-ref: "7bceec74cda4a000b64b154de6270fa9cc4e8833"
       url: "https://github.com/CW-Codewalnut/whisper_ggml.git"
     source: git
     version: "2.4.0"
