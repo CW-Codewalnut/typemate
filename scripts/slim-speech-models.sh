@@ -22,5 +22,8 @@ rm -rf "$BUNDLE_DIR/models/parakeet-tdt-0.6b-v3-int8" \
 rm -f "$BUNDLE_DIR/models/ggml-small-vaani-hindi-q6.bin" \
       "$BUNDLE_DIR/models/ggml-hindi2hinglish-swift.bin" \
       "$BUNDLE_DIR/models/ggml-vistaar-tamil-small-q5_0.bin"
+# Windows/macOS bundles have nothing left in bin at all; drop the empty
+# shell (Linux keeps its tool subfolders, so this no-ops there).
+rmdir "$BUNDLE_DIR/bin" 2>/dev/null || true
 
 echo "slimmed on-demand speech models from $BUNDLE_DIR"
