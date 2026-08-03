@@ -71,7 +71,7 @@ Notes for reviewers of this draft:
 
 ## Assets still needed
 
-- 512x512 icon (have: desktop master `assets/typemate_icon_1024.png`,
+- 512x512 icon (have: desktop master `assets/typemate_icon.png`,
   needs export) and 1024x500 feature graphic.
 - At least 2 phone screenshots (Dictate ready state, transcript state,
   download state, Settings) — capture from a real device or emulator
