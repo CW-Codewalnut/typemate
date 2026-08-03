@@ -110,8 +110,8 @@ icons_launcher:
     android:
       enable: true
       adaptive_background_color: '#FFFFFF'
-      adaptive_foreground_image: assets/typemate_icon_android_foreground.png
-      adaptive_monochrome_image: assets/typemate_icon_android_foreground.png
+      adaptive_foreground_image: assets/typemate_icon_foreground.png
+      adaptive_monochrome_image: assets/typemate_icon_foreground.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
