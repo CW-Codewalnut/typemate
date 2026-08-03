@@ -48,7 +48,10 @@ dependencies:
   whisper_ggml:
     git:
       url: https://github.com/CW-Codewalnut/whisper_ggml.git
-      ref: feat/resident-model-and-audio-ctx
+      # Commit pin, not a branch ref: this plugin owns native memory in
+      # our process, so upgrades must be deliberate. Head of our
+      # feat/resident-model-and-audio-ctx branch (upstream PR sk3llo#27).
+      ref: 7bceec74cda4a000b64b154de6270fa9cc4e8833
   share_plus: ^13.3.0
 
 dev_dependencies:
