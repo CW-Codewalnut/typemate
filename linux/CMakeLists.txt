@@ -107,20 +107,6 @@ set(CMAKE_BUILD_RPATH "\$ORIGIN")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
-# local_notifier links against the system libnotify. Bundle the runtime .so
-# next to the plugin so the portable tarball keeps the "users install
-# nothing" promise (its own deps all come with GTK3, already required).
-find_file(TYPEMATE_LIBNOTIFY_RUNTIME
-  NAMES libnotify.so.4
-  PATHS /usr/lib/x86_64-linux-gnu /lib/x86_64-linux-gnu /usr/lib64 /usr/lib
-)
-if(TYPEMATE_LIBNOTIFY_RUNTIME)
-  list(APPEND PLUGIN_BUNDLED_LIBRARIES "${TYPEMATE_LIBNOTIFY_RUNTIME}")
-else()
-  message(WARNING "libnotify.so.4 not found; failure notifications will need the system library at runtime")
-endif()
-
-
 # === Installation ===
 # By default, "installing" just makes a relocatable bundle in the build
 # directory.
