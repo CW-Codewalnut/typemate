@@ -182,7 +182,7 @@ If hooks block a commit, fix the code instead of bypassing hooks unless Ranjan e
 
 ## UI and design
 
-Follow `DESIGN.md`. Keep the app calm, focused, and desktop-native. Avoid adding visual complexity before the core dictation loop is proven.
+Follow `docs/DESIGN.md`. Keep the app calm, focused, and desktop-native. Avoid adding visual complexity before the core dictation loop is proven.
 
 ## Proof expectations
 
