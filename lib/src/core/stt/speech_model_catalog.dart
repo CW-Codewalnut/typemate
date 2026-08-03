@@ -87,6 +87,18 @@ const hinglishSwiftModelFile = SttModelFile(
       '4e9caa5f4b0416824d7cbeec22a37ef78a05e4b0189864eed65cd56d81c6b0a8',
 );
 
+/// GTCRN speech-enhancement model for the optional noise-suppression
+/// toggle, run in-process through the sherpa_onnx plugin. Bundled on
+/// desktop (tiny); Android downloads it alongside the Parakeet files.
+const gtcrnModelFile = SttModelFile(
+  url:
+      'https://github.com/k2-fsa/sherpa-onnx/releases/download/speech-enhancement-models/gtcrn_simple.onnx',
+  relativePath: 'gtcrn_simple.onnx',
+  expectedBytes: 535638,
+  expectedSha256:
+      'e77603ac0c23dac3227dd2d7135b3a585cbee2679048aecfa886657d3ae1b534',
+);
+
 /// GGML q5_0 quantization of the AI4Bharat Vistaar Tamil fine-tune (MIT),
 /// hosted on this repo's releases because no public GGML exists.
 const vistaarTamilModelFile = SttModelFile(
