@@ -153,7 +153,7 @@ dart run tool/benchmark_stt_corpus.dart --model <path.bin> --language hi
 - `CLAUDE.md` — engineering guide, STT runtime details, quality bars
 - `docs/DESIGN.md` — UI principles
 - `models/README.md` — the models and why each was chosen
-- `docs/requirements.md`, `docs/architecture.md`, `docs/backlog.md`
+- `docs/REQUIREMENTS.md`, `docs/ARCHITECTURE.md`, `docs/BACKLOG.md`
 
 ## 🌐 Connect with Us
 

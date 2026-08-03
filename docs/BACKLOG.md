@@ -17,3 +17,7 @@ PLAN.md this survived from is in git history.)
 - **Native overlay UI via a Flutter multi-window package** (replacing
   the per-platform overlay renderers) — feasibility gate: frameless +
   transparent + never-steals-focus on all three desktop OSes.
+- **Linux store distribution** (Snap/Flathub) — needs a real
+  snapcraft/flatpak manifest written for the slim-install layout; the
+  icons_launcher-generated snap/ scaffolding was removed as misleading.
+  (Flathub would carry the free tier only if a paid tier ever ships.)
