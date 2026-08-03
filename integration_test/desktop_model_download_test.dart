@@ -20,6 +20,13 @@ void main() {
   testWidgets('slim-install model download completes and verifies', (
     tester,
   ) async {
+    // macOS CI runs e2e on flutter-tester (see ci.yml), which registers
+    // no native plugins — the package's macOS download backend cannot
+    // exist there. Windows/Linux/Android exercise the real backend.
+    if (Platform.resolvedExecutable.contains('flutter_tester')) {
+      markTestSkipped('real download backend unavailable on flutter-tester');
+      return;
+    }
     await FileDownloader().trackTasks();
     final directory = Directory.systemTemp.createTempSync('typemate-dl-e2e');
     addTearDown(() => directory.deleteSync(recursive: true));
