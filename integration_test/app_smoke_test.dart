@@ -24,12 +24,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Mobile's first tab is Dictate (the same page with the mic card);
-    // desktop titles it Speech history.
-    expect(
-      find.text(Platform.isAndroid ? 'Dictate' : 'Speech history'),
-      findsWidgets,
-    );
+    // One Dictate-first shell on every platform (tab label + page title).
+    expect(find.text('Dictate'), findsWidgets);
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Prepare local engine'), findsNothing);
   });
