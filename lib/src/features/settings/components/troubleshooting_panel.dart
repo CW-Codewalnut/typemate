@@ -1,27 +1,63 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../components/settings_toggle_tile.dart';
 import '../../../core/diagnostics/telemetry_controller.dart';
 import '../../../utils/reveal_directory.dart';
 
-/// Diagnostics for bug reports: opens the local error-log folder so the
-/// user can attach the file, and holds the anonymous error-reporting
-/// consent toggle (shown only in builds with a telemetry backend).
+/// Diagnostics for bug reports: desktop opens the local error-log folder
+/// so the user can attach the file; mobile shares the log file through
+/// the system share sheet (there is no user-browsable folder). Also holds
+/// the anonymous error-reporting consent toggle (shown only in builds
+/// with a telemetry backend).
 class TroubleshootingPanel extends StatelessWidget {
   const TroubleshootingPanel({
     super.key,
     this.logsDirectoryPath,
+    this.logFilePath,
     this.telemetryController,
     this.onOpenLogsFolder,
+    this.onShareLogFile,
   });
 
   final String? logsDirectoryPath;
+
+  /// Mobile: the log file offered through the share sheet.
+  final String? logFilePath;
+
   final TelemetryController? telemetryController;
 
   /// Injectable for widget tests; defaults to the OS file manager.
   final Future<void> Function(String path)? onOpenLogsFolder;
 
+  /// Injectable for widget tests; defaults to the system share sheet.
+  final Future<void> Function(String path)? onShareLogFile;
+
   bool get _showsTelemetryToggle => telemetryController?.isAvailable ?? false;
+
+  Future<void> _shareLogFile(BuildContext context, String path) async {
+    try {
+      if (!File(path).existsSync()) {
+        throw StateError('no log yet');
+      }
+      await (onShareLogFile ?? _shareViaSystemSheet)(path);
+    } catch (_) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text('Nothing to share yet: no errors have been logged.'),
+        ),
+      );
+    }
+  }
+
+  static Future<void> _shareViaSystemSheet(String path) async {
+    await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
+  }
 
   /// Opening the folder can fail (no permissions to create it, no
   /// xdg-open on minimal Linux installs). The troubleshooting button of
@@ -75,6 +111,14 @@ class TroubleshootingPanel extends StatelessWidget {
                 onPressed: () => _openLogsFolder(context, logsPath),
                 icon: const Icon(Icons.folder_open, size: 18),
                 label: const Text('Open log folder'),
+              ),
+            ] else if (logFilePath != null) ...[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                key: const Key('share-log-file'),
+                onPressed: () => _shareLogFile(context, logFilePath!),
+                icon: const Icon(Icons.ios_share, size: 18),
+                label: const Text('Share log file'),
               ),
             ],
             if (_showsTelemetryToggle) ...[

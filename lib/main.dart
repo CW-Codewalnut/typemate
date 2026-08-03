@@ -120,10 +120,12 @@ Future<void> _runAndroidApp() async {
     running: speechModelDownloadNotification,
     progressBar: true,
   );
-  // No local log file on Android: the Settings surface that lets a user
-  // find and share it is desktop-only, and a log nobody can see should
-  // not be written. Opt-in Sentry telemetry remains the diagnostics path.
-  const diagnosticLog = DiagnosticLog.disabled();
+  // Same local error log as desktop, in the app's private files; Settings
+  // offers it through the system share sheet (no browsable folder on
+  // Android).
+  final diagnosticLog = DiagnosticLog(
+    file: File('${dataDirectory.path}/logs/typemate.log'),
+  );
   final telemetryController = TelemetryController(
     store: createDefaultTelemetrySettingsStore(directory: dataDirectory),
     dsn: _sentryDsn,

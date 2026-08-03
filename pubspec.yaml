@@ -49,6 +49,7 @@ dependencies:
     git:
       url: https://github.com/CW-Codewalnut/whisper_ggml.git
       ref: feat/resident-model-and-audio-ctx
+  share_plus: ^13.3.0
 
 dev_dependencies:
   flutter_test:

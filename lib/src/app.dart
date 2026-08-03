@@ -326,6 +326,9 @@ class _TypeMateAppState extends State<TypeMateApp> {
               logsDirectoryPath: _useMobileShell
                   ? null
                   : _diagnostics.log.directoryPath,
+              // Mobile has no user-browsable folder; the log file goes
+              // through the system share sheet instead.
+              logFilePath: _useMobileShell ? _diagnostics.log.filePath : null,
               onQuitRequested: _useMobileShell ? null : _shutDownAndExit,
               useMobileDictationSurface: _useMobileShell,
               modelProvisioner: _modelProvisioner,

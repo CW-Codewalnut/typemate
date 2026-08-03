@@ -25,6 +25,7 @@ class HomeScreen extends StatefulWidget {
     this.shortcutController,
     this.telemetryController,
     this.logsDirectoryPath,
+    this.logFilePath,
     this.onQuitRequested,
     this.useMobileDictationSurface = false,
     this.modelProvisioner,
@@ -41,6 +42,10 @@ class HomeScreen extends StatefulWidget {
   final HoldShortcutController? shortcutController;
   final TelemetryController? telemetryController;
   final String? logsDirectoryPath;
+
+  /// Mobile: the log file offered through the system share sheet.
+  final String? logFilePath;
+
   final Future<void> Function()? onQuitRequested;
 
   /// Selects the mobile flavor of the shared Dictate surface (floating
@@ -134,9 +139,11 @@ class _HomeScreenState extends State<HomeScreen> {
             shortcutController: widget.shortcutController,
             telemetryController: widget.telemetryController,
             logsDirectoryPath: widget.logsDirectoryPath,
+            logFilePath: widget.logFilePath,
             onQuitRequested: widget.onQuitRequested,
             languageOptions: widget.languageOptions,
             showNoiseSuppression: widget.showNoiseSuppression,
+            showHardwareShortcutNote: widget.useMobileDictationSurface,
           ),
         ];
         final page = pages[_selectedIndex.clamp(0, pages.length - 1)];
