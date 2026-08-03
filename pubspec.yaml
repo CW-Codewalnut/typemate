@@ -45,6 +45,10 @@ dependencies:
   sherpa_onnx: ^1.13.4
   background_downloader: ^9.5.7
   crypto: ^3.0.7
+  whisper_ggml:
+    git:
+      url: https://github.com/CW-Codewalnut/whisper_ggml.git
+      ref: feat/resident-model-and-audio-ctx
 
 dev_dependencies:
   flutter_test:

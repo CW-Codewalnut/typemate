@@ -113,6 +113,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.1.2"
+  ffmpeg_kit_flutter_new_min:
+    dependency: transitive
+    description:
+      name: ffmpeg_kit_flutter_new_min
+      sha256: "1fce79b73ebbcf34e1063ed84cacc4920adfbb8631877e585302e68157b0ace3"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.0"
+  ffmpeg_kit_flutter_platform_interface:
+    dependency: transitive
+    description:
+      name: ffmpeg_kit_flutter_platform_interface
+      sha256: addf046ae44e190ad0101b2fde2ad909a3cd08a2a109f6106d2f7048b7abedee
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.1"
   file:
     dependency: transitive
     description:
@@ -828,6 +844,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.0"
+  whisper_ggml:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: "feat/resident-model-and-audio-ctx"
+      resolved-ref: "103a069094f41cbb246e3be25c50654400967414"
+      url: "https://github.com/CW-Codewalnut/whisper_ggml.git"
+    source: git
+    version: "2.4.0"
   win32:
     dependency: transitive
     description:
