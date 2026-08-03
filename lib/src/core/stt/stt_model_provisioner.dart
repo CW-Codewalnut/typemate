@@ -328,7 +328,14 @@ class SttModelProvisioner extends SpeechModelProvisioner {
 /// owns the download, so no extra permission plugin is pulled in. A
 /// granted (or not-applicable) result needs no action; a denial just
 /// means the download runs without its foreground notification.
+///
+/// Android-only: desktop downloads run in-process with no
+/// foreground-service notification, and the package's permission
+/// channel is not implemented on macOS.
 Future<void> _requestNotificationPermission() async {
+  if (!Platform.isAndroid) {
+    return;
+  }
   final status = await FileDownloader().permissions.status(
     PermissionType.notifications,
   );

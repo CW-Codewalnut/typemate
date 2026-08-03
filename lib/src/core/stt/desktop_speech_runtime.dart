@@ -210,7 +210,6 @@ DesktopSpeechRuntime createDesktopSpeechRuntime({
       // The GTCRN denoiser model rides the Parakeet download when it is
       // not bundled (Android); it lands beside the Parakeet files.
       files: [...parakeetModelFiles, ...gtcrnDownloads],
-      ensureNotificationPermission: _noNotificationPermissionNeeded,
     );
     for (final code in parakeetLanguageCodes) {
       provisionersByLanguageCode[code] = parakeetProvisioner;
@@ -234,7 +233,6 @@ DesktopSpeechRuntime createDesktopSpeechRuntime({
         // The VAD model rides the first whisper download when unbundled;
         // an already-present copy is skipped by the intactness check.
         files: [language.modelFile, ...vadDownloads],
-        ensureNotificationPermission: _noNotificationPermissionNeeded,
       );
     }
     whisperEnginesByCode[language.code] = WhisperGgmlSttEngine(
@@ -266,7 +264,3 @@ DesktopSpeechRuntime createDesktopSpeechRuntime({
           ),
   );
 }
-
-/// Desktop downloads run in-process with no foreground-service
-/// notification, so there is no permission to request.
-Future<void> _noNotificationPermissionNeeded() async {}
