@@ -57,7 +57,9 @@ void main() {
   Widget buildSettings({
     TelemetryController? telemetryController,
     String? logsDirectoryPath,
+    String? logFilePath,
     Future<void> Function(String path)? onOpenLogsFolder,
+    bool showHardwareShortcutNote = false,
   }) {
     return MaterialApp(
       // The Scaffold mirrors production (HomeScreen wraps every page in
@@ -71,11 +73,30 @@ void main() {
           speechSettingsController: SpeechSettingsController(),
           telemetryController: telemetryController,
           logsDirectoryPath: logsDirectoryPath,
+          logFilePath: logFilePath,
           onOpenLogsFolder: onOpenLogsFolder,
+          showHardwareShortcutNote: showHardwareShortcutNote,
         ),
       ),
     );
   }
+
+  testWidgets('mobile offers the log through the share sheet', (tester) async {
+    await tester.pumpWidget(
+      buildSettings(
+        logFilePath: '/data/user/0/typemate/files/logs/typemate.log',
+        showHardwareShortcutNote: true,
+      ),
+    );
+    await tester.pump();
+
+    // Share button instead of the desktop folder button.
+    expect(find.byKey(const Key('share-log-file')), findsOneWidget);
+    expect(find.byKey(const Key('open-log-folder')), findsNothing);
+    // And the fixed hardware-shortcut note replaces the recorder panel.
+    expect(find.text('Keyboard shortcut'), findsOneWidget);
+    expect(find.textContaining('Ctrl+Meta'), findsOneWidget);
+  });
 
   testWidgets('the log folder button opens the diagnostics directory', (
     tester,
