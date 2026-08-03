@@ -87,6 +87,18 @@ const hinglishSwiftModelFile = SttModelFile(
       '4e9caa5f4b0416824d7cbeec22a37ef78a05e4b0189864eed65cd56d81c6b0a8',
 );
 
+/// Silero VAD for whisper decoding: trims hold-to-talk silence so
+/// whisper does not loop over the silent lead/tail. Bundled on desktop
+/// (tiny); Android downloads it alongside a whisper language's model.
+const sileroVadModelFile = SttModelFile(
+  url:
+      'https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin',
+  relativePath: 'ggml-silero-v5.1.2.bin',
+  expectedBytes: 885098,
+  expectedSha256:
+      '29940d98d42b91fbd05ce489f3ecf7c72f0a42f027e4875919a28fb4c04ea2cf',
+);
+
 /// GTCRN speech-enhancement model for the optional noise-suppression
 /// toggle, run in-process through the sherpa_onnx plugin. Bundled on
 /// desktop (tiny); Android downloads it alongside the Parakeet files.

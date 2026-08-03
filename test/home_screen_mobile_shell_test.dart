@@ -35,9 +35,6 @@ void main() {
           ),
           speechSettingsController: SpeechSettingsController(),
           useMobileDictationSurface: mobile,
-          languageOptions: mobile
-              ? androidSpeechLanguageOptions
-              : speechLanguageOptions,
         ),
       ),
     );

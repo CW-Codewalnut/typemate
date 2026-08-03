@@ -30,7 +30,6 @@ import 'core/platform/mock_platform_bridge.dart';
 import 'core/platform/platform_bridge.dart';
 import 'core/platform/windows/windows_platform_bridge.dart';
 import 'core/platform/windows/windows_polling_hold_shortcut_registrar.dart';
-import 'core/stt/android_speech_runtime.dart';
 import 'core/stt/desktop_speech_runtime.dart';
 import 'core/stt/stt_engine.dart';
 import 'core/stt/stt_model_provisioner.dart';
@@ -148,28 +147,16 @@ class _TypeMateAppState extends State<TypeMateApp> {
     if (injectedEngine != null) {
       _sttEngine = injectedEngine;
       _modelProvisioner = widget.modelProvisioner;
-    } else if (Platform.isAndroid) {
-      // Android cannot spawn the bundled desktop servers; it runs the same
-      // Parakeet model in-process, downloaded on first run.
-      final dataDirectory = widget.dataDirectory;
-      if (dataDirectory == null) {
+    } else {
+      // One speech stack on every platform: in-process Parakeet plus the
+      // per-language in-process whisper fine-tunes and the GTCRN
+      // denoiser. Models the install did not bundle download on demand
+      // into the per-user data directory (Android bundles none).
+      if (Platform.isAndroid && widget.dataDirectory == null) {
         throw StateError(
           'Android bootstrap must provide dataDirectory (see main.dart).',
         );
       }
-      final speechRuntime = createAndroidSpeechRuntime(
-        dataDirectory: dataDirectory,
-        diagnostics: _diagnostics,
-      );
-      _sttEngine = speechRuntime.engine;
-      _modelProvisioner = speechRuntime.provisioner;
-      // In-process GTCRN denoiser, same as desktop; its tiny model rides
-      // the first-run download.
-      _audioDenoiser = speechRuntime.denoiser;
-    } else {
-      // Desktop: in-process Parakeet plus per-language whisper servers.
-      // Models the install did not bundle download on demand into the
-      // per-user data directory.
       final runtime = createDesktopSpeechRuntime(
         dataDirectoryPath:
             (widget.dataDirectory ?? _typeMateDataDirectory()).path,
@@ -178,6 +165,7 @@ class _TypeMateAppState extends State<TypeMateApp> {
       );
       _sttEngine = runtime.engine;
       _modelProvisioner = runtime.provisioner;
+      _audioDenoiser = runtime.denoiser;
     }
     if (platformBridge case final QuitRequestSource quitSource) {
       quitSource.onQuitRequested = _shutDownAndExit;
@@ -216,8 +204,7 @@ class _TypeMateAppState extends State<TypeMateApp> {
         if (!speechSettingsController.noiseSuppressionEnabled) {
           return null;
         }
-        return _audioDenoiser ??=
-            widget.audioDenoiser ?? createDefaultAudioDenoiser();
+        return widget.audioDenoiser ?? _audioDenoiser;
       },
     );
     shortcutController = HoldShortcutController(
@@ -336,9 +323,9 @@ class _TypeMateAppState extends State<TypeMateApp> {
                   ? warmUpMicrophonePermission
                   : null,
               floatingMicController: _floatingMicController,
-              languageOptions: _useMobileShell
-                  ? androidSpeechLanguageOptions
-                  : speechLanguageOptions,
+              // One curated language list everywhere: Parakeet's 25 plus
+              // the whisper fine-tunes, all in-process on every platform.
+              languageOptions: speechLanguageOptions,
               // Noise suppression runs in-process on every platform now.
               showNoiseSuppression: true,
             ),
@@ -552,56 +539,6 @@ Directory _typeMateDataDirectory({Map<String, String>? environment}) {
     return Directory('$home/.config/TypeMate');
   }
   return Directory('build/settings/TypeMate');
-}
-
-// Optional noise suppression: the GTCRN speech-enhancement model, run
-// in-process through the sherpa_onnx plugin per recording when the
-// Settings toggle is on.
-const bundledGtcrnModelRelativePath = 'models/gtcrn_simple.onnx';
-
-/// Creates the noise-suppression step, or null when its model is not
-/// present. Unlike the speech runtimes this never throws: noise
-/// suppression is an enhancement, and dictation must keep working on the
-/// raw recording when the optional GTCRN model is missing.
-AudioDenoiser? createDefaultAudioDenoiser({
-  Map<String, String>? environment,
-  PathExists? pathExists,
-  String? currentDirectoryPath,
-  String? executableDirectoryPath,
-}) {
-  final values = environment ?? Platform.environment;
-  final exists = pathExists ?? (path) => File(path).existsSync();
-  final searchDirectories = [
-    currentDirectoryPath ?? Directory.current.path,
-    executableDirectoryPath ?? File(Platform.resolvedExecutable).parent.path,
-  ];
-
-  String? resolveOptional(String relativePath, String? environmentValue) {
-    final override = environmentValue?.trim() ?? '';
-    if (override.isNotEmpty) {
-      return override;
-    }
-    for (final directory in searchDirectories) {
-      final candidate = '${directory.replaceAll('\\', '/')}/$relativePath';
-      if (exists(candidate)) {
-        return candidate;
-      }
-    }
-    return null;
-  }
-
-  final modelPath = resolveOptional(
-    bundledGtcrnModelRelativePath,
-    values['TYPEMATE_DENOISER_MODEL'],
-  );
-  if (modelPath == null) {
-    debugPrint(
-      'TypeMate: noise suppression model is missing; recordings are '
-      'transcribed as captured. Run: dart run tool/fetch_whisper_runtime.dart',
-    );
-    return null;
-  }
-  return SherpaGtcrnAudioDenoiser(modelPath: modelPath);
 }
 
 /// Resolves a helper tool: env override, then the copy bundled next to the

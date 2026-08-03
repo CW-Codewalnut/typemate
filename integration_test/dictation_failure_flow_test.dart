@@ -1,44 +1,58 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:typemate/src/app.dart';
+import 'package:typemate/src/core/audio/audio_recorder.dart';
 import 'package:typemate/src/core/dictation_controller.dart';
 import 'package:typemate/src/core/platform/mock_platform_bridge.dart';
-import 'package:typemate/src/core/stt/whisper_server_stt_engine.dart';
+import 'package:typemate/src/core/stt/stt_engine.dart';
 
 import 'support/fakes.dart';
 
-/// The "stuck transcribing forever" bug, end to end: a local speech server
-/// that accepts the audio and never answers must NOT strand the app in the
+/// Hangs (times out) until [hangs] is cleared, then transcribes — the
+/// shape of a wedged native decoder that later recovers.
+class SwitchableHangingSttEngine implements SttEngine {
+  SwitchableHangingSttEngine({required this.transcript});
+
+  final String transcript;
+  bool hangs = true;
+
+  @override
+  Future<bool> isReady() async => true;
+
+  @override
+  Future<void> prepare() async {}
+
+  @override
+  Future<String> transcribe(AudioRecording recording) async {
+    if (hangs) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      throw TimeoutException('decoder wedged');
+    }
+    return transcript;
+  }
+}
+
+/// The "stuck transcribing forever" bug, end to end: a speech engine that
+/// accepts the audio and never answers must NOT strand the app in the
 /// transcribing overlay. The app has to surface the failure (error overlay,
-/// no inserted text) and accept the very next dictation, which succeeds once
-/// the server answers again — all through the production engine, controller,
-/// state machine, and UI, over a real loopback HTTP server.
+/// no inserted text) and accept the very next dictation, which succeeds
+/// once the engine answers again — through the production controller,
+/// state machine, timeout policy, and UI.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'a hung speech server surfaces an error and the next dictation recovers',
+    'a hung speech engine surfaces an error and the next dictation recovers',
     (tester) async {
-      // Real HTTP server; whether it answers is the test's dial.
-      var serverAnswers = false;
-      final speechServer = await HttpServer.bind(
-        InternetAddress.loopbackIPv4,
-        0,
+      // Whether the engine answers is the test's dial; hung requests
+      // stay pending forever, exactly like a wedged native decoder.
+      final sttEngine = SwitchableHangingSttEngine(
+        transcript: 'recovered after the outage',
       );
-      addTearDown(() async => speechServer.close(force: true));
-      speechServer.listen((request) async {
-        // Drain the multipart upload either way; only answer when healthy.
-        await request.drain<void>();
-        if (serverAnswers) {
-          request.response.headers.contentType = ContentType.json;
-          request.response.write('{"text": "recovered after the outage"}');
-          await request.response.close();
-        }
-        // else: swallow the audio and never reply — the hang under test.
-      });
 
       final dataDirectory = Directory.systemTemp.createTempSync(
         'typemate-e2e-',
@@ -49,19 +63,6 @@ void main() {
       final registrar = TestHoldShortcutRegistrar();
       final recorderFactory = WavWritingAudioRecorderFactory(
         outputDirectory: dataDirectory,
-      );
-      // The production resident-server engine, adopting the test server on
-      // its port. Short timeouts keep the test fast; the production
-      // defaults differ only in duration.
-      final sttEngine = WhisperServerSttEngine(
-        serverExecutable: 'unused: the server is already reachable',
-        modelPath: 'unused',
-        vadModelPath: 'unused',
-        cliLanguage: 'en',
-        port: speechServer.port,
-        responseTimeout: const Duration(seconds: 2),
-        bodyReadTimeout: const Duration(seconds: 1),
-        modelFileExists: (_) => true,
       );
 
       await tester.pumpWidget(
@@ -103,8 +104,8 @@ void main() {
       final retryButton = find.byKey(const Key('history-retry-button'));
       expect(retryButton, findsOneWidget);
 
-      // Server healthy again: Retry resolves the failed entry in place.
-      serverAnswers = true;
+      // Engine healthy again: Retry resolves the failed entry in place.
+      sttEngine.hangs = false;
       await tester.tap(retryButton);
       await tester.pumpAndSettle();
 

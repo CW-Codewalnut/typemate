@@ -6,7 +6,6 @@ import 'dart:io';
 /// - models/ggml-hindi2hinglish-swift.bin (Hinglish, Oriserve Swift)
 /// - models/ggml-silero-v5.1.2.bin (VAD)
 /// - models/gtcrn_simple.onnx (optional noise suppression, GTCRN)
-/// - bin/whisper/ (whisper-cli and its DLLs, OpenBLAS build)
 ///
 /// All are gitignored because they exceed practical git limits, so a fresh
 /// clone runs this once. Release bundles copy both folders next to the
@@ -14,11 +13,12 @@ import 'dart:io';
 /// (they download on first use per selected language); dev builds keep
 /// everything bundled so nothing downloads at runtime.
 ///
-/// Runtime revision 2026-07-31b — CI caches models/ and bin/ keyed on this
+/// Runtime revision 2026-08-03 — CI caches models/ and bin/ keyed on this
 /// file's hash, so bump this line whenever a hosted binary is replaced
-/// under the same asset name (this revision: bin/sherpa is gone entirely —
-/// English, and now the GTCRN denoiser too, run in-process via the
-/// sherpa_onnx plugin).
+/// under the same asset name (this revision: no speech binaries are
+/// fetched at all — Parakeet, the whisper fine-tunes, and the GTCRN
+/// denoiser all run in-process via plugins; bin/ only remains on Linux
+/// for ffmpeg/xdotool/overlay).
 
 class _ModelSpec {
   const _ModelSpec(this.fileName, this.url, this.expectedSizeBytes);
@@ -85,31 +85,6 @@ const _models = [
   ),
 ];
 
-final _isWindows = Platform.isWindows;
-final _isMacOS = Platform.isMacOS;
-
-/// Windows: the official whisper.cpp OpenBLAS build. Linux and macOS:
-/// binaries built from the same v1.9.1 tag by this repo (whisper.cpp does
-/// not publish desktop CLI binaries for them), hosted on the models-v1
-/// release. The macOS tarball is universal2 (arm64 + x86_64), built by
-/// .github/workflows/build-macos-whisper.yml.
-final whisperZipUrl = _isWindows
-    ? 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-blas-bin-x64.zip'
-    : _isMacOS
-    ? 'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/whisper-v1.9.1-macos-universal.tar.gz'
-    : 'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/whisper-v1.9.1-linux-x64.tar.gz';
-final whisperCliFiles = _isWindows
-    ? const [
-        'whisper-cli.exe',
-        'whisper-server.exe',
-        'whisper.dll',
-        'ggml.dll',
-        'ggml-base.dll',
-        'ggml-blas.dll',
-        'libopenblas.dll',
-      ]
-    : const ['whisper-cli', 'whisper-server'];
-
 Future<void> main(List<String> arguments) async {
   final force = arguments.contains('--force');
   final client = HttpClient();
@@ -122,10 +97,6 @@ Future<void> main(List<String> arguments) async {
       if (exitCode != 0) {
         return;
       }
-    }
-    await _fetchCli(client, force: force);
-    if (exitCode != 0) {
-      return;
     }
     // Linux ships its helper tools too, so users install nothing: a static
     // ffmpeg for ALSA capture and xdotool (with its libxdo) for typing.
@@ -325,70 +296,8 @@ Future<void> _fetchModel(
   stdout.writeln('model_ready=${targetFile.absolute.path}');
 }
 
-Future<void> _fetchCli(HttpClient client, {required bool force}) async {
-  final targetDirectory = Directory('bin/whisper');
-  final cliFile = File('${targetDirectory.path}/${whisperCliFiles.first}');
-  final missing = whisperCliFiles
-      .where((name) => !File('${targetDirectory.path}/$name').existsSync())
-      .toList();
-  if (!force && missing.isEmpty) {
-    stdout.writeln('cli_ready=${cliFile.absolute.path}');
-    return;
-  }
-
-  stdout.writeln('downloading=$whisperZipUrl');
-  final stagingDirectory = await Directory.systemTemp.createTemp(
-    'typemate-whisper-cli',
-  );
-  try {
-    final zipFile = File('${stagingDirectory.path}/whisper-archive');
-    if (!await _downloadWithReleaseFallback(client, whisperZipUrl, zipFile)) {
-      exitCode = 1;
-      return;
-    }
-
-    // Windows 10+ ships bsdtar, which extracts zip archives; on Linux tar
-    // handles the .tar.gz.
-    final extract = await Process.run('tar', [
-      '-xf',
-      zipFile.path,
-      '-C',
-      stagingDirectory.path,
-    ]);
-    if (extract.exitCode != 0) {
-      stderr.writeln('cli_extract_failed=${extract.stderr}');
-      exitCode = 1;
-      return;
-    }
-
-    await targetDirectory.create(recursive: true);
-    // The Windows zip nests binaries under Release/; the Linux tarball is
-    // flat.
-    final extractedDirectory = _isWindows
-        ? Directory('${stagingDirectory.path}/Release')
-        : stagingDirectory;
-    for (final name in whisperCliFiles) {
-      final installed = await File(
-        '${extractedDirectory.path}/$name',
-      ).copy('${targetDirectory.path}/$name');
-      await _markExecutable(installed);
-    }
-    if (_isWindows) {
-      await for (final entry in extractedDirectory.list()) {
-        final baseName = entry.uri.pathSegments.last;
-        if (entry is File && baseName.startsWith('ggml-cpu-')) {
-          await entry.copy('${targetDirectory.path}/$baseName');
-        }
-      }
-    }
-    stdout.writeln('cli_ready=${cliFile.absolute.path}');
-  } finally {
-    await stagingDirectory.delete(recursive: true);
-  }
-}
-
 Future<void> _markExecutable(File file) async {
-  if (_isWindows) {
+  if (Platform.isWindows) {
     return;
   }
   await Process.run('chmod', ['+x', file.path]);
