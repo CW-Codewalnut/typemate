@@ -132,21 +132,36 @@ void main() {
     expect(source, contains('SW_HIDE'));
   });
 
-  test('failure notification goes through the desktop notifier', () async {
-    final sent = <({String title, String body})>[];
+  test('failure toast shows through the native error overlay', () async {
+    final calls = <({String method, Object? arguments})>[];
     final bridge = WindowsPlatformBridge(
-      nativeMethodInvoker: <T>(method, [arguments]) async => null,
-      notificationSender: (title, body) async {
-        sent.add((title: title, body: body));
+      nativeMethodInvoker: <T>(method, [arguments]) async {
+        calls.add((method: method, arguments: arguments));
+        return null;
       },
     );
 
-    await bridge.showDictationFailureNotification(
+    await bridge.showDictationFailureOverlay(
       'Transcription took too long and was stopped.',
     );
 
-    expect(sent.single.title, 'Dictation failed');
-    expect(sent.single.body, 'Transcription took too long and was stopped.');
+    expect(calls.single.method, 'showOverlay');
+    expect(calls.single.arguments, {
+      'state': 'error',
+      'message': 'Transcription took too long and was stopped.',
+    });
+  });
+
+  test('native overlay renders and auto-hides the error toast', () {
+    final source = File(
+      'windows/runner/type_mate_overlay.cpp',
+    ).readAsStringSync();
+
+    expect(source, contains('kErrorAutoHideMs'));
+    expect(source, contains('DT_WORDBREAK'));
+    final window = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    expect(window, contains('MultiByteToWideChar'));
+    expect(window, contains('overlay_.Show(state, overlay_message)'));
   });
 
   test('shows native overlay through Windows method channel', () async {
@@ -262,7 +277,7 @@ void main() {
 
     expect(source, contains('constexpr int kOverlayWidth = 210;'));
     expect(source, contains('constexpr int kOverlayHeight = 58;'));
-    expect(source, contains('work_area.bottom - kOverlayHeight - 28'));
+    expect(source, contains('work_area.bottom - Height() - 28'));
     expect(source, contains('CreateRoundRectRgn'));
     expect(source, contains('constexpr int bar_count = 7;'));
     expect(source, contains('constexpr int bar_width = 5;'));

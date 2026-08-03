@@ -29,11 +29,11 @@ class MockPlatformBridge implements PlatformBridge {
     overlayMessage = '';
   }
 
-  String lastFailureNotification = '';
+  String lastFailureOverlayMessage = '';
 
   @override
-  Future<void> showDictationFailureNotification(String message) async {
-    lastFailureNotification = message;
+  Future<void> showDictationFailureOverlay(String message) async {
+    lastFailureOverlayMessage = message;
   }
 
   @override

@@ -20,14 +20,12 @@ void main() {
         // CI must observe the machine it runs on, not reconfigure it.
         platformBridge: MockPlatformBridge(),
         dataDirectory: dataDirectory,
-        // The splash is time-based and integration tests run on a real
-        // clock, so it is covered by widget tests instead.
-        splashDuration: Duration.zero,
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Speech history'), findsOneWidget);
+    // One Dictate-first shell on every platform (tab label + page title).
+    expect(find.text('Dictate'), findsWidgets);
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Prepare local engine'), findsNothing);
   });

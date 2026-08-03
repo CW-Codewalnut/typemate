@@ -1,32 +1,46 @@
 import 'dart:io';
 
 /// Provisions the speech runtimes that ship with TypeMate:
-/// - models/parakeet-tdt-0.6b-v3-int8/ (English, resident sherpa server)
+/// - models/parakeet-tdt-0.6b-v3-int8/ (English, in-process engine)
 /// - models/ggml-small-vaani-hindi-q6.bin (Hindi, Vaani fine-tune)
 /// - models/ggml-hindi2hinglish-swift.bin (Hinglish, Oriserve Swift)
 /// - models/ggml-silero-v5.1.2.bin (VAD)
 /// - models/gtcrn_simple.onnx (optional noise suppression, GTCRN)
-/// - bin/whisper/ (whisper-cli and its DLLs, OpenBLAS build)
-/// - bin/sherpa/ (sherpa-onnx websocket server for the Parakeet model,
-///   plus the offline denoiser that runs the GTCRN model)
 ///
 /// All are gitignored because they exceed practical git limits, so a fresh
 /// clone runs this once. Release bundles copy both folders next to the
-/// executable.
+/// executable, then scripts/slim-speech-models.sh strips the large models
+/// (they download on first use per selected language); dev builds keep
+/// everything bundled so nothing downloads at runtime.
 ///
-/// Runtime revision 2026-07-28b — CI caches models/ and bin/ keyed on this
+/// Runtime revision 2026-08-03b — CI caches models/ and bin/ keyed on this
 /// file's hash, so bump this line whenever a hosted binary is replaced
-/// under the same asset name (this revision: the Linux overlay is now
-/// compiled from linux/overlay/typemate_overlay.c instead of fetched, so
-/// there is no hosted overlay binary to keep in sync — the source is the
-/// single source of truth).
+/// under the same asset name (this revision: no speech binaries are
+/// fetched at all — Parakeet, the whisper fine-tunes, and the GTCRN
+/// denoiser all run in-process via plugins; bin/ only remains on Linux
+/// for ffmpeg/xdotool/overlay).
+///
+/// TYPEMATE_FETCH_SKIP_LARGE_MODELS=1 skips the multi-hundred-MB models
+/// that only real dictation needs. CI e2e sets it: those runs inject mock
+/// engines, and fetching ~1.2 GB per job was most of their wall time.
+/// Release and dev builds must never set it.
 
 class _ModelSpec {
-  const _ModelSpec(this.fileName, this.url, this.expectedSizeBytes);
+  const _ModelSpec(
+    this.fileName,
+    this.url,
+    this.expectedSizeBytes, {
+    this.large = false,
+  });
 
   final String fileName;
   final String url;
   final int expectedSizeBytes;
+
+  /// Large models download on first use in production (see
+  /// speech_model_catalog.dart) and are skippable in CI; the small
+  /// always-bundled files (Silero VAD, GTCRN) are not.
+  final bool large;
 }
 
 const _parakeetBaseUrl =
@@ -37,26 +51,31 @@ const _models = [
     'parakeet-tdt-0.6b-v3-int8/encoder.int8.onnx',
     '$_parakeetBaseUrl/encoder.int8.onnx',
     652184281,
+    large: true,
   ),
   _ModelSpec(
     'parakeet-tdt-0.6b-v3-int8/decoder.int8.onnx',
     '$_parakeetBaseUrl/decoder.int8.onnx',
     11845275,
+    large: true,
   ),
   _ModelSpec(
     'parakeet-tdt-0.6b-v3-int8/joiner.int8.onnx',
     '$_parakeetBaseUrl/joiner.int8.onnx',
     6355277,
+    large: true,
   ),
   _ModelSpec(
     'parakeet-tdt-0.6b-v3-int8/tokens.txt',
     '$_parakeetBaseUrl/tokens.txt',
     93939,
+    large: true,
   ),
   _ModelSpec(
     'ggml-small-vaani-hindi-q6.bin',
     'https://huggingface.co/skaturanus/whisper-vaani-hindi-ggml/resolve/main/whisper-small-vaani-ggml-q6.bin',
     206820806,
+    large: true,
   ),
   _ModelSpec(
     // GGML conversion of Oriserve/Whisper-Hindi2Hinglish-Swift (Apache-2.0),
@@ -64,6 +83,7 @@ const _models = [
     'ggml-hindi2hinglish-swift.bin',
     'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/ggml-hindi2hinglish-swift.bin',
     147951465,
+    large: true,
   ),
   // GGML q5_0 quantization of the AI4Bharat Vistaar Tamil fine-tune (MIT),
   // hosted on this repo's releases because no public GGML exists.
@@ -71,6 +91,7 @@ const _models = [
     'ggml-vistaar-tamil-small-q5_0.bin',
     'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/ggml-vistaar-tamil-small-q5_0.bin',
     175209663,
+    large: true,
   ),
   _ModelSpec(
     'ggml-silero-v5.1.2.bin',
@@ -86,51 +107,24 @@ const _models = [
   ),
 ];
 
-final _isWindows = Platform.isWindows;
-final _isMacOS = Platform.isMacOS;
-
-/// Windows: the official whisper.cpp OpenBLAS build. Linux and macOS:
-/// binaries built from the same v1.9.1 tag by this repo (whisper.cpp does
-/// not publish desktop CLI binaries for them), hosted on the models-v1
-/// release. The macOS tarball is universal2 (arm64 + x86_64), built by
-/// .github/workflows/build-macos-whisper.yml.
-final whisperZipUrl = _isWindows
-    ? 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-blas-bin-x64.zip'
-    : _isMacOS
-    ? 'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/whisper-v1.9.1-macos-universal.tar.gz'
-    : 'https://github.com/Ranjan-Bhagat/typemate/releases/download/models-v1/whisper-v1.9.1-linux-x64.tar.gz';
-final whisperCliFiles = _isWindows
-    ? const [
-        'whisper-cli.exe',
-        'whisper-server.exe',
-        'whisper.dll',
-        'ggml.dll',
-        'ggml-base.dll',
-        'ggml-blas.dll',
-        'libopenblas.dll',
-      ]
-    : const ['whisper-cli', 'whisper-server'];
-
 Future<void> main(List<String> arguments) async {
   final force = arguments.contains('--force');
+  final skipLarge =
+      Platform.environment['TYPEMATE_FETCH_SKIP_LARGE_MODELS'] == '1';
   final client = HttpClient();
   try {
     // Fail fast: a broken download means the build cannot ship anyway, so
     // stop at the first error instead of burning time on the remaining
     // multi-hundred-MB fetches.
     for (final model in _models) {
+      if (skipLarge && model.large) {
+        stdout.writeln('model_skipped_large=${model.fileName}');
+        continue;
+      }
       await _fetchModel(client, model, force: force);
       if (exitCode != 0) {
         return;
       }
-    }
-    await _fetchCli(client, force: force);
-    if (exitCode != 0) {
-      return;
-    }
-    await _fetchSherpaServer(client, force: force);
-    if (exitCode != 0) {
-      return;
     }
     // Linux ships its helper tools too, so users install nothing: a static
     // ffmpeg for ALSA capture and xdotool (with its libxdo) for typing.
@@ -291,78 +285,6 @@ Future<void> _compileLinuxOverlay({required bool force}) async {
   }
 }
 
-final _sherpaArchiveName = _isWindows
-    ? 'sherpa-onnx-v1.13.4-win-x64-static-MD-MinSizeRel-no-tts'
-    : _isMacOS
-    ? 'sherpa-onnx-v1.13.4-osx-universal2-static-no-tts'
-    : 'sherpa-onnx-v1.13.4-linux-x64-static-no-tts';
-final _sherpaArchiveUrl =
-    'https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.4/'
-    '$_sherpaArchiveName.tar.bz2';
-// The websocket server keeps Parakeet resident; the offline denoiser runs
-// the GTCRN model for the optional noise-suppression toggle. Both come out
-// of the same archive.
-final _sherpaBinaryFileNames = _isWindows
-    ? const [
-        'sherpa-onnx-offline-websocket-server.exe',
-        'sherpa-onnx-offline-denoiser.exe',
-      ]
-    : const [
-        'sherpa-onnx-offline-websocket-server',
-        'sherpa-onnx-offline-denoiser',
-      ];
-
-Future<void> _fetchSherpaServer(
-  HttpClient client, {
-  required bool force,
-}) async {
-  final targetDirectory = Directory('bin/sherpa');
-  final missing = _sherpaBinaryFileNames
-      .where((name) => !File('${targetDirectory.path}/$name').existsSync())
-      .toList();
-  if (!force && missing.isEmpty) {
-    stdout.writeln('sherpa_ready=${targetDirectory.absolute.path}');
-    return;
-  }
-
-  stdout.writeln('downloading=$_sherpaArchiveUrl');
-  final stagingDirectory = await Directory.systemTemp.createTemp(
-    'typemate-sherpa',
-  );
-  try {
-    final archive = File('${stagingDirectory.path}/sherpa.tar.bz2');
-    if (!await _download(client, _sherpaArchiveUrl, archive)) {
-      exitCode = 1;
-      return;
-    }
-
-    final extract = await Process.run('tar', [
-      '-xf',
-      archive.path,
-      '-C',
-      stagingDirectory.path,
-      for (final name in _sherpaBinaryFileNames)
-        '$_sherpaArchiveName/bin/$name',
-    ]);
-    if (extract.exitCode != 0) {
-      stderr.writeln('sherpa_extract_failed=${extract.stderr}');
-      exitCode = 1;
-      return;
-    }
-
-    await targetDirectory.create(recursive: true);
-    for (final name in _sherpaBinaryFileNames) {
-      final installed = await File(
-        '${stagingDirectory.path}/$_sherpaArchiveName/bin/$name',
-      ).copy('${targetDirectory.path}/$name');
-      await _markExecutable(installed);
-    }
-    stdout.writeln('sherpa_ready=${targetDirectory.absolute.path}');
-  } finally {
-    await stagingDirectory.delete(recursive: true);
-  }
-}
-
 Future<void> _fetchModel(
   HttpClient client,
   _ModelSpec model, {
@@ -402,70 +324,8 @@ Future<void> _fetchModel(
   stdout.writeln('model_ready=${targetFile.absolute.path}');
 }
 
-Future<void> _fetchCli(HttpClient client, {required bool force}) async {
-  final targetDirectory = Directory('bin/whisper');
-  final cliFile = File('${targetDirectory.path}/${whisperCliFiles.first}');
-  final missing = whisperCliFiles
-      .where((name) => !File('${targetDirectory.path}/$name').existsSync())
-      .toList();
-  if (!force && missing.isEmpty) {
-    stdout.writeln('cli_ready=${cliFile.absolute.path}');
-    return;
-  }
-
-  stdout.writeln('downloading=$whisperZipUrl');
-  final stagingDirectory = await Directory.systemTemp.createTemp(
-    'typemate-whisper-cli',
-  );
-  try {
-    final zipFile = File('${stagingDirectory.path}/whisper-archive');
-    if (!await _downloadWithReleaseFallback(client, whisperZipUrl, zipFile)) {
-      exitCode = 1;
-      return;
-    }
-
-    // Windows 10+ ships bsdtar, which extracts zip archives; on Linux tar
-    // handles the .tar.gz.
-    final extract = await Process.run('tar', [
-      '-xf',
-      zipFile.path,
-      '-C',
-      stagingDirectory.path,
-    ]);
-    if (extract.exitCode != 0) {
-      stderr.writeln('cli_extract_failed=${extract.stderr}');
-      exitCode = 1;
-      return;
-    }
-
-    await targetDirectory.create(recursive: true);
-    // The Windows zip nests binaries under Release/; the Linux tarball is
-    // flat.
-    final extractedDirectory = _isWindows
-        ? Directory('${stagingDirectory.path}/Release')
-        : stagingDirectory;
-    for (final name in whisperCliFiles) {
-      final installed = await File(
-        '${extractedDirectory.path}/$name',
-      ).copy('${targetDirectory.path}/$name');
-      await _markExecutable(installed);
-    }
-    if (_isWindows) {
-      await for (final entry in extractedDirectory.list()) {
-        final baseName = entry.uri.pathSegments.last;
-        if (entry is File && baseName.startsWith('ggml-cpu-')) {
-          await entry.copy('${targetDirectory.path}/$baseName');
-        }
-      }
-    }
-    stdout.writeln('cli_ready=${cliFile.absolute.path}');
-  } finally {
-    await stagingDirectory.delete(recursive: true);
-  }
-}
-
 Future<void> _markExecutable(File file) async {
-  if (_isWindows) {
+  if (Platform.isWindows) {
     return;
   }
   await Process.run('chmod', ['+x', file.path]);

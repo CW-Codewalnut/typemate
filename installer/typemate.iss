@@ -1,7 +1,8 @@
 ; TypeMate Windows installer (Inno Setup 6).
 ;
-; Build (from the repo root, after `flutter build windows --release`):
-;   ISCC.exe /DAppVersion=X.Y.Z installer\typemate.iss
+; Build via scripts/package-windows-release.sh, which stages the Release
+; bundle into build\package\typemate-windows-x64 and strips the on-demand
+; speech models (they download on first use) before this script packs it.
 ; Output: dist\TypeMate-Setup-vX.Y.Z.exe
 ;
 ; Per-user install (no admin prompt): the app is a personal utility and
@@ -24,16 +25,24 @@ OutputDir=..\dist
 OutputBaseFilename=TypeMate-Setup-v{#AppVersion}
 SetupIconFile=..\windows\runner\resources\app_icon.ico
 UninstallDisplayIcon={app}\typemate.exe
-; The bundle is dominated by already-quantized models; heavy compression
-; buys little and costs minutes.
+; The remaining bundle (binaries + small models) compresses fine at the
+; fast preset; the large speech models are not shipped at all.
 Compression=lzma2/fast
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
 
 [Files]
-Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; \
+Source: "..\build\package\typemate-windows-x64\*"; DestDir: "{app}"; \
   Flags: recursesubdirs ignoreversion
+
+[InstallDelete]
+; Retired in 1.4.x: every speech engine (Parakeet, the whisper
+; fine-tunes, the GTCRN denoiser) runs in-process now; the whole bin
+; folder is dead weight from older installs on Windows. The large model
+; files from fat installs are deliberately KEPT on upgrade — they keep
+; working offline and spare the user a re-download.
+Type: filesandordirs; Name: "{app}\bin"
 
 [Icons]
 Name: "{userprograms}\Type Mate"; Filename: "{app}\typemate.exe"

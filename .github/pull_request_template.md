@@ -33,7 +33,7 @@
       by it (verified, not assumed).
 - [ ] Nothing visible is a placeholder: every control, tab, and
       metric added by this PR works.
-- [ ] Docs (README / CLAUDE.md / DESIGN.md) are updated where
+- [ ] Docs (README / CLAUDE.md / docs/DESIGN.md) are updated where
       behavior or process changed.
 - [ ] Release PRs only: version bumped in `pubspec.yaml`, and this
       description is written to serve as the release notes.

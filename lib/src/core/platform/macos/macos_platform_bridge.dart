@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
-import '../desktop_notification_sender.dart';
 import '../platform_bridge.dart';
 
 const _nativeChannel = MethodChannel('typemate/macos');
@@ -24,15 +23,12 @@ class MacosPlatformBridge implements PlatformBridge {
   MacosPlatformBridge({
     MacosNativeMethodInvoker? nativeMethodInvoker,
     this.processRunner = Process.run,
-    DesktopNotificationSender? notificationSender,
     String? executablePath,
   }) : nativeMethodInvoker = nativeMethodInvoker ?? _nativeChannel.invokeMethod,
-       notificationSender = notificationSender ?? showDesktopNotification,
        _executablePath = executablePath ?? Platform.resolvedExecutable;
 
   final MacosNativeMethodInvoker nativeMethodInvoker;
   final MacosProcessRunner processRunner;
-  final DesktopNotificationSender notificationSender;
   final String _executablePath;
 
   String? _overlayState;
@@ -64,12 +60,14 @@ class MacosPlatformBridge implements PlatformBridge {
   }
 
   @override
-  Future<void> showDictationFailureNotification(String message) async {
+  Future<void> showDictationFailureOverlay(String message) async {
     try {
-      await notificationSender('Dictation failed', message);
+      await nativeMethodInvoker<void>('showOverlay', {
+        'state': 'error',
+        'message': message,
+      });
     } on MissingPluginException {
-      // Runners without the notification plugin skip the toast; the
-      // in-app history banner still carries the reason.
+      // Development runners without the native overlay skip the toast.
     }
   }
 

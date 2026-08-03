@@ -26,6 +26,25 @@ void main() {
     expect(controller.statusMessage, contains('Ready'));
   });
 
+  test('markReady shows ready without loading the engine', () async {
+    final engine = FakeSttEngine();
+    final controller = DictationController(
+      platformBridge: MockPlatformBridge(),
+      sttEngine: engine,
+      audioRecorder: FakeAudioRecorder(),
+    );
+
+    controller.markReady();
+
+    expect(controller.phase, DictationPhase.idle);
+    expect(controller.statusMessage, contains('Ready'));
+    expect(
+      engine.ready,
+      isFalse,
+      reason: 'The engine loads lazily on first use, not on markReady.',
+    );
+  });
+
   test('recovers when preparing the local speech engine fails', () async {
     final controller = DictationController(
       platformBridge: MockPlatformBridge(),
@@ -102,11 +121,10 @@ void main() {
     expect(keptPath, isNotNull);
     expect(keptPath, contains('failed'));
     expect(File(keptPath!).existsSync(), isTrue);
-    // Only the OS toast (read outside the app) points at History.
+    // The failure toast shows where the user was dictating from.
     expect(
-      platformBridge.lastFailureNotification,
-      DictationController.transcriptionFailedMessage +
-          DictationController.retryFromHistoryHint,
+      platformBridge.lastFailureOverlayMessage,
+      DictationController.transcriptionFailedMessage,
     );
   });
 
@@ -557,7 +575,7 @@ void main() {
       DictationController.transcriptionTimeoutMessage,
     );
     expect(
-      platformBridge.lastFailureNotification,
+      platformBridge.lastFailureOverlayMessage,
       DictationController.transcriptionTimeoutMessage,
     );
     expect(platformBridge.overlayVisible, isFalse);
@@ -679,7 +697,7 @@ void main() {
     await controller.stopListening();
 
     expect(
-      platformBridge.lastFailureNotification,
+      platformBridge.lastFailureOverlayMessage,
       DictationController.transcriptionFailedMessage,
     );
   });
@@ -758,12 +776,12 @@ void main() {
 
     expect(controller.phase, DictationPhase.idle);
     expect(
-      platformBridge.lastFailureNotification,
+      platformBridge.lastFailureOverlayMessage,
       DictationController.transcriptionFailedMessage,
     );
   });
 
-  test('successful dictation posts no failure notification', () async {
+  test('successful dictation shows no failure toast', () async {
     final platformBridge = MockPlatformBridge();
     final controller = DictationController(
       platformBridge: platformBridge,
@@ -774,7 +792,41 @@ void main() {
     await controller.startListening();
     await controller.stopListening();
 
-    expect(platformBridge.lastFailureNotification, isEmpty);
+    expect(platformBridge.lastFailureOverlayMessage, isEmpty);
+  });
+
+  test('a blocked start refuses to record and shows the reason', () async {
+    final platformBridge = MockPlatformBridge();
+    final recorder = FakeAudioRecorder();
+    var modelReady = false;
+    final controller = DictationController(
+      platformBridge: platformBridge,
+      sttEngine: FakeSttEngine(transcript: 'hello'),
+      audioRecorder: recorder,
+      dictationBlocker: () =>
+          modelReady ? null : 'Download the speech model first.',
+    );
+
+    await controller.startListening();
+
+    // No recording, no listening overlay — just the refusal, surfaced as
+    // the error state and the failure toast (the user may be in another
+    // app entirely, holding the shortcut).
+    expect(recorder.started, isFalse);
+    expect(platformBridge.overlayVisible, isFalse);
+    expect(controller.phase, DictationPhase.idle);
+    expect(controller.errorMessage, 'Download the speech model first.');
+    expect(
+      platformBridge.lastFailureOverlayMessage,
+      'Download the speech model first.',
+    );
+
+    // Once the model exists, the same controller dictates normally.
+    modelReady = true;
+    await controller.startListening();
+    expect(controller.phase, DictationPhase.listening);
+    await controller.stopListening();
+    expect(platformBridge.lastInsertedText, 'hello');
   });
 
   test('keeps the failure reason until the next dictation starts', () async {
@@ -1087,11 +1139,11 @@ class FailingOverlayPlatformBridge extends MockPlatformBridge {
   }
 
   @override
-  Future<void> showDictationFailureNotification(String message) async {
+  Future<void> showDictationFailureOverlay(String message) async {
     if (failTranscribingOnly) {
-      return super.showDictationFailureNotification(message);
+      return super.showDictationFailureOverlay(message);
     }
-    throw StateError('notifier unavailable');
+    throw StateError('overlay unavailable');
   }
 }
 
@@ -1163,7 +1215,7 @@ class ThrowingInsertPlatformBridge implements PlatformBridge {
   }
 
   @override
-  Future<void> showDictationFailureNotification(String message) async {}
+  Future<void> showDictationFailureOverlay(String message) async {}
 
   @override
   Future<void> insertTextIntoFocusedField(String text) async {

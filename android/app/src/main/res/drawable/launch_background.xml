@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pre-Android-12 splash: the TypeMate mark centered on white, matching
+     the in-app splash screen. Android 12+ ignores this and shows the
+     adaptive launcher icon on windowSplashScreenBackground instead
+     (values-v31/styles.xml). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@android:color/white" />
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/splash_logo" />
+    </item>
+</layer-list>

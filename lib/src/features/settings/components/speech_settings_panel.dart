@@ -3,9 +3,17 @@ import 'package:flutter/material.dart';
 import '../../../core/speech_settings_controller.dart';
 
 class SpeechSettingsPanel extends StatelessWidget {
-  const SpeechSettingsPanel({super.key, required this.controller});
+  const SpeechSettingsPanel({
+    super.key,
+    required this.controller,
+    this.options = speechLanguageOptions,
+  });
 
   final SpeechSettingsController controller;
+
+  /// The languages this platform's engines can actually serve; Android
+  /// offers the Parakeet subset.
+  final List<SpeechLanguageOption> options;
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +31,7 @@ class SpeechSettingsPanel extends StatelessWidget {
               initialValue: controller.languageCode,
               decoration: const InputDecoration(labelText: 'Language'),
               items: [
-                for (final language in speechLanguageOptions)
+                for (final language in options)
                   DropdownMenuItem(
                     value: language.code,
                     child: Text(language.label),

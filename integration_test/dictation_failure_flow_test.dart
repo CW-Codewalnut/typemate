@@ -1,48 +1,58 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:typemate/src/app.dart';
+import 'package:typemate/src/core/audio/audio_recorder.dart';
 import 'package:typemate/src/core/dictation_controller.dart';
 import 'package:typemate/src/core/platform/mock_platform_bridge.dart';
-import 'package:typemate/src/core/stt/parakeet_server_stt_engine.dart';
+import 'package:typemate/src/core/stt/stt_engine.dart';
 
 import 'support/fakes.dart';
 
-/// The "stuck transcribing forever" bug, end to end: a local speech server
-/// that accepts the audio and never answers must NOT strand the app in the
+/// Hangs (times out) until [hangs] is cleared, then transcribes — the
+/// shape of a wedged native decoder that later recovers.
+class SwitchableHangingSttEngine implements SttEngine {
+  SwitchableHangingSttEngine({required this.transcript});
+
+  final String transcript;
+  bool hangs = true;
+
+  @override
+  Future<bool> isReady() async => true;
+
+  @override
+  Future<void> prepare() async {}
+
+  @override
+  Future<String> transcribe(AudioRecording recording) async {
+    if (hangs) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      throw TimeoutException('decoder wedged');
+    }
+    return transcript;
+  }
+}
+
+/// The "stuck transcribing forever" bug, end to end: a speech engine that
+/// accepts the audio and never answers must NOT strand the app in the
 /// transcribing overlay. The app has to surface the failure (error overlay,
-/// no inserted text) and accept the very next dictation, which succeeds once
-/// the server answers again — all through the production engine, controller,
-/// state machine, and UI, over a real loopback websocket.
+/// no inserted text) and accept the very next dictation, which succeeds
+/// once the engine answers again — through the production controller,
+/// state machine, timeout policy, and UI.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'a hung speech server surfaces an error and the next dictation recovers',
+    'a hung speech engine surfaces an error and the next dictation recovers',
     (tester) async {
-      // Real websocket server; whether it answers is the test's dial.
-      var serverAnswers = false;
-      final speechServer = await HttpServer.bind(
-        InternetAddress.loopbackIPv4,
-        0,
+      // Whether the engine answers is the test's dial; hung requests
+      // stay pending forever, exactly like a wedged native decoder.
+      final sttEngine = SwitchableHangingSttEngine(
+        transcript: 'recovered after the outage',
       );
-      addTearDown(() async => speechServer.close(force: true));
-      speechServer.listen((request) async {
-        if (!WebSocketTransformer.isUpgradeRequest(request)) {
-          request.response.statusCode = HttpStatus.badRequest;
-          await request.response.close();
-          return;
-        }
-        final socket = await WebSocketTransformer.upgrade(request);
-        socket.listen((message) {
-          if (serverAnswers) {
-            socket.add('{"text": "recovered after the outage"}');
-          }
-          // else: swallow the audio and never reply — the hang under test.
-        });
-      });
 
       final dataDirectory = Directory.systemTemp.createTempSync(
         'typemate-e2e-',
@@ -54,19 +64,6 @@ void main() {
       final recorderFactory = WavWritingAudioRecorderFactory(
         outputDirectory: dataDirectory,
       );
-      // The production English engine, adopting the test server on its port.
-      // Short timeouts keep the test fast; the production defaults differ
-      // only in duration.
-      final sttEngine = ParakeetServerSttEngine(
-        serverExecutable: 'unused: the server is already reachable',
-        encoderPath: 'unused',
-        decoderPath: 'unused',
-        joinerPath: 'unused',
-        tokensPath: 'unused',
-        port: speechServer.port,
-        responseTimeout: const Duration(seconds: 2),
-        socketCloseTimeout: const Duration(seconds: 1),
-      );
 
       await tester.pumpWidget(
         TypeMateApp(
@@ -76,7 +73,9 @@ void main() {
           platformBridge: bridge,
           audioRecorderFactory: recorderFactory,
           dataDirectory: dataDirectory,
-          splashDuration: Duration.zero,
+          // Desktop hold-shortcut flow; force the desktop shell so it runs
+          // identically on the Android emulator.
+          useMobileShell: false,
         ),
       );
       await tester.pumpAndSettle();
@@ -92,25 +91,21 @@ void main() {
 
       expect(bridge.overlayVisible, isFalse);
       expect(bridge.lastInsertedText, isEmpty);
-      // The failed history entry is the ONLY in-app surface carrying the
-      // reason (no separate banner; the overlay just closes)...
+      // The failure reason is visible in-app: the failed history entry
+      // (every platform) and, on mobile, the mic tile's status line too.
+      expect(find.textContaining('Transcription took too long'), findsWidgets);
+      // ...and the failure toast (shown at the overlay position, visible
+      // outside the app) carries the same reason.
       expect(
-        find.textContaining('Transcription took too long'),
-        findsOneWidget,
-      );
-      // ...and the OS notification (read outside the app, persists in the
-      // tray) is the one place that points back at History.
-      expect(
-        bridge.lastFailureNotification,
-        '${DictationController.transcriptionTimeoutMessage}'
-        '${DictationController.retryFromHistoryHint}',
+        bridge.lastFailureOverlayMessage,
+        DictationController.transcriptionTimeoutMessage,
       );
       // The failed dictation kept its recording and offers a retry.
       final retryButton = find.byKey(const Key('history-retry-button'));
       expect(retryButton, findsOneWidget);
 
-      // Server healthy again: Retry resolves the failed entry in place.
-      serverAnswers = true;
+      // Engine healthy again: Retry resolves the failed entry in place.
+      sttEngine.hangs = false;
       await tester.tap(retryButton);
       await tester.pumpAndSettle();
 
@@ -164,7 +159,7 @@ void main() {
           platformBridge: bridge,
           audioRecorderFactory: recorderFactory,
           dataDirectory: dataDirectory,
-          splashDuration: Duration.zero,
+          useMobileShell: false,
         ),
       );
       await tester.pumpAndSettle();
@@ -181,7 +176,7 @@ void main() {
       expect(sttEngine.transcribeCalls, 2);
       expect(bridge.lastInsertedText, 'typed despite history');
       expect(bridge.overlayVisible, isFalse);
-      expect(bridge.lastFailureNotification, isEmpty);
+      expect(bridge.lastFailureOverlayMessage, isEmpty);
     },
   );
 }

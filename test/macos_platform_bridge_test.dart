@@ -178,13 +178,14 @@ void main() {
     expect(infoPlist, contains('NSMicrophoneUsageDescription'));
     expect(infoPlist, contains('NSAppleEventsUsageDescription'));
 
-    // The fetch script must serve macOS its own runtime, never the Linux
-    // binaries or Linux-only helper tools.
+    // The fetch script serves models only — every speech engine runs
+    // in-process via plugins, so no speech binaries are fetched for any
+    // platform; only Linux gets its capture/typing helper tools.
     final fetchScript = File(
       'tool/fetch_whisper_runtime.dart',
     ).readAsStringSync();
-    expect(fetchScript, contains('whisper-v1.9.1-macos-universal.tar.gz'));
-    expect(fetchScript, contains('sherpa-onnx-v1.13.4-osx-universal2-static'));
+    expect(fetchScript, isNot(contains('whisper-blas-bin')));
+    expect(fetchScript, isNot(contains('sherpa-onnx-v1.13.4')));
     expect(fetchScript, contains('if (Platform.isLinux) {'));
   });
 
@@ -206,7 +207,7 @@ void main() {
       expect(source, contains('tickSeconds: TimeInterval = 0.07'));
       // Rounded capsule bars and pill.
       expect(source, contains('xRadius: barWidth / 2'));
-      expect(source, contains('xRadius: overlayHeight / 2'));
+      expect(source, contains('xRadius: bounds.height / 2'));
       // Never steals focus from the field being dictated into.
       expect(source, contains('.nonactivatingPanel'));
       expect(source, contains('orderFrontRegardless'));

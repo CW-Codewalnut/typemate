@@ -1,6 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:typemate/src/app.dart';
+import 'package:typemate/src/core/audio/record_package_audio.dart';
+import 'package:typemate/src/core/audio/system_default_microphone_discovery.dart';
 import 'package:typemate/src/core/hold_shortcut_controller.dart';
+import 'package:typemate/src/core/platform/android/android_platform_bridge.dart';
 import 'package:typemate/src/core/platform/linux/linux_platform_bridge.dart';
 import 'package:typemate/src/core/platform/linux/linux_x11_hold_shortcut_registrar.dart';
 import 'package:typemate/src/core/platform/mock_platform_bridge.dart';
@@ -60,5 +65,42 @@ void main() {
       ),
       isA<NoopHoldShortcutRegistrar>(),
     );
+  });
+
+  test('uses the Android bridge on Android', () {
+    expect(
+      createDefaultPlatformBridge(
+        isWindows: false,
+        isLinux: false,
+        isMacOS: false,
+        isAndroid: true,
+      ),
+      isA<AndroidPlatformBridge>(),
+    );
+  });
+
+  test('Android offers the single system default microphone', () {
+    expect(
+      createDefaultMicrophoneDiscovery(
+        isWindows: false,
+        isLinux: false,
+        isAndroid: true,
+      ),
+      isA<SystemDefaultMicrophoneDiscovery>(),
+    );
+  });
+
+  test('Android records the system default device with permission', () {
+    final factory = createDefaultAudioRecorderFactory(
+      outputDirectory: Directory.systemTemp,
+      isWindows: false,
+      isLinux: false,
+      isAndroid: true,
+    );
+
+    expect(factory, isA<RecordPackageAudioRecorderFactory>());
+    final recordFactory = factory as RecordPackageAudioRecorderFactory;
+    expect(recordFactory.useSystemDefaultDevice, isTrue);
+    expect(recordFactory.requestPermission, isTrue);
   });
 }

@@ -28,12 +28,20 @@ void main() {
       );
 
       expect(await sttEngine.isReady(), isTrue);
-      expect(find.text('Speech history'), findsOneWidget);
+      // Tab label and page title: the same Dictate page as mobile.
+      expect(find.text('Dictate'), findsWidgets);
+      // Under the tile: a quiet plain-text reminder of the shortcut, with
+      // the configured combo — not a second card.
       expect(
-        find.text('Press and hold Ctrl+Win and start speaking.'),
+        find.text(
+          'You can also press and hold Ctrl+Win in any app to dictate there.',
+        ),
         findsOneWidget,
       );
+      // No status line: the mic FAB narrates its own state, and idle
+      // needs no narration at all.
       expect(find.text('Ready. Hold the shortcut and speak.'), findsNothing);
+      expect(find.byKey(const Key('hold-to-dictate-button')), findsOneWidget);
     },
   );
 
@@ -96,17 +104,19 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 250));
 
-    // The hotkey does nothing while the engine loads; the page says so
-    // instead of showing a dictation instruction that will not work.
-    expect(find.textContaining('Starting the speech engine'), findsOneWidget);
-    expect(find.textContaining('Press and hold'), findsNothing);
+    // While the engine loads, the card slot shows the busy card and the
+    // mic FAB expands into its "Preparing..." pill.
+    expect(find.textContaining('Preparing the speech engine'), findsOneWidget);
+    expect(find.text('Preparing...'), findsOneWidget);
 
     engine.completePrepare();
     await tester.pump();
     await tester.pump();
 
-    expect(find.textContaining('Starting the speech engine'), findsNothing);
-    expect(find.textContaining('Press and hold'), findsOneWidget);
+    // Ready: the busy card disappears entirely; the idle mic remains.
+    expect(find.textContaining('Preparing the speech engine'), findsNothing);
+    expect(find.text('Preparing...'), findsNothing);
+    expect(find.byKey(const Key('hold-to-dictate-button')), findsOneWidget);
   });
 
   testWidgets(
@@ -218,9 +228,16 @@ void main() {
     await tester.tap(retryButtons.first);
     await tester.pump();
 
-    // The tapped retry shows progress; every other retry is disabled
-    // because only one transcription can run at a time.
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    // The tapped retry shows progress (the mic tile spins too — the
+    // controller is transcribing); every other retry is disabled because
+    // only one transcription can run at a time.
+    expect(
+      find.descendant(
+        of: retryButtons,
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsOneWidget,
+    );
     final innerButtons = find.descendant(
       of: retryButtons,
       matching: find.byWidgetPredicate((widget) => widget is TextButton),
@@ -491,17 +508,18 @@ void main() {
     expect(speechSettingsController.languageCode, 'hi');
   });
 
-  testWidgets('empty history state is centered without a card', (tester) async {
+  testWidgets('empty history shows the mic mark with its two lines', (
+    tester,
+  ) async {
     await tester.pumpHome();
     await tester.pump();
 
-    final emptyState = find.byKey(const Key('empty-history-state'));
-    expect(emptyState, findsOneWidget);
+    expect(find.byKey(const Key('empty-history-state')), findsOneWidget);
+    expect(find.text('No history yet.'), findsOneWidget);
     expect(
-      find.descendant(of: emptyState, matching: find.byType(Card)),
-      findsNothing,
+      find.text('Everything you dictate will appear here.'),
+      findsOneWidget,
     );
-    expect(find.text('No speech history yet.'), findsOneWidget);
   });
 
   testWidgets('history page shows generated speech text', (tester) async {
@@ -529,7 +547,9 @@ void main() {
     await tester.pumpHome();
     await tester.pump();
 
-    final titleTop = tester.getTopLeft(find.text('Speech history')).dy;
+    // 'Dictate' appears as both the rail label and the page title; the
+    // page title is the last one in the tree.
+    final titleTop = tester.getTopLeft(find.text('Dictate').last).dy;
 
     expect(titleTop, lessThan(80));
   });

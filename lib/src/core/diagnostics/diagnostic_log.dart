@@ -33,6 +33,10 @@ class DiagnosticLog {
   /// The folder Settings opens for the user, or null when disabled.
   String? get directoryPath => file?.parent.path;
 
+  /// The log file itself (mobile shares it through the system sheet), or
+  /// null when disabled.
+  String? get filePath => file?.path;
+
   void log(String area, String message) {
     final target = file;
     if (target == null) {

@@ -21,13 +21,25 @@ class SettingsPage extends StatelessWidget {
     this.shortcutController,
     this.telemetryController,
     this.logsDirectoryPath,
+    this.logFilePath,
     this.onOpenLogsFolder,
     this.onQuitRequested,
+    this.languageOptions = speechLanguageOptions,
+    this.showNoiseSuppression = true,
+    this.showHardwareShortcutNote = false,
   });
 
   final MicrophoneSettingsController microphoneController;
   final SpeechSettingsController speechSettingsController;
   final HoldShortcutController? shortcutController;
+
+  /// Languages the current platform's engines serve (Android offers the
+  /// Parakeet subset only).
+  final List<SpeechLanguageOption> languageOptions;
+
+  /// Hidden on Android: the noise-suppression runtime is a desktop helper
+  /// binary, and a visible toggle must work.
+  final bool showNoiseSuppression;
 
   /// Anonymous error-reporting consent; null or unavailable hides the
   /// toggle (tests and builds without a telemetry DSN).
@@ -36,6 +48,15 @@ class SettingsPage extends StatelessWidget {
   /// Where the local diagnostic log lives; null hides the whole
   /// Troubleshooting panel (tests without a reporter).
   final String? logsDirectoryPath;
+
+  /// Mobile: the log file offered through the system share sheet instead
+  /// of a folder to open.
+  final String? logFilePath;
+
+  /// Mobile: describes the fixed physical-keyboard shortcut (Ctrl+Meta,
+  /// served by the accessibility service) — informational, since Android
+  /// offers no app-configurable global shortcuts.
+  final bool showHardwareShortcutNote;
 
   /// Injectable for widget tests; defaults to the OS file manager.
   final Future<void> Function(String path)? onOpenLogsFolder;
@@ -60,20 +81,30 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          SpeechSettingsPanel(controller: speechSettingsController),
+          SpeechSettingsPanel(
+            controller: speechSettingsController,
+            options: languageOptions,
+          ),
           const SizedBox(height: 24),
           MicrophoneSelectionPanel(controller: microphoneController),
-          const SizedBox(height: 24),
-          NoiseSuppressionPanel(controller: speechSettingsController),
+          if (showNoiseSuppression) ...[
+            const SizedBox(height: 24),
+            NoiseSuppressionPanel(controller: speechSettingsController),
+          ],
           if (shortcutController != null) ...[
             const SizedBox(height: 24),
             ShortcutSettingsPanel(controller: shortcutController!),
+          ] else if (showHardwareShortcutNote) ...[
+            const SizedBox(height: 24),
+            const _HardwareShortcutNote(),
           ],
           if (logsDirectoryPath != null ||
+              logFilePath != null ||
               (telemetryController?.isAvailable ?? false)) ...[
             const SizedBox(height: 24),
             TroubleshootingPanel(
               logsDirectoryPath: logsDirectoryPath,
+              logFilePath: logFilePath,
               telemetryController: telemetryController,
               onOpenLogsFolder: onOpenLogsFolder,
             ),
@@ -85,6 +116,47 @@ class SettingsPage extends StatelessWidget {
           const SizedBox(height: 24),
           const _VersionLabel(),
         ],
+      ),
+    );
+  }
+}
+
+/// Android's shortcut story, stated honestly: the combo is fixed and
+/// served by the accessibility service; the OS offers no app-configurable
+/// global shortcuts to record.
+class _HardwareShortcutNote extends StatelessWidget {
+  const _HardwareShortcutNote();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 0,
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Keyboard shortcut',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'With a physical keyboard connected, press and hold Ctrl+Meta '
+              'in any app to dictate. Needs the floating mic (accessibility '
+              'service) to be on. Android does not allow apps to offer '
+              'custom global shortcuts.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

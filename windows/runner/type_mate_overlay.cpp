@@ -7,10 +7,25 @@ namespace {
 constexpr wchar_t kOverlayWindowClass[] = L"TypeMateNativeOverlayWindow";
 constexpr int kOverlayWidth = 210;
 constexpr int kOverlayHeight = 58;
+// The error toast is a capsule sized to its sentence: text wraps at this
+// width, and padding completes the pill.
+constexpr int kErrorMaxTextWidth = 360;
+constexpr int kErrorPadX = 24;
+constexpr int kErrorPadY = 13;
+constexpr int kErrorMinHeight = 44;
 constexpr int kTimerId = 1;
 constexpr int kTimerMs = 70;
+// Auto-hide for the error toast; every other state is hidden by the app.
+constexpr int kHideTimerId = 2;
+constexpr int kErrorAutoHideMs = 4500;
 
 COLORREF Rgb(int red, int green, int blue) { return RGB(red, green, blue); }
+
+HFONT CreateOverlayFont() {
+  return CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                    CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+}
 }  // namespace
 
 TypeMateOverlay::TypeMateOverlay() { RegisterWindowClass(); }
@@ -33,6 +48,34 @@ void TypeMateOverlay::RegisterWindowClass() {
   registered = true;
 }
 
+int TypeMateOverlay::Width() const {
+  return IsError() ? error_text_width_ + 2 * kErrorPadX : kOverlayWidth;
+}
+
+int TypeMateOverlay::Height() const {
+  if (!IsError()) {
+    return kOverlayHeight;
+  }
+  const int fitted = error_text_height_ + 2 * kErrorPadY;
+  return fitted < kErrorMinHeight ? kErrorMinHeight : fitted;
+}
+
+/// Sizes the error capsule to its sentence: wrap at the max text width,
+/// then pad. Measured with the same font Paint() draws with.
+void TypeMateOverlay::MeasureErrorMessage() {
+  HDC hdc = GetDC(nullptr);
+  HFONT font = CreateOverlayFont();
+  HGDIOBJ previous_font = SelectObject(hdc, font);
+  RECT rect = {0, 0, kErrorMaxTextWidth, 0};
+  DrawText(hdc, message_.c_str(), -1, &rect,
+           DT_CALCRECT | DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
+  error_text_width_ = rect.right - rect.left;
+  error_text_height_ = rect.bottom - rect.top;
+  SelectObject(hdc, previous_font);
+  DeleteObject(font);
+  ReleaseDC(nullptr, hdc);
+}
+
 void TypeMateOverlay::EnsureWindow() {
   if (hwnd_) {
     return;
@@ -43,17 +86,18 @@ void TypeMateOverlay::EnsureWindow() {
     SystemParametersInfo(SPI_GETWORKAREA, 0, &rect, 0);
     return rect;
   }();
-  const int left = work_area.left +
-                   ((work_area.right - work_area.left - kOverlayWidth) / 2);
-  const int top = work_area.bottom - kOverlayHeight - 28;
+  const int left =
+      work_area.left + ((work_area.right - work_area.left - Width()) / 2);
+  const int top = work_area.bottom - Height() - 28;
 
   hwnd_ = CreateWindowEx(
       WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kOverlayWindowClass,
-      L"TypeMate", WS_POPUP, left, top, kOverlayWidth, kOverlayHeight, nullptr,
+      L"TypeMate", WS_POPUP, left, top, Width(), Height(), nullptr,
       nullptr, GetModuleHandle(nullptr), this);
   if (hwnd_) {
-    HRGN rounded_region = CreateRoundRectRgn(0, 0, kOverlayWidth + 1,
-                                            kOverlayHeight + 1, 58, 58);
+    // Ellipse = full height: a capsule for any window size.
+    HRGN rounded_region = CreateRoundRectRgn(0, 0, Width() + 1, Height() + 1,
+                                             Height(), Height());
     SetWindowRgn(hwnd_, rounded_region, TRUE);
   }
 }
@@ -61,8 +105,20 @@ void TypeMateOverlay::EnsureWindow() {
 // The start chime is not played here: dictation sounds are Dart-side
 // (lib/src/core/platform/dictation_sounds.dart), one implementation for
 // every desktop.
-void TypeMateOverlay::Show(const std::wstring& state) {
+void TypeMateOverlay::Show(const std::wstring& state,
+                           const std::wstring& message) {
+  const bool was_error = IsError();
   state_ = state.empty() ? L"listening" : state;
+  message_ = message;
+  if (IsError()) {
+    MeasureErrorMessage();
+  }
+  // The error toast's window is sized to its message, so entering (or
+  // leaving) the error state recreates the window; the listening and
+  // transcribing states share one fixed-size window with no flicker.
+  if (hwnd_ && (IsError() || was_error)) {
+    Hide();
+  }
   EnsureWindow();
   if (!hwnd_) {
     return;
@@ -70,7 +126,15 @@ void TypeMateOverlay::Show(const std::wstring& state) {
 
   SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0,
                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-  SetTimer(hwnd_, kTimerId, kTimerMs, nullptr);
+  if (IsError()) {
+    // No bar animation to drive; just an auto-hide so the toast never
+    // needs a hide call from the app.
+    KillTimer(hwnd_, kTimerId);
+    SetTimer(hwnd_, kHideTimerId, kErrorAutoHideMs, nullptr);
+  } else {
+    KillTimer(hwnd_, kHideTimerId);
+    SetTimer(hwnd_, kTimerId, kTimerMs, nullptr);
+  }
   InvalidateRect(hwnd_, nullptr, TRUE);
 }
 
@@ -107,6 +171,14 @@ LRESULT TypeMateOverlay::HandleMessage(HWND hwnd, UINT message, WPARAM wparam,
                                        LPARAM lparam) {
   switch (message) {
     case WM_TIMER:
+      if (wparam == kHideTimerId) {
+        // The error toast dismisses itself; a newer non-error overlay owns
+        // the animation timer instead and must not be torn down.
+        if (IsError()) {
+          Hide();
+        }
+        return 0;
+      }
       tick_ += 1;
       InvalidateRect(hwnd, nullptr, TRUE);
       return 0;
@@ -128,12 +200,16 @@ LRESULT TypeMateOverlay::HandleMessage(HWND hwnd, UINT message, WPARAM wparam,
 }
 
 void TypeMateOverlay::Paint(HDC hdc) {
-  RECT rect = {0, 0, kOverlayWidth, kOverlayHeight};
-  HBRUSH background = CreateSolidBrush(Rgb(31, 34, 48));
-  HPEN background_pen = CreatePen(PS_SOLID, 1, Rgb(31, 34, 48));
+  // The error toast is a red pill with the failure sentence; everything
+  // else is the dark pill with the animated bars.
+  const COLORREF fill = IsError() ? Rgb(96, 28, 34) : Rgb(31, 34, 48);
+  RECT rect = {0, 0, Width(), Height()};
+  HBRUSH background = CreateSolidBrush(fill);
+  HPEN background_pen = CreatePen(PS_SOLID, 1, fill);
   HGDIOBJ previous_brush = SelectObject(hdc, background);
   HGDIOBJ previous_pen = SelectObject(hdc, background_pen);
-  RoundRect(hdc, rect.left, rect.top, rect.right, rect.bottom, 58, 58);
+  RoundRect(hdc, rect.left, rect.top, rect.right, rect.bottom, Height(),
+            Height());
   SelectObject(hdc, previous_pen);
   SelectObject(hdc, previous_brush);
   DeleteObject(background_pen);
@@ -141,11 +217,20 @@ void TypeMateOverlay::Paint(HDC hdc) {
 
   SetBkMode(hdc, TRANSPARENT);
   SetTextColor(hdc, Rgb(255, 255, 255));
-  HFONT font = CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                          DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                          CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                          DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+  HFONT font = CreateOverlayFont();
   HFONT previous_font = static_cast<HFONT>(SelectObject(hdc, font));
+  if (IsError()) {
+    // Centered both ways: the window was sized from this same measured
+    // text, so the rect just re-centers the measured block.
+    const int top = (Height() - error_text_height_) / 2;
+    RECT text_rect = {kErrorPadX, top, Width() - kErrorPadX,
+                      top + error_text_height_};
+    DrawText(hdc, message_.c_str(), -1, &text_rect,
+             DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
+    SelectObject(hdc, previous_font);
+    DeleteObject(font);
+    return;
+  }
   RECT text_rect = {8, 7, kOverlayWidth - 8, 29};
   const wchar_t* label = state_ == L"transcribing" ? L"Transcribing locally..."
                                                    : L"TypeMate is listening...";

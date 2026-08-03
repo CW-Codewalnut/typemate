@@ -13,6 +13,11 @@ import 'microphone_audio_recorder_factory.dart' show AudioRecorderFactory;
 abstract interface class RecordBackend {
   Future<List<record_pkg.InputDevice>> listInputDevices();
 
+  /// Whether audio capture is allowed. On Android this also shows the
+  /// runtime permission dialog when it has not been answered yet; desktop
+  /// platforms report true (Windows/Linux) or the OS consent state (macOS).
+  Future<bool> hasPermission();
+
   Future<void> start(record_pkg.RecordConfig config, {required String path});
 
   Future<String?> stop();
@@ -28,6 +33,9 @@ class PluginRecordBackend implements RecordBackend {
   @override
   Future<List<record_pkg.InputDevice>> listInputDevices() =>
       _recorder.listInputDevices();
+
+  @override
+  Future<bool> hasPermission() => _recorder.hasPermission();
 
   @override
   Future<void> start(record_pkg.RecordConfig config, {required String path}) =>
@@ -67,16 +75,43 @@ class RecordPackageMicrophoneDiscovery implements MicrophoneDiscovery {
   }
 }
 
+/// Triggers the OS microphone permission prompt (Android) ahead of the
+/// first dictation, so the first hold-to-talk is not interrupted by the
+/// permission dialog appearing mid-recording. Best-effort: a denial here
+/// still surfaces properly on the next recording attempt.
+Future<void> warmUpMicrophonePermission({
+  RecordBackend Function()? backendFactory,
+}) async {
+  final backend = (backendFactory ?? PluginRecordBackend.new)();
+  try {
+    await backend.hasPermission();
+  } catch (_) {
+    // Warm-up only; the recorder reports real failures.
+  } finally {
+    await backend.dispose();
+  }
+}
+
 class RecordPackageAudioRecorderFactory implements AudioRecorderFactory {
   RecordPackageAudioRecorderFactory({
     required this.outputDirectory,
     this.backendFactory,
     this.clock,
+    this.useSystemDefaultDevice = false,
+    this.requestPermission = false,
   });
 
   final Directory outputDirectory;
   final RecordBackend Function()? backendFactory;
   final Clock? clock;
+
+  /// Record from the OS-selected input instead of an explicit device id
+  /// (Android: the plugin expects no device there).
+  final bool useSystemDefaultDevice;
+
+  /// Ask for the microphone permission before capturing (Android runtime
+  /// permission). Desktop keeps its existing behavior of failing at start.
+  final bool requestPermission;
 
   @override
   AudioRecorder create(MicrophoneDevice microphone) {
@@ -85,6 +120,8 @@ class RecordPackageAudioRecorderFactory implements AudioRecorderFactory {
       outputDirectory: outputDirectory,
       backendFactory: backendFactory,
       clock: clock,
+      useSystemDefaultDevice: useSystemDefaultDevice,
+      requestPermission: requestPermission,
     );
   }
 }
@@ -97,6 +134,8 @@ class RecordPackageAudioRecorder implements AudioRecorder {
     required this._outputDirectory,
     RecordBackend Function()? backendFactory,
     Clock? clock,
+    this._useSystemDefaultDevice = false,
+    this._requestPermission = false,
   }) : _backendFactory = backendFactory ?? PluginRecordBackend.new,
        _clock = clock ?? DateTime.now;
 
@@ -104,6 +143,8 @@ class RecordPackageAudioRecorder implements AudioRecorder {
   final Directory _outputDirectory;
   final RecordBackend Function() _backendFactory;
   final Clock _clock;
+  final bool _useSystemDefaultDevice;
+  final bool _requestPermission;
 
   RecordBackend? _backend;
   DateTime? _startedAt;
@@ -121,15 +162,26 @@ class RecordPackageAudioRecorder implements AudioRecorder {
 
     final backend = _backendFactory();
     _backend = backend;
+    if (_requestPermission && !await backend.hasPermission()) {
+      _backend = null;
+      _startedAt = null;
+      _outputPath = null;
+      await backend.dispose();
+      throw StateError('Microphone permission was not granted.');
+    }
     await backend.start(
       record_pkg.RecordConfig(
         encoder: record_pkg.AudioEncoder.wav,
         sampleRate: 16000,
         numChannels: 1,
-        device: record_pkg.InputDevice(
-          id: _microphone.alternativeName ?? _microphone.name,
-          label: _microphone.name,
-        ),
+        // The system default input carries no device id; the OS routes it
+        // to the active microphone (Android).
+        device: _useSystemDefaultDevice
+            ? null
+            : record_pkg.InputDevice(
+                id: _microphone.alternativeName ?? _microphone.name,
+                label: _microphone.name,
+              ),
       ),
       path: _outputPath!,
     );

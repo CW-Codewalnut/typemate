@@ -51,6 +51,155 @@ jobs:
       contents: read
       security-events: write
 
+  # The Android release build runs as its own job, in parallel with the
+  # e2e job below: Gradle/Kotlin/plugin breakage is where every Android
+  # failure so far has lived, the e2e run only exercises debug, and
+  # chaining the two serialized ~8 minutes onto the slowest job in the
+  # pipeline.
+  build-android:
+    name: Android release build
+    needs: security
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # Gradle re-resolves and re-compiles from scratch on a cold runner;
+      # caching the dependency/build caches cuts the builds substantially.
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # The whisper_ggml plugin's native build needs NDK 29, which Gradle
+      # auto-installs — but only if its license is already accepted, and
+      # the runner image has not accepted it. (`|| true`: `yes` exits via
+      # SIGPIPE under pipefail once sdkmanager stops reading.)
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      # No --no-pub: `flutter build` re-runs pub to regenerate
+      # GeneratedPluginRegistrant for release mode (which drops the
+      # integration_test plugin); skipping that compiles a dev-inclusive
+      # registrant and fails on the missing integration_test package.
+      - name: Build release APK
+        run: flutter build apk --release
+
+  # Android runs the same e2e suite as the desktop matrix, on a real
+  # emulator (GitHub's ubuntu runners have KVM).
+  e2e-android:
+    name: Tests and e2e (Android)
+    needs: security
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      # Build the debug APK before the emulator exists: the build is the
+      # expensive part, and running it while the emulator holds half the
+      # runner's RAM slowed every Gradle invocation.
+      - name: Build debug APK
+        run: flutter build apk --debug
+
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # Cache the AVD + a warm snapshot so runs boot from a saved state
+      # instead of cold-booting and provisioning the system image every time.
+      - name: Cache AVD snapshot
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-x86_64
+
+      - name: Create AVD and generate snapshot for caching
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Generated AVD snapshot."
+
+      # One `flutter test` invocation for the whole e2e suite: the
+      # per-file loop used previously re-entered Gradle for every file
+      # while the emulator held half the runner's RAM, and those repeat
+      # builds — not the tests — dominated the job's wall time. (The
+      # desktop matrix still runs per-file; only Windows flaked there.)
+      - name: End-to-end tests on the Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            adb install -r build/app/outputs/flutter-apk/app-debug.apk
+            adb shell pm grant com.codewalnut.typemate android.permission.RECORD_AUDIO
+            adb shell pm grant com.codewalnut.typemate android.permission.POST_NOTIFICATIONS
+            flutter test integration_test -d emulator-5554 --no-pub
+
   test:
     name: Tests and e2e (${{ matrix.name }})
     needs: security
@@ -79,6 +228,12 @@ jobs:
             launcher: ''
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
+    env:
+      # E2e runs inject mock engines, so the multi-hundred-MB speech
+      # models are never read; fetching them was most of the desktop
+      # jobs' wall time. Small always-bundled files (Silero VAD, GTCRN)
+      # still fetch. Release builds must never set this.
+      TYPEMATE_FETCH_SKIP_LARGE_MODELS: '1'
 
     steps:
       - name: Checkout
@@ -88,13 +243,11 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
-          # libnotify-dev: the local_notifier plugin links libnotify to post
-          # dictation-failure notifications.
           # libx11-dev/libxext-dev: the X11 overlay helper is compiled from
           # source during the build (tool/fetch_whisper_runtime.dart).
           # libcurl4-openssl-dev: sentry_flutter compiles sentry-native,
           # whose transport requires curl with the AsynchDNS feature.
-          sudo apt-get install -y -qq clang cmake ninja-build pkg-config libgtk-3-dev libnotify-dev libx11-dev libxext-dev libcurl4-openssl-dev xvfb
+          sudo apt-get install -y -qq clang cmake ninja-build pkg-config libgtk-3-dev libx11-dev libxext-dev libcurl4-openssl-dev xvfb
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -108,11 +261,14 @@ jobs:
       - name: Unit and widget tests
         run: flutter test
 
-      # The Windows and Linux desktop builds fetch the bundled speech
-      # runtimes (models + whisper/sherpa binaries) via CMake; cache them
-      # so e2e runs do not re-download gigabytes every time.
-      - name: Cache speech runtimes
-        if: runner.os != 'macOS'
+      # The Linux desktop build fetches its helper tools (static ffmpeg,
+      # xdotool) and compiles the X11 overlay via CMake
+      # (tool/fetch_whisper_runtime.dart); cache them between runs. No
+      # speech binaries exist anymore, and CI skips the large models
+      # (env above), so Windows has nothing worth caching — its two
+      # remaining small model fetches are faster than a cache restore.
+      - name: Cache Linux tools
+        if: runner.os == 'Linux'
         uses: actions/cache@v4
         with:
           path: |
@@ -122,6 +278,19 @@ jobs:
           # and the Linux build recompiles the overlay (belt-and-suspenders
           # with the source-newer-than-output check in the fetch script).
           key: speech-runtime-${{ runner.os }}-${{ hashFiles('tool/fetch_whisper_runtime.dart', 'linux/overlay/typemate_overlay.c') }}
+
+      # CocoaPods rebuilds every pod (Sentry alone is minutes of Swift/
+      # ObjC) on a cold runner; cache the built Pods keyed on the lockfile.
+      - name: Cache CocoaPods
+        if: runner.os == 'macOS'
+        uses: actions/cache@v4
+        with:
+          # Keyed on pubspec.lock: the pod set derives from the Flutter
+          # plugin set (Podfile.lock is generated, not committed).
+          path: macos/Pods
+          key: pods-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            pods-${{ runner.os }}-
 
       - name: Build macOS app
         if: runner.os == 'macOS'

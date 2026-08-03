@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.4.0+8
+version: 1.5.0+9
 
 environment:
   sdk: ^3.12.2
@@ -35,13 +35,24 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   ffi: ^2.2.0
+  path_provider: ^2.1.5
   record: ^7.1.1
   window_manager: ^0.5.2
   flutter_single_instance: ^1.7.0
   package_info_plus: ^10.2.1
-  local_notifier: ^0.1.6
   sentry_flutter: ^8.14.2
   sentry: ^8.14.2
+  sherpa_onnx: ^1.13.4
+  background_downloader: ^9.5.7
+  crypto: ^3.0.7
+  whisper_ggml:
+    git:
+      url: https://github.com/CW-Codewalnut/whisper_ggml.git
+      # Commit pin, not a branch ref: this plugin owns native memory in
+      # our process, so upgrades must be deliberate. Head of our
+      # feat/resident-model-and-audio-ctx branch (upstream PR sk3llo#27).
+      ref: 7bceec74cda4a000b64b154de6270fa9cc4e8833
+  share_plus: ^13.3.0
 
 dev_dependencies:
   flutter_test:
@@ -82,10 +93,13 @@ flutter:
     - assets/sounds/dictation_start.wav
     - assets/sounds/dictation_failed.wav
 
-# Launcher icons for all desktop targets are generated from the white
-# background master with: dart run icons_launcher:create
+# Launcher icons for all targets are generated from the white background
+# master with: dart run icons_launcher:create
+# Android additionally uses an adaptive icon (white background + padded
+# transparent-glyph foreground so the round mask never crops the mark);
+# on Android 12+ the system splash screen shows this icon automatically.
 icons_launcher:
-  image_path: assets/typemate_icon_1024.png
+  image_path: assets/typemate_icon.png
   platforms:
     windows:
       enable: true
@@ -93,6 +107,11 @@ icons_launcher:
       enable: true
     linux:
       enable: true
+    android:
+      enable: true
+      adaptive_background_color: '#FFFFFF'
+      adaptive_foreground_image: assets/typemate_icon_foreground.png
+      adaptive_monochrome_image: assets/typemate_icon_foreground.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
