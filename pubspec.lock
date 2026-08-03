@@ -904,7 +904,7 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "feat/resident-model-and-audio-ctx"
+      ref: "7bceec74cda4a000b64b154de6270fa9cc4e8833"
       resolved-ref: "7bceec74cda4a000b64b154de6270fa9cc4e8833"
       url: "https://github.com/CW-Codewalnut/whisper_ggml.git"
     source: git
