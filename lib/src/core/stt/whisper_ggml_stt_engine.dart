@@ -35,8 +35,10 @@ class WhisperGgmlSttEngine implements DisposableSttEngine {
     this.numThreads = 6,
     DiagnosticReporter? diagnostics,
     bool Function(String path)? modelFileExists,
+    Future<String> Function(String payload)? requestRunner,
   }) : _diagnostics = diagnostics ?? DiagnosticReporter(),
-       _modelFileExists = modelFileExists ?? _fileExists;
+       _modelFileExists = modelFileExists ?? _fileExists,
+       _requestRunner = requestRunner ?? _isolateRequest;
 
   final String modelPath;
 
@@ -53,6 +55,9 @@ class WhisperGgmlSttEngine implements DisposableSttEngine {
 
   final DiagnosticReporter _diagnostics;
   final bool Function(String path) _modelFileExists;
+
+  /// Sends one JSON request to the native layer; tests inject a fake.
+  final Future<String> Function(String payload) _requestRunner;
 
   bool _warm = false;
 
@@ -96,7 +101,7 @@ class WhisperGgmlSttEngine implements DisposableSttEngine {
       return;
     }
     _warm = false;
-    await Isolate.run(() => _request(json.encode({'@type': 'releaseModel'})));
+    await _requestRunner(json.encode({'@type': 'releaseModel'}));
   }
 
   void _requireModel() {
@@ -137,9 +142,7 @@ class WhisperGgmlSttEngine implements DisposableSttEngine {
       // boundaries (same value the retired servers used).
       'vad_speech_pad_ms': 100,
     });
-    // The blocking FFI call runs off the main isolate; the resident model
-    // lives in native process globals, so every isolate reuses it.
-    final response = await Isolate.run(() => _request(payload));
+    final response = await _requestRunner(payload);
     final decoded = json.decode(response) as Map<String, dynamic>;
     if (decoded['text'] == null) {
       throw SttRuntimeException(
@@ -210,6 +213,22 @@ class WhisperGgmlSttEngine implements DisposableSttEngine {
 
 typedef _WReqNative = Pointer<Utf8> Function(Pointer<Utf8>);
 
+/// Default request path: the blocking FFI call runs off the main isolate;
+/// the resident model lives in native process globals, so every isolate
+/// reuses it.
+Future<String> _isolateRequest(String payload) {
+  return Isolate.run(() => _request(payload));
+}
+
+/// Whether to leak native responses instead of freeing them. The native
+/// side mallocs the response specifically so the caller can free it with
+/// the C allocator. In-app both modules share the release CRT; standalone
+/// harnesses against a debug-built DLL have mismatched CRT heaps and must
+/// leak the few bytes instead (benchmark tools set this). Read once per
+/// isolate, not per request.
+final bool _leakResponses =
+    Platform.environment['TYPEMATE_GGML_NO_FREE'] == '1';
+
 /// Sends one JSON request to the plugin's native `request` symbol and
 /// returns the response JSON. Runs inside a worker isolate; the library
 /// handle is cheap to reopen (the OS caches the loaded module).
@@ -217,18 +236,18 @@ String _request(String payload) {
   final lib = _openLibrary();
   final request = lib.lookupFunction<_WReqNative, _WReqNative>('request');
   final data = payload.toNativeUtf8();
-  final res = request(data);
-  final response = res.toDartString();
-  malloc.free(data);
-  // The native side mallocs the response specifically so the caller can
-  // free it with the C allocator. In-app both modules share the release
-  // CRT; standalone harnesses against a debug-built DLL have mismatched
-  // CRT heaps and must leak the few bytes instead (benchmark tools set
-  // this).
-  if (Platform.environment['TYPEMATE_GGML_NO_FREE'] != '1') {
-    malloc.free(res);
+  try {
+    final res = request(data);
+    try {
+      return res.toDartString();
+    } finally {
+      if (!_leakResponses) {
+        malloc.free(res);
+      }
+    }
+  } finally {
+    malloc.free(data);
   }
-  return response;
 }
 
 DynamicLibrary _openLibrary() {
