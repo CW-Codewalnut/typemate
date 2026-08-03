@@ -13,7 +13,6 @@ class DictatePage extends StatelessWidget {
     this.dictationController,
     this.shortcutController,
     this.dictationSurface,
-    this.mobileSurface = false,
     this.title = 'Speech history',
   });
 
@@ -21,13 +20,9 @@ class DictatePage extends StatelessWidget {
   final DictationController? dictationController;
   final HoldShortcutController? shortcutController;
 
-  /// Replaces the shortcut instruction card: mobile's hold-to-talk mic,
-  /// or desktop's model-download-aware instruction card.
+  /// Replaces the shortcut instruction card: the shared dictation
+  /// surface (model download, capability hint).
   final Widget? dictationSurface;
-
-  /// Whether [dictationSurface] is the mobile mic (words the
-  /// empty-history hint accordingly).
-  final bool mobileSurface;
 
   final String title;
 
@@ -40,7 +35,6 @@ class DictatePage extends StatelessWidget {
         dictationController: dictationController,
         shortcutController: shortcutController,
         dictationSurface: dictationSurface,
-        mobileSurface: mobileSurface,
         title: title,
       ),
     );

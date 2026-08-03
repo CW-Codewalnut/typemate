@@ -38,8 +38,10 @@ void main() {
         ),
         findsOneWidget,
       );
-      // The mic tile shows the ready state once the engine is warm.
-      expect(find.text('Ready. Hold the shortcut and speak.'), findsOneWidget);
+      // No status line: the mic FAB narrates its own state, and idle
+      // needs no narration at all.
+      expect(find.text('Ready. Hold the shortcut and speak.'), findsNothing);
+      expect(find.byKey(const Key('hold-to-dictate-button')), findsOneWidget);
     },
   );
 
@@ -102,20 +104,19 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 250));
 
-    // The hotkey does nothing while the engine loads; the mic tile says so
-    // instead of showing a ready state that will not work.
-    expect(
-      find.textContaining('Preparing local speech engine'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('Ready. Hold the shortcut'), findsNothing);
+    // While the engine loads, the card slot shows the busy card and the
+    // mic FAB expands into its "Preparing..." pill.
+    expect(find.textContaining('Preparing the speech engine'), findsOneWidget);
+    expect(find.text('Preparing...'), findsOneWidget);
 
     engine.completePrepare();
     await tester.pump();
     await tester.pump();
 
-    expect(find.textContaining('Preparing local speech engine'), findsNothing);
-    expect(find.textContaining('Ready. Hold the shortcut'), findsOneWidget);
+    // Ready: the busy card disappears entirely; the idle mic remains.
+    expect(find.textContaining('Preparing the speech engine'), findsNothing);
+    expect(find.text('Preparing...'), findsNothing);
+    expect(find.byKey(const Key('hold-to-dictate-button')), findsOneWidget);
   });
 
   testWidgets(
@@ -507,17 +508,18 @@ void main() {
     expect(speechSettingsController.languageCode, 'hi');
   });
 
-  testWidgets('empty history state is centered without a card', (tester) async {
+  testWidgets('empty history shows the mic mark with its two lines', (
+    tester,
+  ) async {
     await tester.pumpHome();
     await tester.pump();
 
-    final emptyState = find.byKey(const Key('empty-history-state'));
-    expect(emptyState, findsOneWidget);
+    expect(find.byKey(const Key('empty-history-state')), findsOneWidget);
+    expect(find.text('No history yet.'), findsOneWidget);
     expect(
-      find.descendant(of: emptyState, matching: find.byType(Card)),
-      findsNothing,
+      find.text('Everything you dictate will appear here.'),
+      findsOneWidget,
     );
-    expect(find.text('No speech history yet.'), findsOneWidget);
   });
 
   testWidgets('history page shows generated speech text', (tester) async {

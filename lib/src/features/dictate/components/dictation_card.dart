@@ -9,6 +9,7 @@ import '../../../core/platform/android/floating_mic_controller.dart';
 import '../../../core/stt/stt_model_provisioner.dart';
 import '../../../models/dictation_state.dart';
 import 'floating_mic_card.dart';
+import 'shortcut_instruction_card.dart';
 
 /// The one dictation surface, identical on every platform: hold the mic
 /// tile, speak, release. Until the selected language's speech model exists
@@ -167,27 +168,32 @@ class _DictationCardState extends State<DictationCard>
             downloadOfferText: _downloadOfferText(provisioner),
           );
         }
-        // The in-app tile for a quick capture, then the platform's
-        // system-wide capability: the floating mic invitation (hidden once
-        // it is on) or a quiet one-line reminder of the global shortcut.
+        // While the engine loads, the card slot says so with a busy card;
+        // it disappears once the engine is ready.
+        if (widget.controller.phase == DictationPhase.preparing) {
+          return const ShortcutInstructionCard(
+            instruction: 'Preparing the speech engine… one moment.',
+            busy: true,
+          );
+        }
+        // The platform's system-wide capability: the floating mic
+        // invitation (hidden once it is on) or a quiet one-line reminder
+        // of the global shortcut. The hold-to-talk mic itself floats
+        // bottom-right as the page's FAB and narrates its own state;
+        // failures show on the toast and in History.
+        final theme = Theme.of(context);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _HoldToTalkTile(controller: widget.controller),
             if (widget.floatingMicController != null)
               FloatingMicCard(controller: widget.floatingMicController!),
-            if (widget.shortcutController != null) ...[
-              const SizedBox(height: 10),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Text(
-                  _shortcutHint,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+            if (widget.shortcutController != null)
+              Text(
+                _shortcutHint,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-            ],
           ],
         );
       },
@@ -195,12 +201,27 @@ class _DictationCardState extends State<DictationCard>
   }
 }
 
-/// The instruction-card tile shape and typography; the whole tile is the
-/// hold-to-talk surface.
-class _HoldToTalkTile extends StatelessWidget {
-  const _HoldToTalkTile({required this.controller});
+/// The hold-to-talk mic: a round floating-action-style button, shown
+/// bottom-right as the Dictate page's FAB — the same surface on every
+/// platform. Press and hold to dictate; while active it expands into a
+/// pill with the live state beside the icon ("Listening...",
+/// "Transcribing..."), then shrinks back to the idle circle.
+class HoldToTalkMicButton extends StatelessWidget {
+  const HoldToTalkMicButton({super.key, required this.controller});
 
   final DictationController controller;
+
+  static const double _diameter = 72;
+
+  /// The label shown beside the icon while dictation is in flight; null
+  /// keeps the idle circle.
+  String? _activeLabel(DictationPhase phase) => switch (phase) {
+    DictationPhase.listening => 'Listening...',
+    DictationPhase.transcribing ||
+    DictationPhase.inserting => 'Transcribing...',
+    DictationPhase.preparing => 'Preparing...',
+    _ => null,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -211,9 +232,15 @@ class _HoldToTalkTile extends StatelessWidget {
         phase == DictationPhase.transcribing ||
         phase == DictationPhase.inserting ||
         phase == DictationPhase.preparing;
-    // After a failure the status IS the error, so the one tile turns into
-    // the error surface instead of stacking the same text twice.
+    final label = _activeLabel(phase);
+    // After a failure the button turns into the error surface; the toast
+    // and the failed History entry carry the reason.
     final hasError = controller.errorMessage != null;
+    final foreground = switch ((isListening, hasError)) {
+      (true, _) => theme.colorScheme.onPrimary,
+      (false, true) => theme.colorScheme.onErrorContainer,
+      (false, false) => theme.colorScheme.primary,
+    };
 
     return Listener(
       onPointerDown: (_) {
@@ -223,58 +250,66 @@ class _HoldToTalkTile extends StatelessWidget {
       },
       onPointerUp: (_) => unawaited(controller.stopListening()),
       onPointerCancel: (_) => unawaited(controller.stopListening()),
-      child: AnimatedContainer(
-        key: const Key('hold-to-dictate-button'),
+      child: AnimatedSize(
         duration: const Duration(milliseconds: 150),
-        decoration: BoxDecoration(
-          color: switch ((isListening, hasError)) {
-            (true, _) => theme.colorScheme.primary,
-            (false, true) => theme.colorScheme.errorContainer,
-            (false, false) => theme.colorScheme.primaryContainer.withValues(
-              alpha: 0.72,
-            ),
-          },
-          borderRadius: BorderRadius.circular(16),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isWorking)
-              SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.4,
-                  color: theme.colorScheme.primary,
+        curve: Curves.easeOut,
+        child: Container(
+          key: const Key('hold-to-dictate-button'),
+          height: _diameter,
+          constraints: const BoxConstraints(minWidth: _diameter),
+          padding: label == null
+              ? EdgeInsets.zero
+              : const EdgeInsets.symmetric(horizontal: 22),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(_diameter / 2),
+            color: switch ((isListening, hasError)) {
+              (true, _) => theme.colorScheme.primary,
+              (false, true) => theme.colorScheme.errorContainer,
+              (false, false) => theme.colorScheme.primaryContainer,
+            },
+            boxShadow: [
+              BoxShadow(
+                color: theme.colorScheme.shadow.withValues(
+                  alpha: isListening ? 0.30 : 0.15,
                 ),
-              )
-            else
-              Icon(
-                hasError && !isListening
-                    ? Icons.error_outline
-                    : Icons.keyboard_voice,
-                color: switch ((isListening, hasError)) {
-                  (true, _) => theme.colorScheme.onPrimary,
-                  (false, true) => theme.colorScheme.onErrorContainer,
-                  (false, false) => theme.colorScheme.primary,
-                },
+                blurRadius: isListening ? 18 : 10,
+                offset: const Offset(0, 4),
               ),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Text(
-                controller.statusMessage,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: switch ((isListening, hasError)) {
-                    (true, _) => theme.colorScheme.onPrimary,
-                    (false, true) => theme.colorScheme.onErrorContainer,
-                    (false, false) => null,
-                  },
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (isWorking)
+                SizedBox(
+                  width: 26,
+                  height: 26,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.6,
+                    color: foreground,
+                  ),
+                )
+              else
+                Icon(
+                  hasError && !isListening
+                      ? Icons.error_outline
+                      : Icons.keyboard_voice,
+                  size: 30,
+                  color: foreground,
                 ),
-              ),
-            ),
-          ],
+              if (label != null) ...[
+                const SizedBox(width: 10),
+                Text(
+                  label,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: foreground,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

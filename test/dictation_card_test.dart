@@ -33,7 +33,29 @@ void main() {
     home: Scaffold(body: SingleChildScrollView(child: child)),
   );
 
-  testWidgets('hold to talk dictates and inserts via the bridge', (
+  SttModelProvisioner provisionerFor(
+    Directory directory, {
+    bool downloadable = true,
+  }) => SttModelProvisioner(
+    modelDirectory: directory,
+    files: const [
+      SttModelFile(
+        url: 'https://example.test/a',
+        relativePath: 'a.onnx',
+        expectedBytes: 10,
+      ),
+    ],
+    downloader:
+        (file, target, {required resumeFromBytes, required onProgress}) async {
+          if (!downloadable) {
+            fail('Nothing to download when the model already exists.');
+          }
+          target.writeAsStringSync('0123456789');
+          onProgress(10);
+        },
+  );
+
+  testWidgets('the mic button dictates and inserts via the bridge', (
     tester,
   ) async {
     final bridge = MockPlatformBridge();
@@ -44,7 +66,7 @@ void main() {
     );
     addTearDown(controller.dispose);
 
-    await tester.pumpWidget(wrap(DictationCard(controller: controller)));
+    await tester.pumpWidget(wrap(HoldToTalkMicButton(controller: controller)));
     await tester.pump();
 
     final button = find.byKey(const Key('hold-to-dictate-button'));
@@ -58,36 +80,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
 
-    expect(
-      bridge.lastInsertedText,
-      'ship the android build',
-      reason: 'The bridge insertion lands the text on the clipboard.',
-    );
+    expect(bridge.lastInsertedText, 'ship the android build');
   });
 
   testWidgets('fresh install walks through the model download', (tester) async {
     final directory = Directory.systemTemp.createTempSync('typemate-card');
     addTearDown(() => directory.deleteSync(recursive: true));
-    final provisioner = SttModelProvisioner(
-      modelDirectory: directory,
-      files: const [
-        SttModelFile(
-          url: 'https://example.test/a',
-          relativePath: 'a.onnx',
-          expectedBytes: 10,
-        ),
-      ],
-      downloader:
-          (
-            file,
-            target, {
-            required resumeFromBytes,
-            required onProgress,
-          }) async {
-            target.writeAsStringSync('0123456789');
-            onProgress(10);
-          },
-    );
+    final provisioner = provisionerFor(directory);
     addTearDown(provisioner.dispose);
     final engine = FixedTranscriptSttEngine('hello');
     final controller = DictationController(
@@ -110,11 +109,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('start-model-download')), findsOneWidget);
-    expect(
-      find.byKey(const Key('hold-to-dictate-button')),
-      findsNothing,
-      reason: 'No mic before the model exists.',
-    );
     expect(engine.prepared, isFalse);
     expect(permissionWarmUps, 0);
 
@@ -122,7 +116,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(provisioner.isReady, isTrue);
-    expect(find.byKey(const Key('hold-to-dictate-button')), findsOneWidget);
+    expect(find.byKey(const Key('start-model-download')), findsNothing);
     expect(
       engine.prepared,
       isFalse,
@@ -131,29 +125,13 @@ void main() {
     expect(permissionWarmUps, 1);
   });
 
-  testWidgets('a provisioned model goes straight to the mic', (tester) async {
+  testWidgets('a provisioned model needs no download interaction', (
+    tester,
+  ) async {
     final directory = Directory.systemTemp.createTempSync('typemate-card2');
     addTearDown(() => directory.deleteSync(recursive: true));
     File('${directory.path}/a.onnx').writeAsStringSync('0123456789');
-    final provisioner = SttModelProvisioner(
-      modelDirectory: directory,
-      files: const [
-        SttModelFile(
-          url: 'https://example.test/a',
-          relativePath: 'a.onnx',
-          expectedBytes: 10,
-        ),
-      ],
-      downloader:
-          (
-            file,
-            target, {
-            required resumeFromBytes,
-            required onProgress,
-          }) async {
-            fail('Nothing to download when the model already exists.');
-          },
-    );
+    final provisioner = provisionerFor(directory, downloadable: false);
     addTearDown(provisioner.dispose);
     final engine = FixedTranscriptSttEngine('hello');
     final controller = DictationController(
@@ -175,7 +153,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('hold-to-dictate-button')), findsOneWidget);
+    expect(find.byKey(const Key('start-model-download')), findsNothing);
     expect(
       engine.prepared,
       isFalse,
@@ -184,70 +162,52 @@ void main() {
     expect(permissionWarmUps, 1);
   });
 
-  testWidgets('desktop slim install offers the download, then shows the '
-      'mic tile, shortcut card, and warms the engine', (tester) async {
-    final directory = Directory.systemTemp.createTempSync('typemate-desk');
-    addTearDown(() => directory.deleteSync(recursive: true));
-    final provisioner = SttModelProvisioner(
-      modelDirectory: directory,
-      files: const [
-        SttModelFile(
-          url: 'https://example.test/a',
-          relativePath: 'a.onnx',
-          expectedBytes: 10,
+  testWidgets(
+    'desktop slim install offers the download, then warms the engine',
+    (tester) async {
+      final directory = Directory.systemTemp.createTempSync('typemate-desk');
+      addTearDown(() => directory.deleteSync(recursive: true));
+      final provisioner = provisionerFor(directory);
+      addTearDown(provisioner.dispose);
+      final engine = FixedTranscriptSttEngine('hello');
+      final controller = DictationController(
+        platformBridge: MockPlatformBridge(),
+        sttEngine: engine,
+        audioRecorder: MockAudioRecorder(),
+      );
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        wrap(
+          DictationCard(
+            controller: controller,
+            desktop: true,
+            modelProvisioner: provisioner,
+          ),
         ),
-      ],
-      downloader:
-          (
-            file,
-            target, {
-            required resumeFromBytes,
-            required onProgress,
-          }) async {
-            target.writeAsStringSync('0123456789');
-            onProgress(10);
-          },
-    );
-    addTearDown(provisioner.dispose);
-    final engine = FixedTranscriptSttEngine('hello');
-    final controller = DictationController(
-      platformBridge: MockPlatformBridge(),
-      sttEngine: engine,
-      audioRecorder: MockAudioRecorder(),
-    );
-    addTearDown(controller.dispose);
+      );
+      await tester.pumpAndSettle();
 
-    await tester.pumpWidget(
-      wrap(
-        DictationCard(
-          controller: controller,
-          desktop: true,
-          modelProvisioner: provisioner,
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      expect(find.byKey(const Key('start-model-download')), findsOneWidget);
+      expect(find.textContaining('on this computer'), findsOneWidget);
+      expect(engine.prepared, isFalse);
 
-    expect(find.byKey(const Key('start-model-download')), findsOneWidget);
-    // Desktop wording, sized from the actual files (10 bytes rounds to 0).
-    expect(find.textContaining('on this computer'), findsOneWidget);
-    expect(find.byKey(const Key('hold-to-dictate-button')), findsNothing);
-    expect(engine.prepared, isFalse);
+      await tester.tap(find.byKey(const Key('start-model-download')));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('start-model-download')));
-    await tester.pumpAndSettle();
+      expect(provisioner.isReady, isTrue);
+      expect(find.byKey(const Key('start-model-download')), findsNothing);
+      expect(
+        engine.prepared,
+        isTrue,
+        reason: 'Desktop keeps the selected model warm once it exists.',
+      );
+    },
+  );
 
-    expect(provisioner.isReady, isTrue);
-    expect(find.byKey(const Key('hold-to-dictate-button')), findsOneWidget);
-    expect(
-      engine.prepared,
-      isTrue,
-      reason: 'Desktop keeps the selected model warm once it exists.',
-    );
-  });
-
-  testWidgets('desktop with nothing to download goes straight to the mic '
-      'tile and warms the engine', (tester) async {
+  testWidgets('desktop with nothing to download warms the engine immediately', (
+    tester,
+  ) async {
     final engine = FixedTranscriptSttEngine('hello');
     final controller = DictationController(
       platformBridge: MockPlatformBridge(),
@@ -261,7 +221,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('hold-to-dictate-button')), findsOneWidget);
     expect(
       engine.prepared,
       isTrue,

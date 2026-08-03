@@ -4,7 +4,6 @@ import '../../../core/dictation_controller.dart';
 import '../../../core/dictation_history_controller.dart';
 import '../../../core/hold_shortcut_controller.dart';
 import '../../../models/dictation_state.dart';
-import 'empty_history_card.dart';
 import 'history_entry_card.dart';
 import 'shortcut_instruction_card.dart';
 
@@ -15,7 +14,6 @@ class HistoryContent extends StatelessWidget {
     this.dictationController,
     this.shortcutController,
     this.dictationSurface,
-    this.mobileSurface = false,
     this.title = 'Speech history',
   });
 
@@ -23,16 +21,10 @@ class HistoryContent extends StatelessWidget {
   final DictationController? dictationController;
   final HoldShortcutController? shortcutController;
 
-  /// Replaces the shortcut instruction card. Mobile puts its hold-to-talk
-  /// mic in this slot; desktop puts its model-download-aware instruction
-  /// card there. Both platforms share one page: how-to-dictate on top,
-  /// history below.
+  /// Replaces the shortcut instruction card: the shared dictation surface
+  /// (model download, capability hint). Both platforms share one page:
+  /// how-to-dictate on top, history below, mic FAB bottom-right.
   final Widget? dictationSurface;
-
-  /// Whether [dictationSurface] is the mobile hold-to-talk mic, which
-  /// words the empty-history hint around the mic instead of the desktop
-  /// shortcut.
-  final bool mobileSurface;
 
   /// Mobile titles the page after its tab ("Dictate").
   final String title;
@@ -67,19 +59,40 @@ class HistoryContent extends StatelessWidget {
           _TodayHeader(onClearHistory: historyController.clear),
           const SizedBox(height: 6),
         ],
-        if (historyController.entries.isEmpty) const SizedBox(height: 28),
         if (historyController.isLoading)
           const Center(child: CircularProgressIndicator())
         else if (historyController.entries.isEmpty)
-          EmptyHistoryCard(
-            hint: mobileSurface
-                ? 'Hold the mic above or the floating mic in any app, and '
-                      'your dictations will appear here.'
-                : dictationSurface != null
-                ? 'Hold the mic above or the shortcut in any app, and '
-                      'your generated text will appear here.'
-                : 'Hold the shortcut, speak, and your generated text will '
-                      'appear here.',
+          Padding(
+            padding: const EdgeInsets.only(top: 120),
+            child: Center(
+              child: Column(
+                key: const Key('empty-history-state'),
+                children: [
+                  Icon(
+                    Icons.mic_none,
+                    size: 56,
+                    color: theme.colorScheme.onSurfaceVariant.withValues(
+                      alpha: 0.45,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'No history yet.',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Everything you dictate will appear here.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           )
         else
           for (final entry in historyController.entries)
