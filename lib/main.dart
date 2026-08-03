@@ -84,6 +84,9 @@ Future<void> main() async {
   // OSes instead of following each window manager's theme.
   await windowManager.ensureInitialized();
   await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+  // Below this the layout genuinely breaks (the nav rail, download card,
+  // and mic FAB start colliding); the layout is responsive down to here.
+  await windowManager.setMinimumSize(const Size(480, 520));
   // The OS-visible window title (taskbar, alt-tab) derives from the same
   // constant as every in-app surface.
   await windowManager.setTitle(appDisplayName);

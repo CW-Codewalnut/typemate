@@ -104,6 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
         widget.microphoneController,
         widget.speechSettingsController,
         if (widget.shortcutController != null) widget.shortcutController!,
+        if (widget.modelProvisioner != null) widget.modelProvisioner!,
       ]),
       builder: (context, _) {
         final pages = [
@@ -125,7 +126,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   : widget.shortcutController,
               desktop: !widget.useMobileDictationSurface,
             ),
-            mobileSurface: widget.useMobileDictationSurface,
           ),
           InsightsPage(historyController: widget.historyController),
           SettingsPage(
@@ -145,7 +145,21 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (context, constraints) {
             final useBottomNavigation =
                 constraints.maxWidth < mobileNavigationBreakpoint;
+            // The hold-to-talk mic floats bottom-right on the Dictate tab
+            // once the selected language's model exists (until then the
+            // page shows the download card instead).
+            final modelReady =
+                widget.modelProvisioner == null ||
+                widget.modelProvisioner!.isReady;
             return Scaffold(
+              floatingActionButton: _selectedIndex == 0 && modelReady
+                  // Lifted off the window edge: the corner default sits
+                  // too tight against the frame for a hold target.
+                  ? Padding(
+                      padding: const EdgeInsets.only(right: 20, bottom: 20),
+                      child: HoldToTalkMicButton(controller: widget.controller),
+                    )
+                  : null,
               body: SafeArea(
                 child: useBottomNavigation
                     ? page

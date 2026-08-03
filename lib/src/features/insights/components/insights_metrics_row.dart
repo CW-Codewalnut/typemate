@@ -173,7 +173,7 @@ class _InsightGauge extends StatelessWidget {
                 children: [
                   Text(
                     percent == 0 ? 'No pace yet' : 'Top',
-                    style: theme.textTheme.bodyMedium,
+                    style: theme.textTheme.bodySmall,
                   ),
                   Text(
                     percent == 0 ? '0%' : '$percent%',
