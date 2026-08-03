@@ -25,7 +25,7 @@ cp -r "$BUNDLE"/. "$STAGE/opt/typemate/"
 # Slim install: the large speech models download on first use for the
 # selected language instead of shipping in every artifact.
 bash scripts/slim-speech-models.sh "$STAGE/opt/typemate"
-cp assets/typemate_icon_1024.png "$STAGE/usr/share/pixmaps/typemate.png"
+cp assets/typemate_icon.png "$STAGE/usr/share/pixmaps/typemate.png"
 
 cat > "$STAGE/usr/share/applications/typemate.desktop" <<EOF
 [Desktop Entry]
