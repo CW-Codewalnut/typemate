@@ -93,6 +93,13 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # The whisper_ggml plugin's native build needs NDK 29, which Gradle
+      # auto-installs — but only if its license is already accepted, and
+      # the runner image has not accepted it. (`|| true`: `yes` exits via
+      # SIGPIPE under pipefail once sdkmanager stops reading.)
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
       # No --no-pub on the builds: each `flutter build` re-runs pub to
       # regenerate GeneratedPluginRegistrant for its mode (release drops the
       # integration_test plugin; debug keeps it). Skipping that here makes
@@ -147,6 +154,7 @@ jobs:
             flutter build apk --debug
             adb install -r build/app/outputs/flutter-apk/app-debug.apk
             adb shell pm grant com.codewalnut.typemate android.permission.RECORD_AUDIO
+            adb shell pm grant com.codewalnut.typemate android.permission.POST_NOTIFICATIONS
             for f in integration_test/*_test.dart; do flutter test "$f" -d emulator-5554 --no-pub || exit 1; done
 
   test:
