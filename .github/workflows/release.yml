@@ -160,6 +160,67 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  android:
+    name: Android build
+    needs: security
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # The whisper_ggml plugin's native build needs NDK 29; Gradle
+      # auto-installs it only once its license is accepted.
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      # Sideload preview, debug-key signed until a Play keystore exists.
+      # The DSN dart-define matters: without it the Sentry toggle never
+      # renders and production Android ships with telemetry off.
+      - name: Build release APK
+        run: flutter build apk --release --dart-define=TYPEMATE_SENTRY_DSN=$TYPEMATE_SENTRY_DSN
+
+      - name: Rename APK to versioned release asset
+        run: |
+          VERSION="$(sed -n 's/^version: \([0-9.]*\)+.*/\1/p' pubspec.yaml)"
+          mkdir -p dist
+          mv build/app/outputs/flutter-apk/app-release.apk "dist/TypeMate-v$VERSION-android.apk"
+          ls -la dist
+
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: dist/TypeMate-v*-android.apk
+          if-no-files-found: error
+          retention-days: 14
+
   macos:
     name: macOS build
     needs: security
@@ -230,7 +291,7 @@ jobs:
 
   draft-release:
     name: Draft GitHub release
-    needs: [windows, linux, macos]
+    needs: [windows, linux, macos, android]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
