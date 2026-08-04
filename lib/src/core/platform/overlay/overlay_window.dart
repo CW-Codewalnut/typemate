@@ -1,9 +1,9 @@
 // The Flutter-rendered dictation overlay: a second Flutter window
 // (desktop_multi_window) restyled from the main engine by a
 // per-platform [OverlayWindowDriver] - pure Dart FFI, no compiled
-// native code. Replaces the retired Win32 and X11 native overlay
-// renderers; macOS still uses its native Swift panel until the ObjC
-// driver is verified on real hardware.
+// native code. Replaces the retired Win32, X11, and Swift native
+// overlay renderers (the macOS driver is build-verified only until a
+// real-hardware pass).
 import 'dart:convert';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';

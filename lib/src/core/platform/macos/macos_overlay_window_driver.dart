@@ -1,6 +1,6 @@
-// macOS overlay driver - UNTESTED best effort (no Mac available in the
-// development environment; verify on real hardware before any product
-// adoption).
+// macOS overlay driver - IN USE but build-verified only (no Mac in the
+// development environment); exercise on real hardware before the next
+// macOS preview ships.
 //
 // Approach: the Objective-C runtime via FFI from the main engine styles
 // the desktop_multi_window NSWindow to mirror the native Swift

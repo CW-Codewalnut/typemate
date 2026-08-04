@@ -8,10 +8,11 @@ Small per-platform native pieces own the global shortcut, overlays, and
 text insertion, hidden behind Dart interfaces so everything is testable
 with fakes. Every speech engine runs **in-process** through Flutter
 plugins — there are no helper server processes and no speech binaries.
-The Windows/Linux dictation overlay is a second Flutter window
+The desktop dictation overlay is a second Flutter window
 (desktop_multi_window) restyled from Dart FFI
-(lib/src/core/platform/overlay/) — never-focusable by construction;
-macOS keeps its native Swift panel until the ObjC driver is verified.
+(lib/src/core/platform/overlay/) — never-focusable by construction.
+The macOS driver is build-verified only; it awaits a real-hardware
+pass.
 
 A rendered diagram lives at `docs/media/architecture.svg` (embedded in
 the README).
@@ -31,7 +32,7 @@ Core (lib/src/core)
 Native, per platform
   windows/  Win32 runner: key polling, tray, SendInput
   linux/    bundled ffmpeg (capture), xdotool (typing)
-  macos/    Swift overlay panel, osascript paste, key polling
+  macos/    osascript paste, key polling
   android/  accessibility service: floating mic, focused-field insertion
 ```
 
@@ -84,7 +85,8 @@ Native, per platform
   (typing). libX11 FFI keymap polling drives the shortcut. Wayland
   reports unavailable by design.
 - **macOS**: clipboard + synthesized Cmd+V via osascript (needs
-  Accessibility), Swift non-activating overlay panel; preview status.
+  Accessibility); shared Flutter overlay via ObjC-runtime FFI;
+  preview status.
 - **Android**: an accessibility service hosts the floating mic bubble
   and inserts text into the focused field; dictation failures render as
   an overlay pill (background services may not toast); a headless

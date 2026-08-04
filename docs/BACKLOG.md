@@ -14,10 +14,11 @@ PLAN.md this survived from is in git history.)
   - Consider future auto-suggestions from repeated user corrections.
 - **Wayland support** via the portal APIs (global shortcut and text
   insertion are the blockers; see README's Linux notes).
-- **macOS overlay driver verification**: the multi-window overlay
-  shipped for Windows/Linux; the ObjC-FFI macOS driver exists but is
-  untested (no Mac available), so macOS still uses the native Swift
-  panel. Verify on real hardware, then retire the Swift overlay too.
+- **macOS overlay driver hardware pass**: all three desktop platforms
+  now use the multi-window overlay and the Swift panel is deleted, but
+  the ObjC-FFI macOS driver has only been build-verified in CI (no Mac
+  available). Exercise it on real hardware before the next macOS
+  preview ships.
 - **Linux store distribution** (Snap/Flathub) — needs a real
   snapcraft/flatpak manifest written for the slim-install layout; the
   icons_launcher-generated snap/ scaffolding was removed as misleading.
