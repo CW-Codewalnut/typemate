@@ -136,7 +136,8 @@ class WindowsOverlayWindowDriver extends OverlayWindowDriver {
     final buffer = malloc.allocate<Utf16>(512 * 2);
     try {
       final length = _getWindowText(hwnd, buffer, 512);
-      return length > 0 ? buffer.toDartString() : '<untitled:$hwnd>';
+      final title = length > 0 ? buffer.toDartString() : '<untitled>';
+      return '0x${hwnd.toRadixString(16)}:$title';
     } finally {
       malloc.free(buffer);
     }
@@ -147,9 +148,6 @@ class WindowsOverlayWindowDriver extends OverlayWindowDriver {
     final overlay = _findOverlay();
     return overlay != 0 && _getForegroundWindow() == overlay;
   }
-
-  @override
-  bool get isSecondaryEngine => _findOverlay() != 0;
 
   @override
   String styleEvidence() {

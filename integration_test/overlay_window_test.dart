@@ -19,19 +19,28 @@ import 'package:typemate/src/core/platform/overlay/overlay_window_driver.dart';
 Future<void> main() async {
   // The overlay's second engine re-enters THIS main (the test binary is
   // the app), but the test harness only supports a no-arg main - so the
-  // role is detected at runtime: the multi-window class window only
-  // exists once the main engine created it, i.e. in the overlay engine.
+  // role is detected with a same-process marker file: the main (test)
+  // engine writes it before creating the overlay window, and the
+  // second engine, entering later in the same process, finds it.
   // Production main.dart branches on entrypoint args instead.
   WidgetsFlutterBinding.ensureInitialized();
+  final roleMarker = File(
+    '${Directory.systemTemp.path}/typemate-overlay-e2e-$pid.marker',
+  );
   if (!Platform.isAndroid &&
       !Platform.resolvedExecutable.contains('flutter_tester')) {
-    final roleProbe = createOverlayWindowDriver();
-    if (roleProbe != null && roleProbe.isSecondaryEngine) {
+    if (roleMarker.existsSync()) {
       runApp(const OverlayWindowApp());
       return;
     }
+    roleMarker.createSync();
   }
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  tearDownAll(() {
+    if (roleMarker.existsSync()) {
+      roleMarker.deleteSync();
+    }
+  });
 
   testWidgets('overlay window shows every variant without taking focus', (
     tester,
@@ -50,15 +59,23 @@ Future<void> main() async {
     final overlay = OverlayWindow(driver: driver);
     expect(overlay.isAvailable, isTrue);
 
+    // The dictation invariant: whoever held input focus before the
+    // overlay appears still holds it after - across every variant and
+    // across hide/reshow. (On an empty CI desktop the overlay can be
+    // the only window and thus foreground by default, so "overlay is
+    // never foreground" would be the wrong oracle; unchanged focus is
+    // the real contract.)
+    final before = driver!.focusEvidence();
+
     await overlay.showWorking('TypeMate is listening...');
     await Future<void>.delayed(const Duration(milliseconds: 800));
-    expect(driver!.overlayStoleFocus, isFalse);
+    expect(driver.focusEvidence(), before);
 
     await overlay.showWorking('Transcribing locally...');
     await overlay.showInfo('Please download the speech model first.');
     await overlay.showError("Couldn't capture your voice.");
     await Future<void>.delayed(const Duration(milliseconds: 400));
-    expect(driver.overlayStoleFocus, isFalse);
+    expect(driver.focusEvidence(), before);
 
     if (Platform.isWindows) {
       // Style readback: NOACTIVATE | LAYERED | TOOLWINDOW | TOPMOST.
@@ -69,7 +86,7 @@ Future<void> main() async {
     // A second cycle must reuse the window without re-creating it.
     await overlay.showWorking('TypeMate is listening...');
     await Future<void>.delayed(const Duration(milliseconds: 400));
-    expect(driver.overlayStoleFocus, isFalse);
+    expect(driver.focusEvidence(), before);
     await overlay.hide();
   });
 }

@@ -283,11 +283,6 @@ class X11OverlayWindowDriver extends OverlayWindowDriver {
   @override
   void snapshotBefore() => _before = _pidWindows();
 
-  /// More than one client window for this pid means the overlay window
-  /// already exists, i.e. this is the secondary engine.
-  @override
-  bool get isSecondaryEngine => _pidWindows().length > 1;
-
   /// Finds the window created since [snapshotBefore], unmaps it, and
   /// marks it override-redirect so the window manager never decorates,
   /// focuses, or restacks it - the native overlay's exact behaviour.

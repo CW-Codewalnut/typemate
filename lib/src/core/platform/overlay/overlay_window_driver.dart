@@ -36,12 +36,6 @@ abstract class OverlayWindowDriver {
 
   /// Extra styling evidence for the logs (e.g. Win32 exstyle readback).
   String styleEvidence() => '';
-
-  /// Whether this engine is the overlay's secondary engine (a window of
-  /// the multi-window class already exists in this process). The test
-  /// harness cannot branch on entrypoint args, so its main() asks this
-  /// instead; production main.dart branches on args and never needs it.
-  bool get isSecondaryEngine => false;
 }
 
 /// Returns the platform's driver, or null where none exists yet.
