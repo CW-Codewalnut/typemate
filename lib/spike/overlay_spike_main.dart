@@ -27,16 +27,23 @@ import 'package:flutter/material.dart';
 // Chroma key painted behind the overlay UI and keyed out by
 // SetLayeredWindowAttributes: everything this exact colour becomes
 // transparent AND click-through (Windows routes clicks on keyed pixels
-// to the window below). Near-black on purpose: the capsule's
-// antialiased edge pixels blend toward the key colour and are NOT keyed
-// out, so a loud key (magenta) leaves a coloured fringe while a
-// near-black key leaves a faint dark halo that reads as a shadow. The
-// pill itself must simply never contain this exact colour.
-const _chromaKey = Color(0xFF010203);
-// COLORREF is 0x00BBGGRR: blue 03, green 02, red 01.
-const _chromaKeyColorref = 0x00030201;
+// to the window below). One blue-bit away from the pill fill (1F2230 vs
+// 1F2231) on purpose: the capsule's antialiased edge pixels blend
+// toward the key colour and are NOT keyed out, so any residual fringe
+// is pill-coloured - an invisible outline instead of the black halo a
+// dark key leaves or the coloured ring a loud key leaves. The pill
+// interior (exactly 1F2230) is never keyed.
+const _chromaKey = Color(0xFF1F2231);
+// COLORREF is 0x00BBGGRR: blue 31, green 22, red 1F.
+const _chromaKeyColorref = 0x0031221F;
 // The package's fixed Win32 class for every window it creates.
 const _overlayWindowClass = 'FLUTTER_MULTI_WINDOW_WIN32_WINDOW';
+
+/// The overlay's fixed visual variants. Callers pick a variant and pass
+/// their own message; the overlay owns only the look of each variant:
+/// [working] is the animated bars pill with the caller's label,
+/// [info] is guidance on the primary pill, [error] alone renders red.
+enum OverlayVariant { working, info, error }
 
 void main(List<String> args) {
   if (args.firstOrNull == 'multi_window') {
@@ -44,7 +51,10 @@ void main(List<String> args) {
     runApp(
       _OverlayApp(
         windowId: args[1],
-        initialState: data['state'] as String? ?? 'listening',
+        initialVariant:
+            OverlayVariant.values.asNameMap()[data['variant']] ??
+            OverlayVariant.working,
+        initialMessage: data['message'] as String? ?? '',
       ),
     );
     return;
@@ -204,17 +214,16 @@ class _ControlAppState extends State<_ControlApp> {
   WindowController? _overlay;
   String _log = 'Overlay not created yet.';
 
-  // The real product reasons, verbatim, so every error renders exactly
-  // as it will in production (the error pill shows whatever message the
-  // dictation controller reports - engine preparing, model missing,
-  // microphone problems - never a generic failure).
+  // Demo sequence. The driver never defines copy: every message is
+  // passed by the caller, exactly as the dictation controller will pass
+  // its own strings in production.
   static const _sequence = [
-    ('listening', null),
-    ('transcribing', null),
-    ('error', 'Download the speech model in the TypeMate window first.'),
-    ('error', 'Preparing local speech engine...'),
+    (OverlayVariant.working, 'TypeMate is listening...'),
+    (OverlayVariant.working, 'Transcribing locally...'),
+    (OverlayVariant.info, 'Please download the speech model first'),
+    (OverlayVariant.info, 'Preparing local speech engine...'),
     (
-      'error',
+      OverlayVariant.error,
       "Couldn't start recording. Check that your microphone is "
           'connected and allowed, then try again.',
     ),
@@ -227,8 +236,8 @@ class _ControlAppState extends State<_ControlApp> {
     // Unattended: cycle forever - 9s shown, 3s hidden - so an external
     // observer can screenshot any time and logs accumulate evidence.
     Timer.periodic(const Duration(seconds: 12), (_) async {
-      final (state, message) = _sequence[_cycle % _sequence.length];
-      await _show(state, message);
+      final (variant, message) = _sequence[_cycle % _sequence.length];
+      await _show(variant, message);
       _cycle++;
       Timer(const Duration(seconds: 9), _hide);
     });
@@ -249,17 +258,17 @@ class _ControlAppState extends State<_ControlApp> {
     _overlay = controller;
   }
 
-  Future<void> _show(String state, [String? message]) async {
+  Future<void> _show(OverlayVariant variant, String message) async {
     final before = _win32?.foregroundTitle();
     await _ensureOverlay();
     await _overlay!.invokeMethod(
       'setState',
-      json.encode({'state': state, 'message': message}),
+      json.encode({'variant': variant.name, 'message': message}),
     );
-    final isError = state == 'error';
+    final isTextPill = variant != OverlayVariant.working;
     final styled = _win32?.styleAndShowOverlay(
-      width: isError ? 360 : 230,
-      height: isError ? 92 : 66,
+      width: isTextPill ? 360 : 230,
+      height: isTextPill ? 92 : 66,
     );
     await Future<void>.delayed(const Duration(milliseconds: 300));
     final after = _win32?.foregroundTitle();
@@ -280,7 +289,7 @@ class _ControlAppState extends State<_ControlApp> {
     });
     // Also to stdout so `flutter run` logs carry the evidence.
     debugPrint(
-      'SPIKE|$state|styled=$styled|overlay=$overlayHwnd'
+      'SPIKE|${variant.name}|styled=$styled|overlay=$overlayHwnd'
       '|foreground=$foregroundHwnd|stole=$stole'
       '|exstyle=0x${exstyle.toRadixString(16)}'
       '|before=$before|after=$after',
@@ -307,15 +316,22 @@ class _ControlAppState extends State<_ControlApp> {
                 spacing: 8,
                 children: [
                   FilledButton(
-                    onPressed: () => _show('listening'),
+                    onPressed: () => _show(
+                      OverlayVariant.working,
+                      'TypeMate is listening...',
+                    ),
                     child: const Text('Show listening'),
                   ),
                   FilledButton(
-                    onPressed: () => _show('transcribing'),
+                    onPressed: () => _show(
+                      OverlayVariant.working,
+                      'Transcribing locally...',
+                    ),
                     child: const Text('Show transcribing'),
                   ),
                   FilledButton(
-                    onPressed: () => _show('error'),
+                    onPressed: () =>
+                        _show(OverlayVariant.error, 'Dictation failed'),
                     child: const Text('Show error'),
                   ),
                   OutlinedButton(onPressed: _hide, child: const Text('Hide')),
@@ -422,18 +438,23 @@ class _OverlayTheme extends ThemeExtension<_OverlayTheme> {
 }
 
 class _OverlayApp extends StatefulWidget {
-  const _OverlayApp({required this.windowId, required this.initialState});
+  const _OverlayApp({
+    required this.windowId,
+    required this.initialVariant,
+    required this.initialMessage,
+  });
 
   final String windowId;
-  final String initialState;
+  final OverlayVariant initialVariant;
+  final String initialMessage;
 
   @override
   State<_OverlayApp> createState() => _OverlayAppState();
 }
 
 class _OverlayAppState extends State<_OverlayApp> {
-  late String _state = widget.initialState;
-  String? _message;
+  late OverlayVariant _variant = widget.initialVariant;
+  late String _message = widget.initialMessage;
 
   @override
   void initState() {
@@ -444,8 +465,10 @@ class _OverlayAppState extends State<_OverlayApp> {
       if (call.method == 'setState') {
         final data = json.decode(call.arguments as String);
         setState(() {
-          _state = data['state'] as String;
-          _message = data['message'] as String?;
+          _variant =
+              OverlayVariant.values.asNameMap()[data['variant']] ??
+              OverlayVariant.working;
+          _message = data['message'] as String? ?? '';
         });
       }
       return null;
@@ -454,7 +477,7 @@ class _OverlayAppState extends State<_OverlayApp> {
 
   @override
   Widget build(BuildContext context) {
-    final isError = _state == 'error';
+    final isTextPill = _variant != OverlayVariant.working;
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -474,7 +497,7 @@ class _OverlayAppState extends State<_OverlayApp> {
           return Material(
             color: _chromaKey,
             child: Center(
-              child: isError
+              child: isTextPill
                   ? Container(
                       constraints: const BoxConstraints(maxWidth: 340),
                       padding: const EdgeInsets.symmetric(
@@ -482,11 +505,15 @@ class _OverlayAppState extends State<_OverlayApp> {
                         vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        color: overlayTheme.errorBackground,
+                        // Severity-coded: red only for real failures,
+                        // the primary pill colour for guidance.
+                        color: _variant == OverlayVariant.error
+                            ? overlayTheme.errorBackground
+                            : overlayTheme.pillBackground,
                         borderRadius: BorderRadius.circular(29),
                       ),
                       child: Text(
-                        _message ?? 'Dictation failed',
+                        _message,
                         textAlign: TextAlign.center,
                         style: textStyle,
                       ),
@@ -504,12 +531,7 @@ class _OverlayAppState extends State<_OverlayApp> {
                           SizedBox(
                             height: 22,
                             child: Center(
-                              child: Text(
-                                _state == 'transcribing'
-                                    ? 'Transcribing locally...'
-                                    : 'TypeMate is listening...',
-                                style: textStyle,
-                              ),
+                              child: Text(_message, style: textStyle),
                             ),
                           ),
                           const Expanded(child: _Bars()),

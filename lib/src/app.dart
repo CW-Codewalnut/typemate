@@ -183,7 +183,7 @@ class _TypeMateAppState extends State<TypeMateApp> {
       dictationBlocker: () {
         final provisioner = _modelProvisioner;
         if (provisioner != null && !provisioner.isReady) {
-          return 'Download the speech model in the TypeMate window first.';
+          return 'Please download the speech model first.';
         }
         return null;
       },
