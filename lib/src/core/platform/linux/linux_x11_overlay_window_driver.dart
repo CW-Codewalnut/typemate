@@ -404,6 +404,25 @@ class X11OverlayWindowDriver extends OverlayWindowDriver {
   }
 
   @override
+  bool get foregroundIsSelf {
+    if (!isAvailable) {
+      return false;
+    }
+    final focus = malloc<IntPtr>();
+    final revert = malloc<Int32>();
+    try {
+      _getInputFocus(_display, focus, revert);
+      final pidAtomName = '_NET_WM_PID'.toNativeUtf8();
+      final pidAtom = _internAtom(_display, pidAtomName.cast(), 0);
+      malloc.free(pidAtomName);
+      return _windowPid(focus.value, pidAtom) == pid;
+    } finally {
+      malloc.free(focus);
+      malloc.free(revert);
+    }
+  }
+
+  @override
   bool get overlayStoleFocus {
     if (!isAvailable) {
       return false;

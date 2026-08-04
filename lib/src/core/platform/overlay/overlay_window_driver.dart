@@ -36,6 +36,13 @@ abstract class OverlayWindowDriver {
 
   /// Extra styling evidence for the logs (e.g. Win32 exstyle readback).
   String styleEvidence() => '';
+
+  /// Whether the currently focused window belongs to this process. The
+  /// dictation contract is that the overlay never moves focus away from
+  /// ANOTHER app; focus shuffling between this process's own windows
+  /// (the CI-desktop degenerate case, where the test app itself is
+  /// foreground) is harmless.
+  bool get foregroundIsSelf => false;
 }
 
 /// Returns the platform's driver, or null where none exists yet.

@@ -32,11 +32,18 @@ typedef _GetSystemMetricsC = Int32 Function(Int32);
 typedef _GetSystemMetricsD = int Function(int);
 typedef _GetDpiForWindowC = Uint32 Function(IntPtr);
 typedef _GetDpiForWindowD = int Function(int);
+typedef _GetWindowThreadProcessIdC = Uint32 Function(IntPtr, Pointer<Uint32>);
+typedef _GetWindowThreadProcessIdD = int Function(int, Pointer<Uint32>);
+typedef _GetCurrentProcessIdC = Uint32 Function();
+typedef _GetCurrentProcessIdD = int Function();
 
 class WindowsOverlayWindowDriver extends OverlayWindowDriver {
-  WindowsOverlayWindowDriver() : _user32 = DynamicLibrary.open('user32.dll');
+  WindowsOverlayWindowDriver()
+    : _user32 = DynamicLibrary.open('user32.dll'),
+      _kernel32 = DynamicLibrary.open('kernel32.dll');
 
   final DynamicLibrary _user32;
+  final DynamicLibrary _kernel32;
 
   late final _findWindow = _user32.lookupFunction<_FindWindowC, _FindWindowD>(
     'FindWindowW',
@@ -62,6 +69,14 @@ class WindowsOverlayWindowDriver extends OverlayWindowDriver {
       );
   late final _getDpiForWindow = _user32
       .lookupFunction<_GetDpiForWindowC, _GetDpiForWindowD>('GetDpiForWindow');
+  late final _getWindowThreadProcessId = _user32
+      .lookupFunction<_GetWindowThreadProcessIdC, _GetWindowThreadProcessIdD>(
+        'GetWindowThreadProcessId',
+      );
+  late final _getCurrentProcessId = _kernel32
+      .lookupFunction<_GetCurrentProcessIdC, _GetCurrentProcessIdD>(
+        'GetCurrentProcessId',
+      );
 
   static const _gwlStyle = -16;
   static const _gwlExstyle = -20;
@@ -147,6 +162,21 @@ class WindowsOverlayWindowDriver extends OverlayWindowDriver {
   bool get overlayStoleFocus {
     final overlay = _findOverlay();
     return overlay != 0 && _getForegroundWindow() == overlay;
+  }
+
+  @override
+  bool get foregroundIsSelf {
+    final foreground = _getForegroundWindow();
+    if (foreground == 0) {
+      return false;
+    }
+    final processId = malloc<Uint32>();
+    try {
+      _getWindowThreadProcessId(foreground, processId);
+      return processId.value == _getCurrentProcessId();
+    } finally {
+      malloc.free(processId);
+    }
   }
 
   @override

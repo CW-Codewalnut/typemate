@@ -185,6 +185,14 @@ class MacosOverlayWindowDriver extends OverlayWindowDriver {
   }
 
   @override
+  bool get foregroundIsSelf {
+    // NSApplication only sees this process's windows: a non-null
+    // keyWindow IS ours.
+    final app = _msgPP(_cls('NSApplication'), _selector('sharedApplication'));
+    return _msgPP(app, _selector('keyWindow')) != nullptr;
+  }
+
+  @override
   bool get overlayStoleFocus {
     if (_overlayWindow == nullptr) {
       return false;
