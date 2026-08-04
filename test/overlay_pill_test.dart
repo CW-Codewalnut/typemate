@@ -18,15 +18,19 @@ void main() {
     );
   }
 
+  /// The pill's effective colour on any platform: Linux paints it on
+  /// the root Material (the X11 shape supplies the corners), the others
+  /// on a rounded Container inside the chroma backdrop.
   Color pillColor(WidgetTester tester) {
-    final material = tester.widgetList<Material>(find.byType(Material)).first;
-    if (material.color != null) {
-      return material.color!;
+    for (final container in tester.widgetList<Container>(
+      find.byType(Container),
+    )) {
+      final decoration = container.decoration;
+      if (decoration is BoxDecoration && decoration.color != null) {
+        return decoration.color!;
+      }
     }
-    final container = tester
-        .widgetList<Container>(find.byType(Container))
-        .first;
-    return (container.decoration! as BoxDecoration).color!;
+    return tester.widgetList<Material>(find.byType(Material)).first.color!;
   }
 
   testWidgets('working variant shows the caller label with bars', (
@@ -65,8 +69,7 @@ void main() {
       find.text('Please download the speech model first.'),
       findsOneWidget,
     );
-    final theme = const OverlayTheme.native();
-    expect(pillColor(tester), isNot(theme.errorBackground));
+    expect(pillColor(tester), const OverlayTheme.native().pillBackground);
   });
 
   testWidgets('only the error variant renders the red pill', (tester) async {
@@ -77,12 +80,6 @@ void main() {
     );
 
     expect(find.text("Couldn't capture your voice."), findsOneWidget);
-    final container = tester
-        .widgetList<Container>(find.byType(Container))
-        .first;
-    expect(
-      (container.decoration! as BoxDecoration).color,
-      const OverlayTheme.native().errorBackground,
-    );
+    expect(pillColor(tester), const OverlayTheme.native().errorBackground);
   });
 }
