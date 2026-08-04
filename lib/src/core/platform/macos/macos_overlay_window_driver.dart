@@ -102,7 +102,9 @@ class MacosOverlayWindowDriver extends OverlayWindowDriver {
   Pointer<Void> _overlayWindow = nullptr;
 
   /// The main window is [NSApplication.mainWindow]; the overlay is the
-  /// other window in [NSApplication.windows] once created.
+  /// untitled non-main window (desktop_multi_window creates it with an
+  /// empty title), so titled dialogs or popovers are never adopted by
+  /// mistake. Falls back to the first non-main window.
   Pointer<Void> _findOverlay() {
     final app = _msgPP(_cls('NSApplication'), _selector('sharedApplication'));
     if (app == nullptr) {
@@ -114,13 +116,24 @@ class MacosOverlayWindowDriver extends OverlayWindowDriver {
       return nullptr;
     }
     final count = _msgUlong(windows, _selector('count'));
+    Pointer<Void> fallback = nullptr;
     for (var i = 0; i < count; i++) {
       final window = _msgAtIndex(windows, _selector('objectAtIndex:'), i);
-      if (window != mainWindow && window != nullptr) {
+      if (window == mainWindow || window == nullptr) {
+        continue;
+      }
+      final title = _msgPP(window, _selector('title'));
+      final length = title == nullptr
+          ? 0
+          : _msgUlong(title, _selector('length'));
+      if (length == 0) {
         return window;
       }
+      if (fallback == nullptr) {
+        fallback = window;
+      }
     }
-    return nullptr;
+    return fallback;
   }
 
   @override
@@ -139,8 +152,10 @@ class MacosOverlayWindowDriver extends OverlayWindowDriver {
     _msgVoidBool(window, _selector('setIgnoresMouseEvents:'), 1);
     final clear = _msgPP(_cls('NSColor'), _selector('clearColor'));
     _msgVoidPtr(window, _selector('setBackgroundColor:'), clear);
-    // canJoinAllSpaces (1) | stationary (16).
-    _msgVoidLong(window, _selector('setCollectionBehavior:'), 1 | 16);
+    // canJoinAllSpaces (1) | stationary (16) | fullScreenAuxiliary
+    // (256, so the pill appears over full-screen apps like the retired
+    // Swift panel did).
+    _msgVoidLong(window, _selector('setCollectionBehavior:'), 1 | 16 | 256);
     return true;
   }
 

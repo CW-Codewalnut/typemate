@@ -119,6 +119,7 @@ class OverlayWindowApp extends StatefulWidget {
 class _OverlayWindowAppState extends State<OverlayWindowApp> {
   late OverlayVariant _variant = widget.initialVariant;
   late String _message = widget.initialMessage;
+  bool _hidden = false;
 
   @override
   void initState() {
@@ -133,10 +134,15 @@ class _OverlayWindowAppState extends State<OverlayWindowApp> {
       if (call.method == 'setState') {
         final data = json.decode(call.arguments as String);
         setState(() {
-          _variant =
-              OverlayVariant.values.asNameMap()[data['variant']] ??
-              OverlayVariant.working;
-          _message = data['message'] as String? ?? '';
+          _hidden = data['hidden'] as bool? ?? false;
+          if (data['variant'] != null) {
+            _variant =
+                OverlayVariant.values.asNameMap()[data['variant']] ??
+                OverlayVariant.working;
+          }
+          if (data['message'] != null) {
+            _message = data['message'] as String;
+          }
         });
       }
       return null;
@@ -145,6 +151,15 @@ class _OverlayWindowAppState extends State<OverlayWindowApp> {
 
   @override
   Widget build(BuildContext context) {
+    // A hidden overlay renders nothing at all, which also unmounts the
+    // bars and stops their animation timer - the native window is
+    // invisible anyway, so ticking would only burn cycles.
+    if (_hidden) {
+      return const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: SizedBox.shrink(),
+      );
+    }
     final isTextPill = _variant != OverlayVariant.working;
     return MaterialApp(
       debugShowCheckedModeBanner: false,

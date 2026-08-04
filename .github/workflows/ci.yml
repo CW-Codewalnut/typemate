@@ -274,19 +274,6 @@ jobs:
             bin
           key: speech-runtime-${{ runner.os }}-${{ hashFiles('tool/fetch_whisper_runtime.dart') }}
 
-      # CocoaPods rebuilds every pod (Sentry alone is minutes of Swift/
-      # ObjC) on a cold runner; cache the built Pods keyed on the lockfile.
-      - name: Cache CocoaPods
-        if: runner.os == 'macOS'
-        uses: actions/cache@v4
-        with:
-          # Keyed on pubspec.lock: the pod set derives from the Flutter
-          # plugin set (Podfile.lock is generated, not committed).
-          path: macos/Pods
-          key: pods-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
-          restore-keys: |
-            pods-${{ runner.os }}-
-
       - name: Build macOS app
         if: runner.os == 'macOS'
         run: flutter build macos --debug

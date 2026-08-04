@@ -29,7 +29,11 @@ class MacosPlatformBridge implements PlatformBridge, InfoOverlaySource {
     OverlayWindow? overlayWindow,
   }) : nativeMethodInvoker = nativeMethodInvoker ?? _nativeChannel.invokeMethod,
        _executablePath = executablePath ?? Platform.resolvedExecutable,
-       _overlay = overlayWindow ?? OverlayWindow.forPlatform();
+       _overlay = overlayWindow ?? OverlayWindow.forPlatform() {
+    // Off the dictation critical path: the first showListening must
+    // never wait on second-engine bring-up while the user speaks.
+    _overlay.preload();
+  }
 
   final MacosNativeMethodInvoker nativeMethodInvoker;
   final MacosProcessRunner processRunner;

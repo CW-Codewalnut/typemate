@@ -389,6 +389,9 @@ class X11OverlayWindowDriver extends OverlayWindowDriver {
 
   @override
   String focusEvidence() {
+    if (!isAvailable) {
+      return 'no-display';
+    }
     final focus = malloc<IntPtr>();
     final revert = malloc<Int32>();
     try {
@@ -402,6 +405,9 @@ class X11OverlayWindowDriver extends OverlayWindowDriver {
 
   @override
   bool get overlayStoleFocus {
+    if (!isAvailable) {
+      return false;
+    }
     final focus = malloc<IntPtr>();
     final revert = malloc<Int32>();
     try {

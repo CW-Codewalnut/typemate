@@ -40,7 +40,12 @@ class LinuxPlatformBridge implements PlatformBridge, InfoOverlaySource {
   }) : _processRunner = processRunner ?? _runProcess,
        _environment = environment ?? Platform.environment,
        _executablePath = executablePath ?? Platform.resolvedExecutable,
-       _overlay = overlayWindow ?? OverlayWindow.forPlatform();
+       _overlay = overlayWindow ?? OverlayWindow.forPlatform() {
+    // Off the dictation critical path - and on Linux this also moves
+    // the brief WM-managed flash (before adoption unmaps the window)
+    // to app boot instead of mid-dictation.
+    _overlay.preload();
+  }
 
   final LinuxProcessRunner _processRunner;
   final Map<String, String> _environment;

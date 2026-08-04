@@ -1,13 +1,17 @@
 import 'dart:convert';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:typemate/src/core/platform/overlay/overlay_window.dart';
 import 'package:typemate/src/core/platform/overlay/overlay_window_driver.dart';
 
 class _FakeDriver extends OverlayWindowDriver {
-  _FakeDriver({this.visibleAtLaunch = false});
+  _FakeDriver({this.visibleAtLaunch = false, this.adoptFailures = 0});
 
   final bool visibleAtLaunch;
+
+  /// How many adopt attempts fail before one succeeds.
+  int adoptFailures;
   final List<String> calls = [];
 
   @override
@@ -19,6 +23,10 @@ class _FakeDriver extends OverlayWindowDriver {
   @override
   bool adoptNewWindow() {
     calls.add('adopt');
+    if (adoptFailures > 0) {
+      adoptFailures--;
+      return false;
+    }
     return true;
   }
 
@@ -48,40 +56,74 @@ class _FakeHandle implements OverlayWindowHandle {
 }
 
 void main() {
-  (OverlayWindow, _FakeDriver, _FakeHandle, List<bool>) build({
+  (OverlayWindow, _FakeDriver, _FakeHandle, List<String>) build({
     bool visibleAtLaunch = false,
+    int adoptFailures = 0,
+    Duration autoHide = const Duration(milliseconds: 4500),
   }) {
-    final driver = _FakeDriver(visibleAtLaunch: visibleAtLaunch);
+    final driver = _FakeDriver(
+      visibleAtLaunch: visibleAtLaunch,
+      adoptFailures: adoptFailures,
+    );
     final handle = _FakeHandle();
-    final hiddenFlags = <bool>[];
+    final creations = <String>[];
     final overlay = OverlayWindow(
       driver: driver,
-      createWindow: ({required bool hiddenAtLaunch}) async {
-        hiddenFlags.add(hiddenAtLaunch);
-        return handle;
-      },
+      textPillAutoHideAfter: autoHide,
+      createWindow:
+          ({required bool hiddenAtLaunch, required String arguments}) async {
+            creations.add('hidden=$hiddenAtLaunch args=$arguments');
+            return handle;
+          },
     );
-    return (overlay, driver, handle, hiddenFlags);
+    return (overlay, driver, handle, creations);
   }
 
+  Map<String, dynamic> payload(_FakeHandle handle, int index) =>
+      json.decode(handle.invocations[index].$2! as String)
+          as Map<String, dynamic>;
+
   test('creates the window once and reuses it across shows', () async {
-    final (overlay, driver, handle, hiddenFlags) = build();
+    final (overlay, driver, handle, creations) = build();
 
     await overlay.showWorking('TypeMate is listening...');
     await overlay.showError('Something went wrong.');
 
-    expect(hiddenFlags, [true], reason: 'one window, hidden at launch');
+    expect(creations, hasLength(1), reason: 'one window for the app life');
+    expect(creations.single, startsWith('hidden=true'));
     expect(driver.calls.where((call) => call == 'snapshot'), hasLength(1));
     expect(driver.calls.where((call) => call == 'adopt'), hasLength(1));
-    expect(handle.invocations, hasLength(2));
+  });
+
+  test('the first show rides the creation arguments', () async {
+    final (overlay, _, _, creations) = build();
+
+    await overlay.showInfo('Please download the speech model first.');
+
+    // Even if the sub-engine misses the first setState, its creation
+    // args already carry the right pill.
+    expect(creations.single, contains('"variant":"info"'));
+    expect(
+      creations.single,
+      contains('Please download the speech model first.'),
+    );
   });
 
   test('a driver that needs a visible launch gets one', () async {
-    final (overlay, _, _, hiddenFlags) = build(visibleAtLaunch: true);
+    final (overlay, _, _, creations) = build(visibleAtLaunch: true);
 
     await overlay.showWorking('TypeMate is listening...');
 
-    expect(hiddenFlags, [false]);
+    expect(creations.single, startsWith('hidden=false'));
+  });
+
+  test('adoption retries until the native window exists', () async {
+    final (overlay, driver, _, _) = build(adoptFailures: 3);
+
+    await overlay.showWorking('TypeMate is listening...');
+
+    expect(driver.calls.where((call) => call == 'adopt'), hasLength(4));
+    expect(driver.calls.last, startsWith('show:'));
   });
 
   test('variants carry the caller message and size their pill', () async {
@@ -90,30 +132,92 @@ void main() {
     await overlay.showWorking('Transcribing locally...');
     await overlay.showInfo('Please download the speech model first.');
     await overlay.showError("Couldn't capture your voice.");
-    await overlay.hide();
 
-    Map<String, dynamic> payload(int index) =>
-        json.decode(handle.invocations[index].$2! as String)
-            as Map<String, dynamic>;
-    expect(payload(0), {
+    expect(payload(handle, 0), {
       'variant': 'working',
       'message': 'Transcribing locally...',
+      'hidden': false,
     });
-    expect(payload(1), {
-      'variant': 'info',
-      'message': 'Please download the speech model first.',
-    });
-    expect(payload(2), {
-      'variant': 'error',
-      'message': "Couldn't capture your voice.",
-    });
+    expect(payload(handle, 1)['variant'], 'info');
+    expect(payload(handle, 2)['variant'], 'error');
     // The bars pill is the native 210x58; text pills get the wide pill.
     expect(driver.calls.where((call) => call.startsWith('show:')), [
       'show:210x58',
       'show:360x92',
       'show:360x92',
     ]);
+  });
+
+  test('hide pauses the pill before hiding the native window', () async {
+    final (overlay, driver, handle, _) = build();
+
+    await overlay.showWorking('TypeMate is listening...');
+    await overlay.hide();
+
+    expect(payload(handle, 1), {'hidden': true});
     expect(driver.calls.last, 'hide');
+  });
+
+  test('info and error pills auto-hide; working never does', () {
+    fakeAsync((async) {
+      final (overlay, driver, _, _) = build(
+        autoHide: const Duration(milliseconds: 4500),
+      );
+
+      overlay.showError('Something went wrong.');
+      async.flushMicrotasks();
+      expect(driver.calls, isNot(contains('hide')));
+
+      async.elapse(const Duration(milliseconds: 4600));
+      expect(
+        driver.calls,
+        contains('hide'),
+        reason: 'the native overlays all auto-hid their toasts at 4.5s',
+      );
+
+      driver.calls.clear();
+      overlay.showWorking('TypeMate is listening...');
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 30));
+      expect(
+        driver.calls,
+        isNot(contains('hide')),
+        reason: 'the working pill lives for the whole dictation',
+      );
+    });
+  });
+
+  test('a new show cancels the pending auto-hide', () {
+    fakeAsync((async) {
+      final (overlay, driver, _, _) = build();
+
+      overlay.showError('Something went wrong.');
+      async.flushMicrotasks();
+      async.elapse(const Duration(milliseconds: 3000));
+      overlay.showWorking('TypeMate is listening...');
+      async.flushMicrotasks();
+      async.elapse(const Duration(milliseconds: 3000));
+
+      expect(
+        driver.calls,
+        isNot(contains('hide')),
+        reason: 'the working pill must not be killed by a stale timer',
+      );
+    });
+  });
+
+  test('preload creates the window off the dictation path', () async {
+    final (overlay, driver, _, creations) = build();
+
+    overlay.preload();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(creations, hasLength(1));
+    expect(driver.calls, isNot(contains(startsWith('show:'))));
+
+    // The first dictation reuses the preloaded window instantly.
+    await overlay.showWorking('TypeMate is listening...');
+    expect(creations, hasLength(1));
   });
 
   test(
@@ -122,14 +226,16 @@ void main() {
       var created = 0;
       final overlay = OverlayWindow(
         driver: null,
-        createWindow: ({required bool hiddenAtLaunch}) async {
-          created++;
-          return _FakeHandle();
-        },
+        createWindow:
+            ({required bool hiddenAtLaunch, required String arguments}) async {
+              created++;
+              return _FakeHandle();
+            },
       );
 
       // Explicit null driver models an unsupported platform.
       expect(overlay.isAvailable, isFalse);
+      overlay.preload();
       await overlay.showWorking('TypeMate is listening...');
       await overlay.hide();
       expect(created, 0);

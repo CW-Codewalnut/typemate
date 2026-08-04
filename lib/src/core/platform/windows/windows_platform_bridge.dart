@@ -51,6 +51,9 @@ class WindowsPlatformBridge
        _executablePath = executablePath ?? Platform.resolvedExecutable,
        _overlay = overlayWindow ?? OverlayWindow.forPlatform() {
     _nativeChannel.setMethodCallHandler(_handleNativeCall);
+    // Off the dictation critical path: the first showListening must
+    // never wait on second-engine bring-up while the user speaks.
+    _overlay.preload();
   }
 
   final PlatformProcessRunner processRunner;

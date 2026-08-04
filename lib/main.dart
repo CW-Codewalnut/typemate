@@ -32,7 +32,11 @@ Future<void> main(List<String> args) async {
   // these args. It must branch before ANY app bootstrap - it needs no
   // single-instance check, window manager, or speech runtime.
   if (args.firstOrNull == 'multi_window') {
-    final data = json.decode(args[2]) as Map<String, dynamic>;
+    // Guard the arg shape: a future package change must degrade to a
+    // default pill, not crash the overlay engine at entry.
+    final data = args.length >= 3
+        ? json.decode(args[2]) as Map<String, dynamic>
+        : const <String, dynamic>{};
     runApp(
       OverlayWindowApp(
         initialVariant:
