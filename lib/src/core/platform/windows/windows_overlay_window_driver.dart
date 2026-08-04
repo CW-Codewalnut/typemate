@@ -81,7 +81,6 @@ class WindowsOverlayWindowDriver extends OverlayWindowDriver {
   static const _gwlStyle = -16;
   static const _gwlExstyle = -20;
   static const _wsPopup = 0x80000000;
-  static const _wsVisible = 0x10000000;
   static const _wsExNoActivate = 0x08000000;
   static const _wsExToolwindow = 0x00000080;
   static const _wsExTopmost = 0x00000008;
@@ -103,19 +102,30 @@ class WindowsOverlayWindowDriver extends OverlayWindowDriver {
     }
   }
 
+  /// The hwnd already styled as an overlay; styling runs once per
+  /// window, while it is hidden.
+  int _styledWindow = 0;
+
   @override
   bool show({required int width, required int height}) {
     final hwnd = _findOverlay();
     if (hwnd == 0) {
       return false;
     }
-    _setWindowLong(hwnd, _gwlStyle, _wsPopup | _wsVisible);
-    _setWindowLong(
-      hwnd,
-      _gwlExstyle,
-      _wsExNoActivate | _wsExToolwindow | _wsExTopmost | _wsExLayered,
-    );
-    _setLayeredWindowAttributes(hwnd, kChromaKeyColorref, 0, _lwaColorkey);
+    if (hwnd != _styledWindow) {
+      // Style WITHOUT WS_VISIBLE: turning visibility on through a style
+      // write bypasses ShowWindow's no-activate path and let the
+      // overlay grab foreground on some desktops. Visibility belongs
+      // exclusively to SW_SHOWNOACTIVATE below.
+      _setWindowLong(hwnd, _gwlStyle, _wsPopup);
+      _setWindowLong(
+        hwnd,
+        _gwlExstyle,
+        _wsExNoActivate | _wsExToolwindow | _wsExTopmost | _wsExLayered,
+      );
+      _setLayeredWindowAttributes(hwnd, kChromaKeyColorref, 0, _lwaColorkey);
+      _styledWindow = hwnd;
+    }
     // width/height are LOGICAL pixels; scale to the window's DPI so the
     // Flutter content gets the layout space it was designed for.
     final scale = _getDpiForWindow(hwnd) / 96.0;
