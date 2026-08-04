@@ -904,11 +904,11 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "7bceec74cda4a000b64b154de6270fa9cc4e8833"
-      resolved-ref: "7bceec74cda4a000b64b154de6270fa9cc4e8833"
+      ref: "2dd2fb333fbe318cc225b98d6ced0bea8f2d95a7"
+      resolved-ref: "2dd2fb333fbe318cc225b98d6ced0bea8f2d95a7"
       url: "https://github.com/CW-Codewalnut/whisper_ggml.git"
     source: git
-    version: "2.4.0"
+    version: "2.6.0"
   win32:
     dependency: transitive
     description:

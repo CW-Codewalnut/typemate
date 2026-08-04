@@ -50,8 +50,11 @@ dependencies:
       url: https://github.com/CW-Codewalnut/whisper_ggml.git
       # Commit pin, not a branch ref: this plugin owns native memory in
       # our process, so upgrades must be deliberate. Head of our
-      # feat/resident-model-and-audio-ctx branch (upstream PR sk3llo#27).
-      ref: 7bceec74cda4a000b64b154de6270fa9cc4e8833
+      # feat/silero-vad-passthrough branch: upstream 2.6.0 (resident
+      # model via checkout semantics, all platforms) + our Silero VAD
+      # passthrough, offered upstream as sk3llo/whisper_ggml#28.
+      # Repoint to pub.dev once that merges and releases.
+      ref: 2dd2fb333fbe318cc225b98d6ced0bea8f2d95a7
   share_plus: ^13.3.0
 
 dev_dependencies:
