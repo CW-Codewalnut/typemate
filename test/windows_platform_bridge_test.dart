@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:typemate/src/core/platform/overlay/overlay_window.dart';
 import 'package:typemate/src/core/platform/windows/windows_platform_bridge.dart';
 
 void main() {
@@ -132,157 +133,42 @@ void main() {
     expect(source, contains('SW_HIDE'));
   });
 
-  test('failure toast shows through the native error overlay', () async {
-    final calls = <({String method, Object? arguments})>[];
+  test('overlay states map to the Flutter overlay window', () async {
+    final overlay = FakeOverlayWindow();
     final bridge = WindowsPlatformBridge(
-      nativeMethodInvoker: <T>(method, [arguments]) async {
-        calls.add((method: method, arguments: arguments));
-        return null;
-      },
+      nativeMethodInvoker: <T>(method, [arguments]) async => null,
+      overlayWindow: overlay,
     );
 
+    await bridge.showListeningOverlay();
+    await bridge.showTranscribingOverlay();
+    await bridge.showDictationInfoOverlay(
+      'Please download the speech model first.',
+    );
     await bridge.showDictationFailureOverlay(
       'Transcription took too long and was stopped.',
     );
-
-    expect(calls.single.method, 'showOverlay');
-    expect(calls.single.arguments, {
-      'state': 'error',
-      'message': 'Transcription took too long and was stopped.',
-    });
-  });
-
-  test('native overlay renders and auto-hides the error toast', () {
-    final source = File(
-      'windows/runner/type_mate_overlay.cpp',
-    ).readAsStringSync();
-
-    expect(source, contains('kErrorAutoHideMs'));
-    expect(source, contains('DT_WORDBREAK'));
-    final window = File('windows/runner/flutter_window.cpp').readAsStringSync();
-    expect(window, contains('MultiByteToWideChar'));
-    expect(window, contains('overlay_.Show(state, overlay_message)'));
-  });
-
-  test('shows native overlay through Windows method channel', () async {
-    final calls = <({String method, Object? arguments})>[];
-    final bridge = WindowsPlatformBridge(
-      nativeMethodInvoker: <T>(method, [arguments]) async {
-        calls.add((method: method, arguments: arguments));
-        return null;
-      },
-    );
-
-    await bridge.showListeningOverlay();
-    await bridge.showListeningOverlay();
-    await bridge.showTranscribingOverlay();
     await bridge.hideListeningOverlay();
 
-    expect(calls.map((call) => call.method), [
-      'showOverlay',
-      'showOverlay',
-      'hideOverlay',
+    expect(overlay.calls, [
+      'working:TypeMate is listening...',
+      'working:Transcribing locally...',
+      'info:Please download the speech model first.',
+      'error:Transcription took too long and was stopped.',
+      'hide',
     ]);
-    expect(calls[0].arguments, {'state': 'listening'});
-    expect(calls[1].arguments, {'state': 'transcribing'});
-    expect(calls[2].arguments, isNull);
   });
 
-  test(
-    'falls back to PowerShell overlay when native channel is unavailable',
-    () async {
-      final started = <({String executable, List<String> arguments})>[];
-      final overlayProcess = FakeOverlayProcess();
-      final bridge = WindowsPlatformBridge(
-        overlayProcessStarter: (executable, arguments) async {
-          started.add((executable: executable, arguments: arguments));
-          return overlayProcess;
-        },
-      );
-
-      await bridge.showListeningOverlay();
-      await bridge.showListeningOverlay();
-      await bridge.hideListeningOverlay();
-
-      expect(started, hasLength(1));
-      expect(started.single.executable, 'powershell.exe');
-      expect(started.single.arguments, contains('-File'));
-      expect(started.single.arguments.last, 'listening');
-      final scriptPath =
-          started.single.arguments[started.single.arguments.length - 2];
-      expect(scriptPath, endsWith('typemate-listening-overlay.ps1'));
-      final script = File(scriptPath).readAsStringSync();
-      expect(script, contains('TypeMate is listening'));
-      expect(script, contains('Transcribing locally'));
-      expect(script, contains(r"param([string]$State"));
-      expect(script, contains('Application]::Run'));
-      expect(script, contains('System.Windows.Forms.Timer'));
-      expect(script, contains(r'$form.Width = 210'));
-      expect(script, contains(r'$form.Height = 58'));
-      expect(
-        script,
-        contains(r'$form.Top = [int]($screen.Bottom - $form.Height - 28)'),
-      );
-      expect(script, contains(r'$script:barCount = 7'));
-      expect(script, contains(r'$script:barWidth = 5'));
-      expect(script, contains(r'$script:maxHeight = 18'));
-      expect(script, contains('System.Drawing.Drawing2D.GraphicsPath'));
-      expect(script, contains('Set-CapsuleControlRegion'));
-      expect(script, contains(r'Set-CapsuleControlRegion $bar'));
-      expect(script, contains('[Math]::Sin'));
-      expect(script, contains('SetWindowPos'));
-      expect(overlayProcess.killCount, 1);
-    },
-  );
-  test('shows transcribing overlay as a native overlay state', () async {
-    final started = <({String executable, List<String> arguments})>[];
-    final listeningProcess = FakeOverlayProcess();
-    final transcribingProcess = FakeOverlayProcess();
-    final bridge = WindowsPlatformBridge(
-      overlayProcessStarter: (executable, arguments) async {
-        started.add((executable: executable, arguments: arguments));
-        return started.length == 1 ? listeningProcess : transcribingProcess;
-      },
-    );
-
-    await bridge.showListeningOverlay();
-    await bridge.showTranscribingOverlay();
-
-    expect(started, hasLength(2));
-    expect(started.first.arguments.last, 'listening');
-    expect(started.last.arguments.last, 'transcribing');
-    expect(listeningProcess.killCount, 1);
-    expect(transcribingProcess.killCount, 0);
-  });
-
-  test('native overlay draws only — dictation sounds are Dart-side', () {
-    final source = File(
-      'windows/runner/type_mate_overlay.cpp',
-    ).readAsStringSync();
-
-    // Sounds moved to lib/src/core/platform/dictation_sounds.dart (one
-    // implementation for every desktop); the native overlay must not play
-    // audio of its own or the chime would double up.
-    expect(source, isNot(contains('PlaySound')));
-    expect(source, isNot(contains('overlay_chime_wav.h')));
-
+  test('the Windows runner no longer carries a native overlay', () {
+    // The overlay is a second Flutter window now
+    // (lib/src/core/platform/overlay/); the Win32 renderer is retired
+    // and must not creep back into the runner.
+    final window = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    expect(window, isNot(contains('overlay_')));
+    expect(window, isNot(contains('showOverlay')));
     final cmake = File('windows/runner/CMakeLists.txt').readAsStringSync();
-    expect(cmake, isNot(contains('winmm.lib')));
-  });
-
-  test('native Windows overlay is bottom anchored, compact, and rounded', () {
-    final source = File(
-      'windows/runner/type_mate_overlay.cpp',
-    ).readAsStringSync();
-
-    expect(source, contains('constexpr int kOverlayWidth = 210;'));
-    expect(source, contains('constexpr int kOverlayHeight = 58;'));
-    expect(source, contains('work_area.bottom - Height() - 28'));
-    expect(source, contains('CreateRoundRectRgn'));
-    expect(source, contains('constexpr int bar_count = 7;'));
-    expect(source, contains('constexpr int bar_width = 5;'));
-    expect(source, contains('constexpr int max_height = 18;'));
-    expect(source, contains('RoundRect(hdc, left, top'));
+    expect(cmake, isNot(contains('type_mate_overlay.cpp')));
+    expect(File('windows/runner/type_mate_overlay.cpp').existsSync(), isFalse);
   });
 
   test(
@@ -356,11 +242,26 @@ void main() {
   });
 }
 
-class FakeOverlayProcess implements OverlayProcess {
-  int killCount = 0;
+class FakeOverlayWindow extends OverlayWindow {
+  final List<String> calls = [];
 
   @override
-  void kill() {
-    killCount += 1;
+  Future<void> showWorking(String label) async {
+    calls.add('working:$label');
+  }
+
+  @override
+  Future<void> showInfo(String message) async {
+    calls.add('info:$message');
+  }
+
+  @override
+  Future<void> showError(String message) async {
+    calls.add('error:$message');
+  }
+
+  @override
+  Future<void> hide() async {
+    calls.add('hide');
   }
 }

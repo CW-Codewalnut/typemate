@@ -8,6 +8,10 @@ Small per-platform native pieces own the global shortcut, overlays, and
 text insertion, hidden behind Dart interfaces so everything is testable
 with fakes. Every speech engine runs **in-process** through Flutter
 plugins — there are no helper server processes and no speech binaries.
+The Windows/Linux dictation overlay is a second Flutter window
+(desktop_multi_window) restyled from Dart FFI
+(lib/src/core/platform/overlay/) — never-focusable by construction;
+macOS keeps its native Swift panel until the ObjC driver is verified.
 
 A rendered diagram lives at `docs/media/architecture.svg` (embedded in
 the README).
@@ -25,8 +29,8 @@ Core (lib/src/core)
   platform/                   per-OS bridges (shortcut, overlay, insertion)
 
 Native, per platform
-  windows/  Win32 runner: key polling, tray, SendInput, overlay pill
-  linux/    bundled ffmpeg (capture), xdotool (typing), X11 overlay
+  windows/  Win32 runner: key polling, tray, SendInput
+  linux/    bundled ffmpeg (capture), xdotool (typing)
   macos/    Swift overlay panel, osascript paste, key polling
   android/  accessibility service: floating mic, focused-field insertion
 ```
@@ -72,12 +76,13 @@ Native, per platform
 ## Platform notes
 
 - **Windows**: capture via the record plugin (MediaFoundation);
-  insertion via SendInput; overlay and error capsule are native Win32
-  windows; polling hold-shortcut registrar.
+  insertion via SendInput; polling hold-shortcut registrar. The
+  overlay is the shared Flutter overlay window (Win32 layered
+  no-activate popup via Dart FFI).
 - **Linux**: X11 only. Fully self-contained `bin/`: static ffmpeg
-  (ALSA capture via the system-default device), xdotool + libxdo
-  (typing), and the compiled X11 overlay. libX11 FFI keymap polling
-  drives the shortcut. Wayland reports unavailable by design.
+  (ALSA capture via the system-default device) and xdotool + libxdo
+  (typing). libX11 FFI keymap polling drives the shortcut. Wayland
+  reports unavailable by design.
 - **macOS**: clipboard + synthesized Cmd+V via osascript (needs
   Accessibility), Swift non-activating overlay panel; preview status.
 - **Android**: an accessibility service hosts the floating mic bubble

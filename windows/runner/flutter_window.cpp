@@ -99,43 +99,6 @@ bool FlutterWindow::OnCreate() {
       [this](const flutter::MethodCall<flutter::EncodableValue>& call,
              std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
                  result) {
-        if (call.method_name() == "showOverlay") {
-          std::wstring state = L"listening";
-          std::wstring overlay_message;
-          const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
-          if (arguments) {
-            auto state_it = arguments->find(flutter::EncodableValue("state"));
-            if (state_it != arguments->end()) {
-              if (const auto* state_string =
-                      std::get_if<std::string>(&state_it->second)) {
-                state = std::wstring(state_string->begin(), state_string->end());
-              }
-            }
-            auto message_it =
-                arguments->find(flutter::EncodableValue("message"));
-            if (message_it != arguments->end()) {
-              if (const auto* message_string =
-                      std::get_if<std::string>(&message_it->second)) {
-                // Proper UTF-8 decode: failure copy may not stay ASCII.
-                const int length = MultiByteToWideChar(
-                    CP_UTF8, 0, message_string->c_str(), -1, nullptr, 0);
-                if (length > 0) {
-                  overlay_message.resize(length - 1);
-                  MultiByteToWideChar(CP_UTF8, 0, message_string->c_str(), -1,
-                                      overlay_message.data(), length);
-                }
-              }
-            }
-          }
-          overlay_.Show(state, overlay_message);
-          result->Success();
-          return;
-        }
-        if (call.method_name() == "hideOverlay") {
-          overlay_.Hide();
-          result->Success();
-          return;
-        }
         if (call.method_name() == "insertText") {
           std::string text;
           const auto* arguments =
@@ -179,7 +142,6 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   RemoveTrayIcon();
-  overlay_.Hide();
   windows_channel_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;

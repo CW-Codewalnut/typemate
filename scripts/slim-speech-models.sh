@@ -9,8 +9,8 @@
 # Also drops the retired bin/sherpa and bin/whisper executables if a
 # cached runtime still carries them: every speech engine (Parakeet, the
 # whisper fine-tunes, the GTCRN denoiser) runs in-process through plugins
-# now. Linux keeps bin/ffmpeg, bin/xdotool, and bin/overlay — capture and
-# typing tools, not speech engines.
+# now. Linux keeps bin/ffmpeg and bin/xdotool — capture and typing
+# tools, not speech engines.
 set -euo pipefail
 
 BUNDLE_DIR="${1:?usage: slim-speech-models.sh <bundle-dir>}"

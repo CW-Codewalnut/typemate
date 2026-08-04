@@ -24,3 +24,11 @@ abstract interface class PlatformBridge {
 abstract interface class QuitRequestSource {
   set onQuitRequested(Future<void> Function()? handler);
 }
+
+/// Bridges whose overlay distinguishes guidance from failure: info
+/// renders on the primary pill, only real failures render red. Callers
+/// fall back to [PlatformBridge.showDictationFailureOverlay] on bridges
+/// without this (Android's pill predates the split and stays as is).
+abstract interface class InfoOverlaySource {
+  Future<void> showDictationInfoOverlay(String message);
+}

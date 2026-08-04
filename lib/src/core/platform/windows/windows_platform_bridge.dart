@@ -1,7 +1,8 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import '../overlay/overlay_window.dart';
 import '../platform_bridge.dart';
 
 const _nativeChannel = MethodChannel('typemate/windows');
@@ -11,9 +12,6 @@ typedef PlatformProcessRunner =
       String executable,
       List<String> arguments,
     );
-
-typedef OverlayProcessStarter =
-    Future<OverlayProcess> Function(String executable, List<String> arguments);
 
 class PlatformProcessResult {
   const PlatformProcessResult({
@@ -25,21 +23,6 @@ class PlatformProcessResult {
   final int exitCode;
   final String stdout;
   final String stderr;
-}
-
-abstract interface class OverlayProcess {
-  void kill();
-}
-
-class StartedOverlayProcess implements OverlayProcess {
-  StartedOverlayProcess(this.process);
-
-  final Process process;
-
-  @override
-  void kill() {
-    process.kill();
-  }
 }
 
 Future<PlatformProcessResult> runPlatformProcess(
@@ -54,36 +37,29 @@ Future<PlatformProcessResult> runPlatformProcess(
   );
 }
 
-Future<OverlayProcess> startOverlayProcess(
-  String executable,
-  List<String> arguments,
-) async {
-  final process = await Process.start(
-    executable,
-    arguments,
-    mode: ProcessStartMode.detachedWithStdio,
-  );
-  return StartedOverlayProcess(process);
-}
-
 typedef NativeMethodInvoker =
     Future<T?> Function<T>(String method, [Object? arguments]);
 
-class WindowsPlatformBridge implements PlatformBridge, QuitRequestSource {
+class WindowsPlatformBridge
+    implements PlatformBridge, InfoOverlaySource, QuitRequestSource {
   WindowsPlatformBridge({
     this.processRunner = runPlatformProcess,
-    this.overlayProcessStarter = startOverlayProcess,
     NativeMethodInvoker? nativeMethodInvoker,
     String? executablePath,
+    OverlayWindow? overlayWindow,
   }) : nativeMethodInvoker = nativeMethodInvoker ?? _nativeChannel.invokeMethod,
-       _executablePath = executablePath ?? Platform.resolvedExecutable {
+       _executablePath = executablePath ?? Platform.resolvedExecutable,
+       _overlay = overlayWindow ?? OverlayWindow.forPlatform() {
     _nativeChannel.setMethodCallHandler(_handleNativeCall);
   }
 
   final PlatformProcessRunner processRunner;
-  final OverlayProcessStarter overlayProcessStarter;
   final NativeMethodInvoker nativeMethodInvoker;
   final String _executablePath;
+
+  /// The Flutter-rendered overlay window (second engine), which replaced
+  /// the native Win32 overlay renderer.
+  final OverlayWindow _overlay;
 
   Future<void> Function()? _onQuitRequested;
 
@@ -99,86 +75,32 @@ class WindowsPlatformBridge implements PlatformBridge, QuitRequestSource {
     return null;
   }
 
-  OverlayProcess? _overlayProcess;
-  String? _overlayState;
-
   @override
   Future<bool> isGlobalShortcutAvailable() async => true;
 
   @override
   Future<void> showListeningOverlay() async {
-    await _showOverlay('listening');
+    await _overlay.showWorking('TypeMate is listening...');
   }
 
   @override
   Future<void> showTranscribingOverlay() async {
-    await _showOverlay('transcribing');
-  }
-
-  Future<void> _showOverlay(String state) async {
-    if (_overlayState == state) {
-      return;
-    }
-
-    try {
-      await nativeMethodInvoker<void>('showOverlay', {'state': state});
-      _overlayProcess?.kill();
-      _overlayProcess = null;
-      _overlayState = state;
-      return;
-    } on MissingPluginException {
-      // Development fallback for older Windows runners before the native method
-      // channel is available.
-    }
-
-    if (_overlayProcess != null) {
-      _overlayProcess?.kill();
-      _overlayProcess = null;
-      _overlayState = null;
-    }
-
-    final overlayScriptFile = File(
-      '${Directory.systemTemp.path}${Platform.pathSeparator}typemate-listening-overlay.ps1',
-    );
-    await overlayScriptFile.parent.create(recursive: true);
-    await overlayScriptFile.writeAsString(_overlayScript, flush: true);
-
-    _overlayProcess = await overlayProcessStarter('powershell.exe', [
-      '-NoLogo',
-      '-NoProfile',
-      '-STA',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      overlayScriptFile.path,
-      state,
-    ]);
-    _overlayState = state;
+    await _overlay.showWorking('Transcribing locally...');
   }
 
   @override
   Future<void> showDictationFailureOverlay(String message) async {
-    try {
-      await nativeMethodInvoker<void>('showOverlay', {
-        'state': 'error',
-        'message': message,
-      });
-    } on MissingPluginException {
-      // Development runners without the native overlay skip the toast; the
-      // in-app error state still carries the reason.
-    }
+    await _overlay.showError(message);
+  }
+
+  @override
+  Future<void> showDictationInfoOverlay(String message) async {
+    await _overlay.showInfo(message);
   }
 
   @override
   Future<void> hideListeningOverlay() async {
-    try {
-      await nativeMethodInvoker<void>('hideOverlay');
-    } on MissingPluginException {
-      // Ignore: older runners only have the PowerShell fallback below.
-    }
-    _overlayProcess?.kill();
-    _overlayProcess = null;
-    _overlayState = null;
+    await _overlay.hide();
   }
 
   @override
@@ -260,133 +182,3 @@ Add-Type -AssemblyName System.Windows.Forms
     }
   }
 }
-
-const _overlayScript = r'''
-param([string]$State = 'listening')
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-public static class TypeMateOverlayWindow {
-  [DllImport("user32.dll")]
-  public static extern bool SetWindowPos(
-    IntPtr hWnd,
-    IntPtr hWndInsertAfter,
-    int X,
-    int Y,
-    int cx,
-    int cy,
-    uint uFlags);
-}
-"@
-[System.Windows.Forms.Application]::EnableVisualStyles()
-
-$form = New-Object System.Windows.Forms.Form
-$form.Text = 'TypeMate'
-$form.FormBorderStyle = 'None'
-$form.StartPosition = 'Manual'
-$form.TopMost = $true
-$form.ShowInTaskbar = $false
-$form.BackColor = [System.Drawing.Color]::FromArgb(31, 34, 48)
-$form.Width = 210
-$form.Height = 58
-$form.Opacity = 0.96
-
-$screen = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-$form.Left = [int]($screen.Left + (($screen.Width - $form.Width) / 2))
-$form.Top = [int]($screen.Bottom - $form.Height - 28)
-
-$container = New-Object System.Windows.Forms.TableLayoutPanel
-$container.Dock = 'Fill'
-$container.ColumnCount = 1
-$container.RowCount = 2
-$container.Padding = New-Object System.Windows.Forms.Padding(8, 7, 8, 7)
-$container.BackColor = $form.BackColor
-$container.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 22))) | Out-Null
-$container.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 100))) | Out-Null
-
-$label = New-Object System.Windows.Forms.Label
-if ($State -eq 'transcribing') {
-  $label.Text = 'Transcribing locally...'
-} else {
-  $label.Text = 'TypeMate is listening...'
-}
-$label.ForeColor = [System.Drawing.Color]::White
-$label.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
-$label.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-$label.Dock = 'Fill'
-$container.Controls.Add($label, 0, 0)
-
-function Set-CapsuleControlRegion($Control) {
-  if ($Control.Width -le 0 -or $Control.Height -le 0) { return }
-  $diameter = [Math]::Min($Control.Width, $Control.Height)
-  $rect = New-Object System.Drawing.Rectangle(0, 0, $Control.Width, $Control.Height)
-  $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-  $path.AddArc($rect.Left, $rect.Top, $diameter, $diameter, 180, 90)
-  $path.AddArc($rect.Right - $diameter, $rect.Top, $diameter, $diameter, 270, 90)
-  $path.AddArc($rect.Right - $diameter, $rect.Bottom - $diameter, $diameter, $diameter, 0, 90)
-  $path.AddArc($rect.Left, $rect.Bottom - $diameter, $diameter, $diameter, 90, 90)
-  $path.CloseFigure()
-  $Control.Region = New-Object System.Drawing.Region($path)
-}
-Set-CapsuleControlRegion $form
-
-$wavePanel = New-Object System.Windows.Forms.Panel
-$wavePanel.Dock = 'Fill'
-$wavePanel.BackColor = $form.BackColor
-$container.Controls.Add($wavePanel, 0, 1)
-$form.Controls.Add($container)
-
-$script:bars = @()
-$script:barCount = 7
-$script:barWidth = 5
-$script:gap = 6
-$script:maxHeight = 18
-$script:minHeight = 5
-$totalWidth = ($script:barCount * $script:barWidth) + (($script:barCount - 1) * $script:gap)
-$startX = [int](($form.Width - $totalWidth) / 2) - 8
-for ($i = 0; $i -lt $script:barCount; $i++) {
-  $bar = New-Object System.Windows.Forms.Panel
-  $bar.Width = $script:barWidth
-  $bar.Height = $script:minHeight
-  $bar.Left = $startX + ($i * ($script:barWidth + $script:gap))
-  $bar.Top = [int](($script:maxHeight - $bar.Height) / 2)
-  $bar.BackColor = [System.Drawing.Color]::FromArgb(122, 139, 255)
-  Set-CapsuleControlRegion $bar
-  $wavePanel.Controls.Add($bar)
-  $script:bars += $bar
-}
-
-$tick = 0
-$timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 70
-$timer.Add_Tick({
-  $script:tick += 1
-  for ($i = 0; $i -lt $script:bars.Count; $i++) {
-    $phase = ($script:tick + ($i * 2)) * 0.55
-    $height = [int]($script:minHeight + (([Math]::Sin($phase) + 1) / 2) * ($script:maxHeight - $script:minHeight))
-    $script:bars[$i].Height = $height
-    $script:bars[$i].Top = [int](($script:maxHeight - $height) / 2)
-    Set-CapsuleControlRegion $script:bars[$i]
-  }
-})
-$form.Add_Shown({
-  $topMost = [IntPtr]::new(-1)
-  $noSize = 0x0001
-  $noMove = 0x0002
-  $showWindow = 0x0040
-  [TypeMateOverlayWindow]::SetWindowPos(
-    $form.Handle,
-    $topMost,
-    0,
-    0,
-    0,
-    0,
-    $noSize -bor $noMove -bor $showWindow
-  ) | Out-Null
-  $timer.Start()
-})
-$form.Add_FormClosed({ $timer.Stop(); $timer.Dispose() })
-[System.Windows.Forms.Application]::Run($form)
-''';

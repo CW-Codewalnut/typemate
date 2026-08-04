@@ -372,11 +372,6 @@ PlatformBridge createDefaultPlatformBridge({
     return LinuxPlatformBridge(
       xdotoolExecutable: xdotool.executable,
       xdotoolLibraryDirectory: xdotool.libraryDirectory,
-      overlayExecutable: resolveBundledTool(
-        bundledRelativePath: 'bin/overlay/typemate-overlay',
-        fallbackCommand: '',
-        environmentOverrideVariable: 'TYPEMATE_OVERLAY',
-      ),
     );
   }
   if (isMacOS ?? Platform.isMacOS) {
