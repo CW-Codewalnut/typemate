@@ -912,8 +912,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "2dd2fb333fbe318cc225b98d6ced0bea8f2d95a7"
-      resolved-ref: "2dd2fb333fbe318cc225b98d6ced0bea8f2d95a7"
+      ref: b0a7eb9ad945992026f0a31d6f13b0526f171ed1
+      resolved-ref: b0a7eb9ad945992026f0a31d6f13b0526f171ed1
       url: "https://github.com/CW-Codewalnut/whisper_ggml.git"
     source: git
     version: "2.6.0"

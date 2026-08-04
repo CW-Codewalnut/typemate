@@ -50,11 +50,12 @@ dependencies:
       url: https://github.com/CW-Codewalnut/whisper_ggml.git
       # Commit pin, not a branch ref: this plugin owns native memory in
       # our process, so upgrades must be deliberate. Head of our
-      # feat/silero-vad-passthrough branch: upstream 2.6.0 (resident
-      # model via checkout semantics, all platforms) + our Silero VAD
-      # passthrough, offered upstream as sk3llo/whisper_ggml#28.
-      # Repoint to pub.dev once that merges and releases.
-      ref: 2dd2fb333fbe318cc225b98d6ced0bea8f2d95a7
+      # typemate-consumer branch: upstream 2.6.0 (resident model via
+      # checkout semantics, all platforms) + our Silero VAD passthrough
+      # (offered upstream as sk3llo/whisper_ggml#28) + MSVC vendored-
+      # warning suppression kept out of the upstream PR. Repoint to
+      # pub.dev once #28 merges and releases.
+      ref: b0a7eb9ad945992026f0a31d6f13b0526f171ed1
   share_plus: ^13.3.0
   desktop_multi_window: ^0.3.0
 
