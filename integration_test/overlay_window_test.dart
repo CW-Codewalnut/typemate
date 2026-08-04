@@ -69,8 +69,12 @@ Future<void> main() async {
     final before = driver!.focusEvidence();
     void expectNoFocusTheft() {
       final after = driver.focusEvidence();
+      // In-process shuffling between NON-overlay windows is tolerated
+      // (CI desktops foreground the test app itself), but the overlay
+      // window taking foreground is exactly the theft this guards.
       expect(
-        after == before || driver.foregroundIsSelf,
+        after == before ||
+            (driver.foregroundIsSelf && !driver.overlayStoleFocus),
         isTrue,
         reason:
             'overlay must not move focus away from another app '

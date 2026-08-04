@@ -221,6 +221,36 @@ void main() {
   });
 
   test(
+    'a failed window creation never reaches the caller and retries',
+    () async {
+      final driver = _FakeDriver();
+      final handle = _FakeHandle();
+      var attempts = 0;
+      final overlay = OverlayWindow(
+        driver: driver,
+        createWindow:
+            ({required bool hiddenAtLaunch, required String arguments}) async {
+              attempts++;
+              if (attempts == 1) {
+                throw StateError('channel not ready');
+              }
+              return handle;
+            },
+      );
+
+      // The first show swallows the failure - dictation must proceed.
+      await overlay.showWorking('TypeMate is listening...');
+      expect(attempts, 1);
+      expect(driver.calls, isNot(contains(startsWith('show:'))));
+
+      // The failure is not memoized: the next show retries and succeeds.
+      await overlay.showWorking('TypeMate is listening...');
+      expect(attempts, 2);
+      expect(driver.calls, contains('show:210x58'));
+    },
+  );
+
+  test(
     'a platform without a driver stays silent instead of throwing',
     () async {
       var created = 0;

@@ -274,6 +274,11 @@ jobs:
             bin
           key: speech-runtime-${{ runner.os }}-${{ hashFiles('tool/fetch_whisper_runtime.dart') }}
 
+      # Deliberately NO CocoaPods cache here: ffmpeg-kit (a whisper_ggml
+      # transitive) downloads its binary xcframework during pod install,
+      # and a restored Pods tree with a matching manifest skips that
+      # download - one bad save then breaks every later macOS build with
+      # "FFmpegKitConfig.h not found". Re-adding the cache re-breaks CI.
       - name: Build macOS app
         if: runner.os == 'macOS'
         run: flutter build macos --debug

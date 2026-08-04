@@ -9,6 +9,7 @@ import 'dart:convert';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../../../components/overlay_pill.dart';
 import 'overlay_variant.dart';
@@ -101,7 +102,12 @@ class OverlayWindow {
       _ensureWindow(driver, OverlayVariant.working, '').catchError((
         Object error,
       ) {
-        debugPrint('TypeMate: overlay preload failed: $error');
+        // MissingPluginException is the expected shape in unit-test
+        // harnesses (no desktop_multi_window plugin registered) - not
+        // worth a log line there; anything else is.
+        if (error is! MissingPluginException) {
+          debugPrint('TypeMate: overlay preload failed: $error');
+        }
       }),
     );
   }
@@ -137,7 +143,15 @@ class OverlayWindow {
     }
     _autoHide?.cancel();
     _autoHide = null;
-    await _ensureWindow(driver, variant, message);
+    try {
+      await _ensureWindow(driver, variant, message);
+    } catch (error) {
+      // A broken overlay must never affect dictation: swallow the
+      // failure (creation may retry on the next show) and skip the
+      // pill for this one.
+      debugPrint('TypeMate: overlay window creation failed: $error');
+      return;
+    }
     try {
       await _handle?.invokeMethod(
         'setState',
@@ -172,25 +186,41 @@ class OverlayWindow {
     String message,
   ) {
     return _creating ??= () async {
-      driver.snapshotBefore();
-      _handle = await _createWindow(
-        hiddenAtLaunch: !driver.needsVisibleAtLaunch,
-        // The first pill content rides the creation arguments, so even
-        // a show that beats the channel-handler registration renders
-        // the right variant and message.
-        arguments: json.encode({'variant': variant.name, 'message': message}),
-      );
-      // Adopt as soon as the native window exists instead of a fixed
-      // wait: on Linux the window is briefly WM-managed and visible, so
-      // every spared millisecond shrinks that flash (preload moves it
-      // to app boot entirely).
-      for (var attempt = 0; attempt < 24; attempt++) {
-        if (driver.adoptNewWindow()) {
-          return;
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 50));
+      try {
+        await _createAndAdopt(driver, variant, message);
+      } catch (error) {
+        // Un-memoize so a transient failure (e.g. the platform channel
+        // not ready yet) can retry on a later show instead of poisoning
+        // every dictation for the rest of the process.
+        _creating = null;
+        rethrow;
       }
-      debugPrint('TypeMate: overlay window adoption failed');
     }();
+  }
+
+  Future<void> _createAndAdopt(
+    OverlayWindowDriver driver,
+    OverlayVariant variant,
+    String message,
+  ) async {
+    driver.snapshotBefore();
+    _handle = await _createWindow(
+      hiddenAtLaunch: !driver.needsVisibleAtLaunch,
+      // The first pill content rides the creation arguments, so even
+      // a show that beats the channel-handler registration renders
+      // the right variant and message.
+      arguments: json.encode({'variant': variant.name, 'message': message}),
+    );
+    // Adopt as soon as the native window exists instead of a fixed
+    // wait: on Linux the window is briefly WM-managed and visible, so
+    // every spared millisecond shrinks that flash (preload moves it
+    // to app boot entirely).
+    for (var attempt = 0; attempt < 24; attempt++) {
+      if (driver.adoptNewWindow()) {
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    debugPrint('TypeMate: overlay window adoption failed');
   }
 }
