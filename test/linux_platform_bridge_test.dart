@@ -2,40 +2,43 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:typemate/src/core/platform/linux/linux_platform_bridge.dart';
+import 'package:typemate/src/core/platform/overlay/overlay_window.dart';
 
-class _FakeOverlaySink implements OverlaySink {
-  _FakeOverlaySink(this.commands, {this.onClose});
-
-  final List<String> commands;
-  final void Function()? onClose;
+class _FakeOverlayWindow extends OverlayWindow {
+  final List<String> calls = [];
 
   @override
-  void send(String command) => commands.add(command);
+  Future<void> showWorking(String label) async {
+    calls.add('working:$label');
+  }
 
   @override
-  Future<void> close() async => onClose?.call();
+  Future<void> showInfo(String message) async {
+    calls.add('info:$message');
+  }
+
+  @override
+  Future<void> showError(String message) async {
+    calls.add('error:$message');
+  }
+
+  @override
+  Future<void> hide() async {
+    calls.add('hide');
+  }
 }
 
 void main() {
-  test('X11 overlay draws capsule bars and no sound of its own', () {
-    final source = File('linux/overlay/typemate_overlay.c').readAsStringSync();
-
-    // Bars must have rounded capsule ends like the Windows RoundRect bars,
-    // not sharp XFillRectangle corners.
-    expect(
-      source,
-      contains('XFillArc(d, buffer, gc, bx, by, kBarWidth, kBarWidth'),
-    );
-    expect(
-      source,
-      isNot(contains('XFillRectangle(d, buffer, gc, bx, by, kBarWidth, h)')),
-    );
-
-    // Sounds moved to lib/src/core/platform/dictation_sounds.dart; the
-    // helper must not play audio of its own or the chime would double up.
-    expect(source, isNot(contains('overlay_chime_wav.h')));
-    expect(source, isNot(contains('libasound')));
-    expect(source, isNot(contains('play_chime')));
+  test('the native X11 overlay helper is retired', () {
+    // The overlay is a second Flutter window now
+    // (lib/src/core/platform/overlay/); the C helper is gone and the
+    // fetch script must not compile or ship it.
+    expect(File('linux/overlay/typemate_overlay.c').existsSync(), isFalse);
+    final fetchScript = File(
+      'tool/fetch_whisper_runtime.dart',
+    ).readAsStringSync();
+    expect(fetchScript, isNot(contains('typemate_overlay')));
+    expect(fetchScript, isNot(contains('bin/overlay')));
   });
 
   test('types into the focused field through xdotool', () async {
@@ -88,53 +91,28 @@ void main() {
     );
   });
 
-  test('drives the overlay through its lifecycle', () async {
-    final commands = <String>[];
-    var spawnCount = 0;
-    var closed = false;
+  test('overlay states map to the Flutter overlay window', () async {
+    final overlay = _FakeOverlayWindow();
     final bridge = LinuxPlatformBridge(
       processRunner: (_, _, {environment}) async => ProcessResult(1, 0, '', ''),
       environment: const {'DISPLAY': ':0'},
       executablePath: '/opt/typemate/typemate',
-      overlayExecutable: '/opt/typemate/bin/overlay/typemate-overlay',
-      overlayStarter: () async {
-        spawnCount++;
-        return _FakeOverlaySink(commands, onClose: () => closed = true);
-      },
+      overlayWindow: overlay,
     );
 
-    // Showing spawns the helper (which maps its window on start); the
-    // transcribing update is sent; hiding closes it.
     await bridge.showListeningOverlay();
     await bridge.showTranscribingOverlay();
+    await bridge.showDictationInfoOverlay('Preparing local speech engine...');
+    await bridge.showDictationFailureOverlay('Something went wrong.');
     await bridge.hideListeningOverlay();
 
-    expect(spawnCount, 1);
-    expect(commands, ['transcribing']);
-    expect(closed, isTrue);
-
-    // The next dictation spawns a fresh helper.
-    await bridge.showListeningOverlay();
-    expect(spawnCount, 2);
-  });
-
-  test('overlay stays silent when no helper is configured', () async {
-    var started = false;
-    final bridge = LinuxPlatformBridge(
-      processRunner: (_, _, {environment}) async => ProcessResult(1, 0, '', ''),
-      environment: const {'DISPLAY': ':0'},
-      executablePath: '/opt/typemate/typemate',
-      overlayStarter: () async {
-        started = true;
-        return null;
-      },
-    );
-
-    await bridge.showListeningOverlay();
-    await bridge.showListeningOverlay();
-
-    // A failed start is remembered so it is not retried on every dictation.
-    expect(started, isTrue);
+    expect(overlay.calls, [
+      'working:TypeMate is listening...',
+      'working:Transcribing locally...',
+      'info:Preparing local speech engine...',
+      'error:Something went wrong.',
+      'hide',
+    ]);
   });
 
   test('fails clearly when xdotool is missing', () async {

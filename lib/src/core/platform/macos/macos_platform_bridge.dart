@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import '../overlay/overlay_window.dart';
 import '../platform_bridge.dart';
 
 const _nativeChannel = MethodChannel('typemate/macos');
@@ -12,63 +13,62 @@ typedef MacosProcessRunner =
 typedef MacosNativeMethodInvoker =
     Future<T?> Function<T>(String method, [Object? arguments]);
 
-/// macOS adapter: the native overlay panel is driven over the
-/// `typemate/macos` method channel; text lands in the focused field via
+/// macOS adapter: the dictation overlay is the shared Flutter overlay
+/// window (ObjC-runtime FFI driver - verified in CI to build, still
+/// pending a real-hardware pass); text lands in the focused field via
 /// clipboard + a synthesized Cmd+V (System Events, which requires the
 /// user to grant Accessibility permission); launch-at-login registers a
 /// System Events login item for the installed .app bundle. The global
 /// hold shortcut is served by MacosPollingHoldShortcutRegistrar (Input
 /// Monitoring permission, prompted at registration).
-class MacosPlatformBridge implements PlatformBridge {
+class MacosPlatformBridge implements PlatformBridge, InfoOverlaySource {
   MacosPlatformBridge({
     MacosNativeMethodInvoker? nativeMethodInvoker,
     this.processRunner = Process.run,
     String? executablePath,
+    OverlayWindow? overlayWindow,
   }) : nativeMethodInvoker = nativeMethodInvoker ?? _nativeChannel.invokeMethod,
-       _executablePath = executablePath ?? Platform.resolvedExecutable;
+       _executablePath = executablePath ?? Platform.resolvedExecutable,
+       _overlay = overlayWindow ?? OverlayWindow.forPlatform() {
+    // Off the dictation critical path: the first showListening must
+    // never wait on second-engine bring-up while the user speaks.
+    _overlay.preload();
+  }
 
   final MacosNativeMethodInvoker nativeMethodInvoker;
   final MacosProcessRunner processRunner;
   final String _executablePath;
 
-  String? _overlayState;
+  /// The Flutter-rendered overlay window (second engine), which
+  /// replaced the native Swift overlay panel.
+  final OverlayWindow _overlay;
 
   @override
   Future<bool> isGlobalShortcutAvailable() async => true;
 
   @override
-  Future<void> showListeningOverlay() => _showOverlay('listening');
+  Future<void> showListeningOverlay() async {
+    await _overlay.showWorking('TypeMate is listening...');
+  }
 
   @override
-  Future<void> showTranscribingOverlay() => _showOverlay('transcribing');
-
-  Future<void> _showOverlay(String state) async {
-    if (_overlayState == state) {
-      return;
-    }
-    _overlayState = state;
-    await nativeMethodInvoker<void>('showOverlay', {'state': state});
+  Future<void> showTranscribingOverlay() async {
+    await _overlay.showWorking('Transcribing locally...');
   }
 
   @override
   Future<void> hideListeningOverlay() async {
-    if (_overlayState == null) {
-      return;
-    }
-    _overlayState = null;
-    await nativeMethodInvoker<void>('hideOverlay');
+    await _overlay.hide();
+  }
+
+  @override
+  Future<void> showDictationInfoOverlay(String message) async {
+    await _overlay.showInfo(message);
   }
 
   @override
   Future<void> showDictationFailureOverlay(String message) async {
-    try {
-      await nativeMethodInvoker<void>('showOverlay', {
-        'state': 'error',
-        'message': message,
-      });
-    } on MissingPluginException {
-      // Development runners without the native overlay skip the toast.
-    }
+    await _overlay.showError(message);
   }
 
   @override
