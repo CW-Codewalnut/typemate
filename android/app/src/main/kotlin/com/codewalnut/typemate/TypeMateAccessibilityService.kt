@@ -193,7 +193,9 @@ class TypeMateAccessibilityService : AccessibilityService() {
         val size = dp(BUBBLE_SIZE_DP)
 
         val icon = ImageView(overlayContext).apply {
-            setImageResource(android.R.drawable.ic_btn_speak_now)
+            // Same glyph as the in-app hold-to-talk FAB (Icons.keyboard_voice)
+            // so the bubble and the Dictate page show one mic.
+            setImageResource(R.drawable.ic_keyboard_voice)
         }
         val label = TextView(overlayContext).apply {
             textSize = 13f
