@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import '../../../models/app_identity.dart';
+import '../overlay/overlay_window.dart';
 import '../platform_bridge.dart';
 
 typedef LinuxProcessRunner =
@@ -18,15 +18,6 @@ Future<ProcessResult> _runProcess(
   Map<String, String>? environment,
 }) => Process.run(executable, arguments, environment: environment);
 
-/// Starts the long-lived overlay helper; abstracted so tests can capture
-/// the commands written to it.
-abstract interface class OverlaySink {
-  void send(String command);
-  Future<void> close();
-}
-
-typedef OverlayStarter = Future<OverlaySink?> Function();
-
 /// Linux (X11) implementation of the platform bridge.
 ///
 /// Text lands in the focused field through `xdotool type`, which synthesizes
@@ -34,23 +25,27 @@ typedef OverlayStarter = Future<OverlaySink?> Function();
 /// synthetic input by design, so dictation requires an X11 session (or
 /// XWayland focus); [isGlobalShortcutAvailable] reports that honestly.
 ///
-/// The listening/transcribing overlay is a small bundled X11 helper
-/// ([overlayExecutable]) driven over stdin; it is override-redirect so it
-/// never steals focus from the field being typed into.
-class LinuxPlatformBridge implements PlatformBridge {
+/// The listening/transcribing overlay is a second Flutter window
+/// restyled over our own X11 connection (override-redirect + XShape,
+/// the retired native helper's exact technique) so it never steals
+/// focus from the field being typed into.
+class LinuxPlatformBridge implements PlatformBridge, InfoOverlaySource {
   LinuxPlatformBridge({
     LinuxProcessRunner? processRunner,
     Map<String, String>? environment,
     String? executablePath,
     this.xdotoolExecutable = 'xdotool',
     this.xdotoolLibraryDirectory,
-    this.overlayExecutable = '',
-    OverlayStarter? overlayStarter,
+    OverlayWindow? overlayWindow,
   }) : _processRunner = processRunner ?? _runProcess,
        _environment = environment ?? Platform.environment,
        _executablePath = executablePath ?? Platform.resolvedExecutable,
-       // ignore: prefer_initializing_formals
-       _overlayStarter = overlayStarter;
+       _overlay = overlayWindow ?? OverlayWindow.forPlatform() {
+    // Off the dictation critical path - and on Linux this also moves
+    // the brief WM-managed flash (before adoption unmaps the window)
+    // to app boot instead of mid-dictation.
+    _overlay.preload();
+  }
 
   final LinuxProcessRunner _processRunner;
   final Map<String, String> _environment;
@@ -61,43 +56,9 @@ class LinuxPlatformBridge implements PlatformBridge {
   final String xdotoolExecutable;
   final String? xdotoolLibraryDirectory;
 
-  /// The bundled overlay helper; empty disables the overlay (falls back to
-  /// the in-app status only).
-  final String overlayExecutable;
-  final OverlayStarter? _overlayStarter;
-  OverlaySink? _overlay;
-  bool _overlayFailed = false;
-
-  /// Spawns one overlay per dictation. The helper maps its window as soon
-  /// as it starts, so being spawned IS the "show" — no reliance on the
-  /// first stdin command arriving (parent-side write buffering could delay
-  /// it). Later state changes ([showTranscribingOverlay]) are best-effort
-  /// stdin updates; [hideListeningOverlay] closes the helper.
-  Future<void> _ensureOverlay() async {
-    if (_overlayFailed || _overlay != null) {
-      return;
-    }
-    if (overlayExecutable.isEmpty && _overlayStarter == null) {
-      return;
-    }
-    final overlay = await (_overlayStarter ?? _startOverlayProcess)();
-    if (overlay == null) {
-      _overlayFailed = true;
-      return;
-    }
-    _overlay = overlay;
-  }
-
-  Future<OverlaySink?> _startOverlayProcess() async {
-    try {
-      final process = await Process.start(overlayExecutable, const []);
-      unawaited(process.stdout.drain<void>());
-      unawaited(process.stderr.drain<void>());
-      return _ProcessOverlaySink(process);
-    } on ProcessException {
-      return null;
-    }
-  }
+  /// The Flutter-rendered overlay window (second engine), which
+  /// replaced the native X11 overlay helper.
+  final OverlayWindow _overlay;
 
   @override
   Future<bool> isGlobalShortcutAvailable() async {
@@ -105,39 +66,28 @@ class LinuxPlatformBridge implements PlatformBridge {
   }
 
   @override
-  Future<void> showListeningOverlay() => _ensureOverlay();
+  Future<void> showListeningOverlay() async {
+    await _overlay.showWorking('TypeMate is listening...');
+  }
 
   @override
   Future<void> showTranscribingOverlay() async {
-    await _ensureOverlay();
-    _overlay?.send('transcribing');
+    await _overlay.showWorking('Transcribing locally...');
   }
 
   @override
   Future<void> hideListeningOverlay() async {
-    final overlay = _overlay;
-    _overlay = null;
-    await overlay?.close();
+    await _overlay.hide();
   }
 
   @override
   Future<void> showDictationFailureOverlay(String message) async {
-    if (overlayExecutable.isEmpty) {
-      return;
-    }
-    try {
-      // One-shot toast process: the helper renders the error pill and
-      // exits on its own after a few seconds — no stdin protocol needed.
-      final process = await Process.start(overlayExecutable, [
-        'error',
-        message,
-      ]);
-      unawaited(process.stdout.drain<void>());
-      unawaited(process.stderr.drain<void>());
-    } on ProcessException {
-      // The toast is best effort; the in-app error state still carries
-      // the reason.
-    }
+    await _overlay.showError(message);
+  }
+
+  @override
+  Future<void> showDictationInfoOverlay(String message) async {
+    await _overlay.showInfo(message);
   }
 
   @override
@@ -211,30 +161,4 @@ class TextInsertionException implements Exception {
 
   @override
   String toString() => 'TextInsertionException: $message';
-}
-
-class _ProcessOverlaySink implements OverlaySink {
-  _ProcessOverlaySink(this._process);
-
-  final Process _process;
-
-  @override
-  void send(String command) {
-    try {
-      // add() + flush pushes the bytes straight down the pipe; writeln's
-      // buffering can otherwise leave the helper waiting.
-      _process.stdin.add(utf8.encode('$command\n'));
-      unawaited(_process.stdin.flush());
-    } catch (_) {
-      // The helper may have exited; ignored.
-    }
-  }
-
-  @override
-  Future<void> close() async {
-    try {
-      await _process.stdin.close();
-    } catch (_) {}
-    _process.kill();
-  }
 }

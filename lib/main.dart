@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:background_downloader/background_downloader.dart';
@@ -7,7 +8,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'src/app.dart';
+import 'src/components/overlay_pill.dart';
 import 'src/core/audio/record_package_audio.dart';
+import 'src/core/platform/overlay/overlay_variant.dart';
 import 'src/core/diagnostics/diagnostic_log.dart';
 import 'src/core/diagnostics/diagnostic_reporter.dart';
 import 'src/core/dictation_history_controller.dart';
@@ -22,8 +25,28 @@ import 'src/models/app_identity.dart';
 /// dev build — telemetry is entirely off and the Settings toggle hides.
 const _sentryDsn = String.fromEnvironment('TYPEMATE_SENTRY_DSN');
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // The dictation overlay runs as a second Flutter engine in this same
+  // process (desktop_multi_window); its engine re-enters main() with
+  // these args. It must branch before ANY app bootstrap - it needs no
+  // single-instance check, window manager, or speech runtime.
+  if (args.firstOrNull == 'multi_window') {
+    // Guard the arg shape: a future package change must degrade to a
+    // default pill, not crash the overlay engine at entry.
+    final data = args.length >= 3
+        ? json.decode(args[2]) as Map<String, dynamic>
+        : const <String, dynamic>{};
+    runApp(
+      OverlayWindowApp(
+        initialVariant:
+            OverlayVariant.values.asNameMap()[data['variant']] ??
+            OverlayVariant.working,
+        initialMessage: data['message'] as String? ?? '',
+      ),
+    );
+    return;
+  }
   // Android has no window manager, tray, single-instance concern, or
   // desktop notifier; it bootstraps on its own leaner path.
   if (Platform.isAndroid) {

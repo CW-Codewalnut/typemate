@@ -205,8 +205,14 @@ class DictationController extends ChangeNotifier {
       }
       try {
         // The refusal must be visible where the user is dictating from —
-        // usually another app entirely.
-        await _platformBridge.showDictationFailureOverlay(blocked);
+        // usually another app entirely. A refusal is guidance, not a
+        // failure: bridges that can render an info pill show it calm,
+        // the rest fall back to the failure toast.
+        if (_platformBridge case final InfoOverlaySource infoOverlay) {
+          await infoOverlay.showDictationInfoOverlay(blocked);
+        } else {
+          await _platformBridge.showDictationFailureOverlay(blocked);
+        }
       } catch (_) {
         // Best effort; a broken overlay must never strand the phase.
       }

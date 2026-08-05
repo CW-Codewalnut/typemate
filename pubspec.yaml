@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.5.0+9
+version: 1.6.0+10
 
 environment:
   sdk: ^3.12.2
@@ -50,9 +50,14 @@ dependencies:
       url: https://github.com/CW-Codewalnut/whisper_ggml.git
       # Commit pin, not a branch ref: this plugin owns native memory in
       # our process, so upgrades must be deliberate. Head of our
-      # feat/resident-model-and-audio-ctx branch (upstream PR sk3llo#27).
-      ref: 7bceec74cda4a000b64b154de6270fa9cc4e8833
+      # typemate-consumer branch: upstream 2.6.0 (resident model via
+      # checkout semantics, all platforms) + our Silero VAD passthrough
+      # (offered upstream as sk3llo/whisper_ggml#28) + MSVC vendored-
+      # warning suppression kept out of the upstream PR. Repoint to
+      # pub.dev once #28 merges and releases.
+      ref: b0a7eb9ad945992026f0a31d6f13b0526f171ed1
   share_plus: ^13.3.0
+  desktop_multi_window: ^0.3.0
 
 dev_dependencies:
   flutter_test:

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:typemate/src/app.dart';
 import 'package:typemate/src/core/platform/macos/macos_platform_bridge.dart';
+import 'package:typemate/src/core/platform/overlay/overlay_window.dart';
 import 'package:typemate/src/core/platform/macos/macos_polling_hold_shortcut_registrar.dart';
 
 void main() {
@@ -43,29 +44,26 @@ void main() {
     expect(bridge.isGlobalShortcutAvailable(), completion(isTrue));
   });
 
-  test('drives the native overlay panel through the macOS channel', () async {
-    final calls = <({String method, Object? arguments})>[];
+  test('overlay states map to the Flutter overlay window', () async {
+    final overlay = _FakeOverlayWindow();
     final bridge = MacosPlatformBridge(
-      nativeMethodInvoker: <T>(method, [arguments]) async {
-        calls.add((method: method, arguments: arguments));
-        return null;
-      },
+      nativeMethodInvoker: <T>(method, [arguments]) async => null,
+      overlayWindow: overlay,
     );
 
     await bridge.showListeningOverlay();
-    await bridge.showListeningOverlay();
     await bridge.showTranscribingOverlay();
-    await bridge.hideListeningOverlay();
+    await bridge.showDictationInfoOverlay('Preparing local speech engine...');
+    await bridge.showDictationFailureOverlay('Something went wrong.');
     await bridge.hideListeningOverlay();
 
-    expect(calls.map((call) => call.method), [
-      'showOverlay',
-      'showOverlay',
-      'hideOverlay',
+    expect(overlay.calls, [
+      'working:TypeMate is listening...',
+      'working:Transcribing locally...',
+      'info:Preparing local speech engine...',
+      'error:Something went wrong.',
+      'hide',
     ]);
-    expect(calls[0].arguments, {'state': 'listening'});
-    expect(calls[1].arguments, {'state': 'transcribing'});
-    expect(calls[2].arguments, isNull);
   });
 
   test('pastes the transcript with clipboard + synthesized Cmd+V', () async {
@@ -189,47 +187,43 @@ void main() {
     expect(fetchScript, contains('if (Platform.isLinux) {'));
   });
 
-  test(
-    'native macOS overlay matches the Windows pill, no sound of its own',
-    () {
-      final source = File(
-        'macos/Runner/TypeMateOverlay.swift',
-      ).readAsStringSync();
+  test('the native macOS overlay panel is retired', () {
+    // The overlay is the shared Flutter overlay window now
+    // (lib/src/core/platform/overlay/); the Swift panel is gone and the
+    // runner channel no longer carries overlay methods.
+    expect(File('macos/Runner/TypeMateOverlay.swift').existsSync(), isFalse);
+    final window = File(
+      'macos/Runner/MainFlutterWindow.swift',
+    ).readAsStringSync();
+    expect(window, isNot(contains('showOverlay')));
+    expect(window, isNot(contains('TypeMateOverlay')));
+    final project = File(
+      'macos/Runner.xcodeproj/project.pbxproj',
+    ).readAsStringSync();
+    expect(project, isNot(contains('TypeMateOverlay')));
+  });
+}
 
-      // Same geometry and cadence as windows/runner/type_mate_overlay.cpp.
-      expect(source, contains('overlayWidth: CGFloat = 210'));
-      expect(source, contains('overlayHeight: CGFloat = 58'));
-      expect(source, contains('let barCount = 7'));
-      expect(source, contains('let barWidth = 5.0'));
-      expect(source, contains('let gap = 6.0'));
-      expect(source, contains('let maxHeight = 18.0'));
-      expect(source, contains('* 0.55'));
-      expect(source, contains('tickSeconds: TimeInterval = 0.07'));
-      // Rounded capsule bars and pill.
-      expect(source, contains('xRadius: barWidth / 2'));
-      expect(source, contains('xRadius: bounds.height / 2'));
-      // Never steals focus from the field being dictated into.
-      expect(source, contains('.nonactivatingPanel'));
-      expect(source, contains('orderFrontRegardless'));
-      // Sounds moved to lib/src/core/platform/dictation_sounds.dart; the
-      // overlay must not play audio of its own or the chime would double up.
-      expect(source, isNot(contains('NSSound')));
-      expect(source, isNot(contains('overlayChimeWavBase64')));
+class _FakeOverlayWindow extends OverlayWindow {
+  final List<String> calls = [];
 
-      final window = File(
-        'macos/Runner/MainFlutterWindow.swift',
-      ).readAsStringSync();
-      expect(window, contains('typemate/macos'));
-      expect(window, contains('showOverlay'));
-      expect(window, contains('hideOverlay'));
+  @override
+  Future<void> showWorking(String label) async {
+    calls.add('working:$label');
+  }
 
-      // The Xcode project must compile the overlay and must no longer
-      // reference the retired chime source.
-      final project = File(
-        'macos/Runner.xcodeproj/project.pbxproj',
-      ).readAsStringSync();
-      expect(project, contains('TypeMateOverlay.swift in Sources'));
-      expect(project, isNot(contains('OverlayChimeWav')));
-    },
-  );
+  @override
+  Future<void> showInfo(String message) async {
+    calls.add('info:$message');
+  }
+
+  @override
+  Future<void> showError(String message) async {
+    calls.add('error:$message');
+  }
+
+  @override
+  Future<void> hide() async {
+    calls.add('hide');
+  }
 }

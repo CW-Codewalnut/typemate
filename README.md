@@ -65,7 +65,7 @@ Linux support targets **X11 sessions** (or apps running under XWayland). Pure Wa
 
 ## How it works
 
-![TypeMate architecture: the dictation pipeline and the app's three layers — Flutter app, native platform adapters, bundled speech runtimes](docs/media/architecture.svg)
+![TypeMate architecture: the dictation pipeline and the app's three layers — Flutter app, native platform adapters, in-process speech engines](docs/media/architecture.svg)
 
 One dictation, end to end:
 
