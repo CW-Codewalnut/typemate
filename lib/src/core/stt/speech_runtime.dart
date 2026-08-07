@@ -149,7 +149,7 @@ SpeechRuntime createSpeechRuntime({
       : <SttModelFile>[];
 
   // Noise suppression: bundled GTCRN wins; otherwise the tiny model rides
-  // whichever Parakeet download (English v2 or multilingual v3) happens
+  // whichever Parakeet download (English unified or multilingual v3) happens
   // first, so both directories are candidates. An env override points
   // anywhere.
   final envDenoiserModel = values['TYPEMATE_DENOISER_MODEL']?.trim() ?? '';
@@ -253,10 +253,7 @@ SpeechRuntime createSpeechRuntime({
     bundledDirRelativePath: bundledParakeetDirRelativePath,
     directoryName: parakeetModelDirectoryName,
     modelFiles: parakeetModelFiles,
-    languageCodes: [
-      for (final code in parakeetLanguageCodes)
-        if (code != 'en') code,
-    ],
+    languageCodes: parakeetMultilingualLanguageCodes,
   );
 
   final whisperEnginesByCode = <String, WhisperGgmlSttEngine>{};
@@ -287,8 +284,9 @@ SpeechRuntime createSpeechRuntime({
   return SpeechRuntime(
     engine: LanguageRoutingSttEngine(
       routes: {
-        for (final code in parakeetLanguageCodes)
-          code: code == 'en' ? englishParakeet : multilingualParakeet,
+        'en': englishParakeet,
+        for (final code in parakeetMultilingualLanguageCodes)
+          code: multilingualParakeet,
         ...whisperEnginesByCode,
       },
       fallback: whisperEnginesByCode['hi']!,

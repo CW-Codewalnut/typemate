@@ -38,7 +38,7 @@ class SherpaGtcrnAudioDenoiser implements AudioDenoiser {
 
   /// Where the GTCRN model may live, first existing wins: a bundled
   /// install has exactly one location, but on Android the model rides
-  /// whichever Parakeet download (English v2 or multilingual v3) happened
+  /// whichever Parakeet download (English unified or multilingual v3) happened
   /// first, so both directories are candidates. Checked per call because
   /// the download can complete after this object is built.
   final List<String> modelPathCandidates;
