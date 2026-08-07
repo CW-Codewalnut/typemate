@@ -16,7 +16,9 @@
 //     --language en [--dialect en-IN] --type <type> --model-dir <dir>
 //
 // Or through the production whisper_ggml engine (needs the plugin DLL on
-// PATH, e.g. build/windows/x64/runner/Debug):
+// PATH, e.g. build/windows/x64/runner/Debug). --model takes a single
+// .bin here, where sherpa's --model-dir takes a directory; both accept
+// --manifest for WER scoring:
 //   dart run tool/transcribe_directory.dart <wav-dir> \
 //     --engine whisper-ggml --model models/ggml-small-vaani-hindi-q6.bin \
 //     --language hi
@@ -31,12 +33,28 @@ import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa_onnx;
 import 'package:typemate/src/core/audio/audio_recorder.dart';
 import 'package:typemate/src/core/stt/whisper_ggml_stt_engine.dart';
 
+/// The newest sherpa_onnx_windows in the pub cache, so a plugin bump does
+/// not silently drop the tool back to the System32 onnxruntime (which
+/// crashes with an ORT API mismatch). Pass --lib-dir to override.
 String _defaultLibraryDirectory() {
   final home = Platform.environment['USERPROFILE'] ?? '';
-  final pubCache =
-      '$home/AppData/Local/Pub/Cache/hosted/pub.dev/'
-      'sherpa_onnx_windows-1.13.4/windows';
-  return Directory(pubCache).existsSync() ? pubCache : '';
+  final hosted = Directory('$home/AppData/Local/Pub/Cache/hosted/pub.dev');
+  if (!hosted.existsSync()) {
+    return '';
+  }
+  final versions =
+      hosted
+          .listSync()
+          .whereType<Directory>()
+          .map((d) => d.path.replaceAll('\\', '/'))
+          .where((p) => p.split('/').last.startsWith('sherpa_onnx_windows-'))
+          .toList()
+        ..sort();
+  if (versions.isEmpty) {
+    return '';
+  }
+  final windows = '${versions.last}/windows';
+  return Directory(windows).existsSync() ? windows : '';
 }
 
 /// Finds the model file in [directory] whose name contains [nameFragment],
@@ -157,14 +175,20 @@ sherpa_onnx.OfflineModelConfig _modelConfig(
 }
 
 /// Lowercases, strips punctuation, and splits into words so WER measures
-/// recognition quality rather than formatting differences.
+/// recognition quality rather than formatting differences. Keeps letters
+/// and digits in EVERY script: a Latin-only class silently normalized
+/// Devanagari and Tamil references to nothing, turning their WER into
+/// Infinity% instead of a number.
 List<String> _normalizedWords(String text) => text
     .toLowerCase()
-    .replaceAll(RegExp(r"[^a-z0-9']+"), ' ')
+    .replaceAll(RegExp(r"[^\p{L}\p{N}']+", unicode: true), ' ')
     .trim()
     .split(RegExp(r'\s+'))
     .where((w) => w.isNotEmpty)
     .toList();
+
+/// Transcribes one WAV; lets the manifest scorer drive any engine.
+typedef ClipTranscriber = Future<String> Function(String wavPath);
 
 /// Word-level Levenshtein distance (substitutions + insertions + deletions).
 int _editDistance(List<String> reference, List<String> hypothesis) {
@@ -187,7 +211,7 @@ int _editDistance(List<String> reference, List<String> hypothesis) {
 }
 
 Future<void> _runManifest(
-  sherpa_onnx.OfflineRecognizer recognizer,
+  ClipTranscriber transcribe,
   String manifestPath,
   String language,
   String dialectFilter,
@@ -221,15 +245,16 @@ Future<void> _runManifest(
       stderr.writeln('SKIPPED (file missing): ${clip['file']}');
       continue;
     }
-    final decodeStopwatch = Stopwatch()..start();
-    final wave = sherpa_onnx.readWave(wavPath);
-    final stream = recognizer.createStream();
-    stream.acceptWaveform(samples: wave.samples, sampleRate: wave.sampleRate);
-    recognizer.decode(stream);
-    final text = recognizer.getResult(stream).text;
-    stream.free();
-
     final reference = _normalizedWords(clip['expected'] as String);
+    if (reference.isEmpty) {
+      stderr.writeln(
+        'SKIPPED (reference normalizes to no words): '
+        '${clip['file']}',
+      );
+      continue;
+    }
+    final decodeStopwatch = Stopwatch()..start();
+    final text = await transcribe(wavPath);
     final errors = _editDistance(reference, _normalizedWords(text));
     final dialect = clip['dialect'] as String? ?? 'unknown';
     errorsByDialect[dialect] = (errorsByDialect[dialect] ?? 0) + errors;
@@ -244,6 +269,15 @@ Future<void> _runManifest(
       )
       ..writeln('  expected: ${clip['expected']}')
       ..writeln('  got:      $text');
+  }
+
+  if (wordsByDialect.isEmpty) {
+    // Every clip was skipped — missing audio (a fresh clone has only the
+    // committed synthetic clips) or references that normalize to nothing.
+    // Saying so beats printing NaN% and looking like a score.
+    stderr.writeln('No clip was scored: no audio present for "$language".');
+    exitCode = 66;
+    return;
   }
 
   stdout.writeln('--- WER by dialect ---');
@@ -277,6 +311,8 @@ Future<void> _runWhisperGgml(
   List<String> directories,
   String modelPath,
   String language,
+  String manifestPath,
+  String dialectFilter,
 ) async {
   final engine = WhisperGgmlSttEngine(
     modelPath: modelPath,
@@ -286,6 +322,18 @@ Future<void> _runWhisperGgml(
   final prepareStopwatch = Stopwatch()..start();
   await engine.prepare();
   stdout.writeln('model_loaded_ms=${prepareStopwatch.elapsedMilliseconds}');
+  if (manifestPath.isNotEmpty) {
+    await _runManifest(
+      (wavPath) => engine.transcribe(
+        AudioRecording(path: wavPath, duration: Duration.zero),
+      ),
+      manifestPath,
+      language,
+      dialectFilter,
+    );
+    await engine.shutdown();
+    return;
+  }
   for (final directory in directories) {
     for (final wavFile in _wavFiles(directory)) {
       final decodeStopwatch = Stopwatch()..start();
@@ -312,25 +360,50 @@ Future<void> main(List<String> arguments) async {
   var language = 'en';
   var manifestPath = '';
   var dialectFilter = '';
+  // A trailing flag with no value is a typo, not a crash: report it
+  // instead of letting arguments[++i] throw a RangeError.
+  String? value(int index, String flag) {
+    if (index + 1 >= arguments.length) {
+      stderr.writeln('Missing value after $flag.');
+      exitCode = 64;
+      return null;
+    }
+    return arguments[index + 1];
+  }
+
   for (var i = 0; i < arguments.length; i++) {
-    switch (arguments[i]) {
+    final flag = arguments[i];
+    if (!flag.startsWith('--')) {
+      directories.add(flag);
+      continue;
+    }
+    final argument = value(i++, flag);
+    if (argument == null) {
+      return;
+    }
+    switch (flag) {
+      // --model is the whisper-ggml spelling (a single .bin file);
+      // --model-dir the sherpa one (a directory of ONNX files). Same
+      // slot, because only one engine runs per invocation.
       case '--model-dir':
       case '--model':
-        modelDirectory = arguments[++i];
+        modelDirectory = argument;
       case '--lib-dir':
-        libraryDirectory = arguments[++i];
+        libraryDirectory = argument;
       case '--type':
-        type = arguments[++i];
+        type = argument;
       case '--engine':
-        engine = arguments[++i];
+        engine = argument;
       case '--language':
-        language = arguments[++i];
+        language = argument;
       case '--manifest':
-        manifestPath = arguments[++i];
+        manifestPath = argument;
       case '--dialect':
-        dialectFilter = arguments[++i];
+        dialectFilter = argument;
       default:
-        directories.add(arguments[i]);
+        stderr.writeln('Unknown flag $flag.');
+        exitCode = 64;
+        return;
     }
   }
   if (directories.isEmpty && manifestPath.isEmpty) {
@@ -342,7 +415,13 @@ Future<void> main(List<String> arguments) async {
     return;
   }
   if (engine == 'whisper-ggml') {
-    await _runWhisperGgml(directories, modelDirectory, language);
+    await _runWhisperGgml(
+      directories,
+      modelDirectory,
+      language,
+      manifestPath,
+      dialectFilter,
+    );
     return;
   }
 
@@ -367,7 +446,23 @@ Future<void> main(List<String> arguments) async {
   stdout.writeln('model_loaded_ms=${loadStopwatch.elapsedMilliseconds}');
 
   if (manifestPath.isNotEmpty) {
-    await _runManifest(recognizer, manifestPath, language, dialectFilter);
+    await _runManifest(
+      (wavPath) async {
+        final wave = sherpa_onnx.readWave(wavPath);
+        final stream = recognizer.createStream();
+        stream.acceptWaveform(
+          samples: wave.samples,
+          sampleRate: wave.sampleRate,
+        );
+        recognizer.decode(stream);
+        final text = recognizer.getResult(stream).text;
+        stream.free();
+        return text;
+      },
+      manifestPath,
+      language,
+      dialectFilter,
+    );
     recognizer.free();
     return;
   }
