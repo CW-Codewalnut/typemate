@@ -12,8 +12,8 @@ import 'stt_model_provisioner.dart';
 /// about one model identity everywhere. English runs its own model:
 /// parakeet-unified-en-0.6b (NVIDIA Open Model License — commercial use
 /// and redistribution permitted) beat every candidate on the real-recording
-/// accent corpus (test_assets/stt_benchmark, 2026-08 sweep: 6.0% vs v3's
-/// 10.3% WER overall; Indian English 8.3% vs 13.3%) and its family has
+/// accent corpus (test_assets/stt_benchmark, 2026-08 sweep: 4.2% vs v3's
+/// 10.3% WER overall; Indian English 8.2% vs 13.3%) and its family has
 /// streaming exports if live dictation preview ever lands — v3 keeps
 /// serving the 24 multilingual languages it was adopted for.
 const parakeetModelDirectoryName = 'parakeet-tdt-0.6b-v3-int8';
@@ -64,6 +64,12 @@ final parakeetModelFiles = [
     ),
 ];
 
+// Hosted on csukuangfj2 (the sherpa-onnx maintainer's secondary account,
+// where the newer exports land) rather than the usual csukuangfj — no
+// k2-fsa-org copy of this export exists. Deliberate, and the revision +
+// SHA-256 pins below make the host untrusted anyway: a byte that does not
+// match never reaches the loader. Mirror to our own models-v1 release
+// (as the Hinglish and Tamil GGMLs are) if that account ever goes away.
 const _parakeetEnglishModelRevision =
     '8c3a10fb13408c7a7054f6898958bf1c64a8d6c7';
 const _parakeetEnglishModelBaseUrl =
@@ -102,12 +108,17 @@ final parakeetEnglishModelFiles = [
 ];
 
 /// The 25 languages served by a Parakeet engine: English by the dedicated
-/// v2 model, the other 24 by the multilingual v3 with automatic language
-/// detection.
-const parakeetLanguageCodes = [
-  'en', 'bg', 'hr', 'cs', 'da', 'nl', 'et', 'fi', 'fr', 'de', 'el', 'hu', //
-  'it', 'lv', 'lt', 'mt', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'es', 'sv',
-  'uk',
+/// parakeet-unified-en model, the other 24 by the multilingual v3 with
+/// automatic language detection.
+const parakeetLanguageCodes = ['en', ...parakeetMultilingualLanguageCodes];
+
+/// The 24 languages the multilingual v3 model serves — every Parakeet
+/// language except English, which has its own model. Kept as its own
+/// const so routing and provisioning never re-derive it by filtering
+/// 'en' out of [parakeetLanguageCodes] at each call site.
+const parakeetMultilingualLanguageCodes = [
+  'bg', 'hr', 'cs', 'da', 'nl', 'et', 'fi', 'fr', 'de', 'el', 'hu', 'it', //
+  'lv', 'lt', 'mt', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'es', 'sv', 'uk',
 ];
 
 /// Vaani small fine-tune for Hindi (noise-robust, Devanagari output),

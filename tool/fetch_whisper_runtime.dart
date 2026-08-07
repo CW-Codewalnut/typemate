@@ -44,10 +44,15 @@ class _ModelSpec {
   final bool large;
 }
 
+// Pinned to the same revisions as speech_model_catalog.dart, never to a
+// branch: a bundled copy always wins over downloading, so fetching `main`
+// here would let a dev checkout or a release bundle carry different bytes
+// from what users download and what the corpus benchmark validated. Keep
+// both files' revisions in lockstep.
 const _parakeetBaseUrl =
-    'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main';
+    'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/2bda32ec70b097a55adaa07d9a7173915b43cc78';
 const _parakeetEnglishBaseUrl =
-    'https://huggingface.co/csukuangfj2/sherpa-onnx-nemo-parakeet-unified-en-0.6b-int8-non-streaming/resolve/main';
+    'https://huggingface.co/csukuangfj2/sherpa-onnx-nemo-parakeet-unified-en-0.6b-int8-non-streaming/resolve/8c3a10fb13408c7a7054f6898958bf1c64a8d6c7';
 
 const _models = [
   _ModelSpec(
