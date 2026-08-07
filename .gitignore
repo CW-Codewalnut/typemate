@@ -45,7 +45,9 @@ node_modules/
 /models/*.bin
 /models/*.onnx
 /models/*.part
-/models/parakeet-tdt-0.6b-v3-int8/
+# Every Parakeet model directory: English (parakeet-unified-en-0.6b-int8)
+# and the multilingual TDT v3, plus any candidate fetched for benchmarking.
+/models/parakeet-*/
 /bin/whisper/*.exe
 /bin/whisper/*.dll
 /bin/sherpa/*.exe
