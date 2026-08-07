@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:typemate/src/core/stt/speech_model_revisions.dart';
+
 /// Provisions the speech runtimes that ship with TypeMate:
 /// - models/parakeet-unified-en-0.6b-int8/ (English, in-process engine)
 /// - models/parakeet-tdt-0.6b-v3-int8/ (24 multilingual languages)
@@ -44,15 +46,17 @@ class _ModelSpec {
   final bool large;
 }
 
-// Pinned to the same revisions as speech_model_catalog.dart, never to a
-// branch: a bundled copy always wins over downloading, so fetching `main`
-// here would let a dev checkout or a release bundle carry different bytes
-// from what users download and what the corpus benchmark validated. Keep
-// both files' revisions in lockstep.
+// The revisions come from speech_model_revisions.dart, the same consts the
+// catalog pins its SHA-256s to, so the two can never drift: a bundled copy
+// always wins over downloading, and fetching `main` here would let a dev
+// checkout or a release bundle carry different bytes from what users
+// download and what the corpus benchmark validated. That file imports
+// nothing, which is why this tool can reach it under plain `dart run`
+// (the catalog itself pulls in package:flutter through the provisioner).
 const _parakeetBaseUrl =
-    'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/2bda32ec70b097a55adaa07d9a7173915b43cc78';
+    'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/$parakeetMultilingualModelRevision';
 const _parakeetEnglishBaseUrl =
-    'https://huggingface.co/csukuangfj2/sherpa-onnx-nemo-parakeet-unified-en-0.6b-int8-non-streaming/resolve/8c3a10fb13408c7a7054f6898958bf1c64a8d6c7';
+    'https://huggingface.co/csukuangfj2/sherpa-onnx-nemo-parakeet-unified-en-0.6b-int8-non-streaming/resolve/$parakeetEnglishModelRevision';
 
 const _models = [
   _ModelSpec(

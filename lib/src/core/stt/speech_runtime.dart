@@ -70,9 +70,6 @@ const whisperLanguages = [
 // Silero VAD trims hold-to-talk silence before decoding; without it whisper
 // loops and repeats sentences while decoding the silent tail.
 const bundledVadModelRelativePath = 'models/ggml-silero-v5.1.2.bin';
-const bundledParakeetDirRelativePath = 'models/$parakeetModelDirectoryName';
-const bundledParakeetEnglishDirRelativePath =
-    'models/$parakeetEnglishModelDirectoryName';
 
 /// Threads for the in-process Parakeet recognizer — matches the
 /// `--num-work-threads=4` the retired websocket server ran with, so
@@ -215,13 +212,12 @@ SpeechRuntime createSpeechRuntime({
   // multilingual v3. Each model provisions independently, so an
   // English-only user never downloads v3.
   SherpaParakeetSttEngine parakeetEngineFor({
-    required String bundledDirRelativePath,
     required String directoryName,
     required List<SttModelFile> modelFiles,
     required List<String> languageCodes,
   }) {
     final bundledDirectory = findBundledParakeetDirectory(
-      bundledDirRelativePath,
+      'models/$directoryName',
     );
     final modelDirectory =
         bundledDirectory ?? '$downloadedModelsDirectory/$directoryName';
@@ -244,13 +240,11 @@ SpeechRuntime createSpeechRuntime({
   }
 
   final englishParakeet = parakeetEngineFor(
-    bundledDirRelativePath: bundledParakeetEnglishDirRelativePath,
     directoryName: parakeetEnglishModelDirectoryName,
     modelFiles: parakeetEnglishModelFiles,
     languageCodes: const ['en'],
   );
   final multilingualParakeet = parakeetEngineFor(
-    bundledDirRelativePath: bundledParakeetDirRelativePath,
     directoryName: parakeetModelDirectoryName,
     modelFiles: parakeetModelFiles,
     languageCodes: parakeetMultilingualLanguageCodes,

@@ -30,7 +30,18 @@ class SherpaGtcrnAudioDenoiser implements AudioDenoiser {
   SherpaGtcrnAudioDenoiser({
     required this.modelPathCandidates,
     this.timeout = defaultTimeout,
-  }) : assert(modelPathCandidates.isNotEmpty);
+  }) {
+    // A real check, not an assert: asserts are stripped in release, and an
+    // empty list would surface as a confusing StateError from firstWhere
+    // mid-dictation rather than at construction.
+    if (modelPathCandidates.isEmpty) {
+      throw ArgumentError.value(
+        modelPathCandidates,
+        'modelPathCandidates',
+        'needs at least one path to look for the GTCRN model',
+      );
+    }
+  }
 
   /// GTCRN runs at well under 0.1x realtime, so even a two-minute dictation
   /// finishes in seconds; a run that hits this bound is hung.
