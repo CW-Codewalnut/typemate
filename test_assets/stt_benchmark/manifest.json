@@ -1,5 +1,5 @@
 {
-  "description": "Persistent STT benchmark corpus: synthetic (edge-tts) and real human clips, one entry per audio file with its reference transcript. Folders: \"<language> (<code>)/\", with English split by accent cluster. The 18 synthetic clips are committed (added with git add -f, since .gitignore covers this tree); real and dataset audio is NOT in the repo, so a fresh clone scores only the synthetic clips until the dataset clips are re-fetched. verified=true means the transcript is exact ground truth (dataset-supplied or TTS input text); verified=false was drafted from multi-model consensus and still needs a human ear. SAMPLING CAVEAT, read before quoting a per-dialect number: only en-US (372 words), en-IN (207) and the OpenSLR/AMI British sets carry enough audio to be stable. The 20 Speech Accent Archive buckets are ONE 69-word reading of the same \"Please call Stella\" paragraph each, so a single bad clip moves that dialect by tens of percent and the paragraph repeats across them. Treat those as a smoke test for accent collapse, not as a measured WER. Score any model with: dart run tool/transcribe_directory.dart --manifest test_assets/stt_benchmark/manifest.json --language <code> --type <type> --model-dir <dir>",
+  "description": "Persistent STT benchmark corpus: synthetic (edge-tts) and real human clips, one entry per audio file with its reference transcript. Folders: \"<language> (<code>)/\", with English split by accent cluster. The 18 synthetic clips are committed (added with git add -f, since .gitignore covers this tree); real and dataset audio is NOT in the repo, so a fresh clone scores only the synthetic clips until the dataset clips are re-fetched. verified=true means the transcript is exact ground truth (dataset-supplied or TTS input text); verified=false was drafted from multi-model consensus and still needs a human ear. SAMPLING CAVEAT, read before quoting a per-dialect number: only en-US (372 words), en-IN (207) and the OpenSLR/AMI British sets carry enough audio to be stable. The 20 Speech Accent Archive buckets are ONE 69-word reading of the same \"Please call Stella\" paragraph each, so a single bad clip moves that dialect by tens of percent and the paragraph repeats across them. Treat those as a smoke test for accent collapse, not as a measured WER. Score any model with: dart run tool/transcribe_directory.dart --manifest test_assets/stt_benchmark/manifest.json --language <code> --type <type> --model-dir <dir> PENDING: eight code-mixed Hinglish segments cut from an own call recording sit on disk at \"hindi (hi)/real-call-01..08.wav\" but are deliberately NOT listed here — the Hindi and Hinglish models disagree substantially on them and nobody has transcribed them by ear, so any reference drafted from those models would bake a model's own errors into the benchmark. Add them back only with hand-written transcripts.",
   "clips": [
     {
       "file": "english (en)/north-america/en-typemate.wav",
@@ -189,78 +189,6 @@
       "license": "internal",
       "verified": false,
       "cluster": "south-asia"
-    },
-    {
-      "file": "hindi (hi)/real-call-01.wav",
-      "language": "hi",
-      "dialect": "hi-IN (code-mixed Hinglish call)",
-      "expected": "",
-      "source": "own recording (call, speech segment 1 of 8; source m4a was 18.5 min silence + 69 s speech)",
-      "license": "internal",
-      "verified": false
-    },
-    {
-      "file": "hindi (hi)/real-call-02.wav",
-      "language": "hi",
-      "dialect": "hi-IN (code-mixed Hinglish call)",
-      "expected": "",
-      "source": "own recording (call, speech segment 2 of 8)",
-      "license": "internal",
-      "verified": false
-    },
-    {
-      "file": "hindi (hi)/real-call-03.wav",
-      "language": "hi",
-      "dialect": "hi-IN (code-mixed Hinglish call)",
-      "expected": "",
-      "source": "own recording (call, speech segment 3 of 8)",
-      "license": "internal",
-      "verified": false
-    },
-    {
-      "file": "hindi (hi)/real-call-04.wav",
-      "language": "hi",
-      "dialect": "hi-IN (code-mixed Hinglish call)",
-      "expected": "",
-      "source": "own recording (call, speech segment 4 of 8)",
-      "license": "internal",
-      "verified": false
-    },
-    {
-      "file": "hindi (hi)/real-call-05.wav",
-      "language": "hi",
-      "dialect": "hi-IN (code-mixed Hinglish call)",
-      "expected": "",
-      "source": "own recording (call, speech segment 5 of 8)",
-      "license": "internal",
-      "verified": false
-    },
-    {
-      "file": "hindi (hi)/real-call-06.wav",
-      "language": "hi",
-      "dialect": "hi-IN (code-mixed Hinglish call)",
-      "expected": "",
-      "source": "own recording (call, speech segment 6 of 8)",
-      "license": "internal",
-      "verified": false
-    },
-    {
-      "file": "hindi (hi)/real-call-07.wav",
-      "language": "hi",
-      "dialect": "hi-IN (code-mixed Hinglish call)",
-      "expected": "",
-      "source": "own recording (call, speech segment 7 of 8)",
-      "license": "internal",
-      "verified": false
-    },
-    {
-      "file": "hindi (hi)/real-call-08.wav",
-      "language": "hi",
-      "dialect": "hi-IN (code-mixed Hinglish call)",
-      "expected": "",
-      "source": "own recording (call, speech segment 8 of 8)",
-      "license": "internal",
-      "verified": false
     },
     {
       "file": "english (en)/north-america/1089-134686-0013.wav",

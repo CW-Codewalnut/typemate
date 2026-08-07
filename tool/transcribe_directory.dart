@@ -1,12 +1,12 @@
-// Transcribes every WAV in a directory through an in-process STT engine,
-// so real-world recordings can be checked against candidate models without
-// running the app. Defaults to the exact model files and recognizer config
+// Transcribes WAVs through an in-process STT engine, so real-world
+// recordings can be checked against candidate models without running the
+// app. Defaults to the exact model files and recognizer config
 // SherpaParakeetSttEngine loads.
 //
 // Usage (pure Dart, no Flutter runtime needed):
 //   dart run tool/transcribe_directory.dart <wav-dir> \
-//     [--model-dir models/parakeet-tdt-0.6b-v3-int8] \
-//     [--type transducer|moonshine|whisper|canary|zipformer-ctc|sense-voice] \
+//     [--model-dir models/parakeet-unified-en-0.6b-int8] \
+//     [--type transducer|whisper|canary|moonshine|qwen3-asr|nemo-ctc] \
 //     [--lib-dir <dll dir>]
 //
 // With --manifest it scores WER against the reference transcripts instead
@@ -15,51 +15,57 @@
 //     --manifest test_assets/stt_benchmark/manifest.json \
 //     --language en [--dialect en-IN] --type <type> --model-dir <dir>
 //
-// Or through the production whisper_ggml engine (needs the plugin DLL on
-// PATH, e.g. build/windows/x64/runner/Debug). --model takes a single
-// .bin here, where sherpa's --model-dir takes a directory; both accept
-// --manifest for WER scoring:
-//   dart run tool/transcribe_directory.dart <wav-dir> \
+// Or through the production whisper_ggml engine. That needs the plugin
+// DLL on PATH, and it MUST be the Release copy — the Debug DLLs mix CRT
+// heaps with the release Dart VM and abort the process with
+// 0xC0000374 (STATUS_HEAP_CORRUPTION) right after the warm-up VAD call,
+// printing nothing at all:
+//   PATH="build/windows/x64/runner/Release:$PATH" \
+//     dart run tool/transcribe_directory.dart <wav-dir> \
 //     --engine whisper-ggml --model models/ggml-small-vaani-hindi-q6.bin \
 //     --language hi
+// --model takes a single .bin there, where sherpa's --model-dir takes a
+// directory; both accept --manifest.
 //
 // sherpa model files are located inside --model-dir by the standard names
 // used in the k2-fsa/sherpa-onnx release archives, preferring int8 variants.
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa_onnx;
 import 'package:typemate/src/core/audio/audio_recorder.dart';
 import 'package:typemate/src/core/stt/whisper_ggml_stt_engine.dart';
 
-/// The newest sherpa_onnx_windows in the pub cache, so a plugin bump does
-/// not silently drop the tool back to the System32 onnxruntime (which
-/// crashes with an ORT API mismatch). Pass --lib-dir to override.
+/// The sherpa_onnx_windows copy THIS project resolved, read from the
+/// package config rather than guessed from the shared pub cache: the
+/// cache can hold several versions, and loading the wrong one brings back
+/// the ORT API mismatch this exists to avoid. Pass --lib-dir to override.
 String _defaultLibraryDirectory() {
-  final home = Platform.environment['USERPROFILE'] ?? '';
-  final hosted = Directory('$home/AppData/Local/Pub/Cache/hosted/pub.dev');
-  if (!hosted.existsSync()) {
+  final config = File('.dart_tool/package_config.json');
+  if (!config.existsSync()) {
     return '';
   }
-  final versions =
-      hosted
-          .listSync()
-          .whereType<Directory>()
-          .map((d) => d.path.replaceAll('\\', '/'))
-          .where((p) => p.split('/').last.startsWith('sherpa_onnx_windows-'))
-          .toList()
-        ..sort();
-  if (versions.isEmpty) {
+  final packages =
+      (jsonDecode(config.readAsStringSync()) as Map)['packages'] as List;
+  final root =
+      packages.cast<Map<String, dynamic>>().firstWhere(
+            (p) => p['name'] == 'sherpa_onnx_windows',
+            orElse: () => const <String, dynamic>{},
+          )['rootUri']
+          as String?;
+  if (root == null) {
     return '';
   }
-  final windows = '${versions.last}/windows';
-  return Directory(windows).existsSync() ? windows : '';
+  final resolved = Uri.parse(root).toFilePath().replaceAll('\\', '/');
+  return '$resolved/windows';
 }
 
 /// Finds the model file in [directory] whose name contains [nameFragment],
 /// preferring int8 exports to match what the app would ship.
-String _find(String directory, String nameFragment, {bool optional = false}) {
+String _find(String directory, String nameFragment) {
   final candidates =
       Directory(directory)
           .listSync()
@@ -69,9 +75,6 @@ String _find(String directory, String nameFragment, {bool optional = false}) {
           .toList()
         ..sort();
   if (candidates.isEmpty) {
-    if (optional) {
-      return '';
-    }
     throw StateError('No "$nameFragment" file in $directory');
   }
   return candidates.firstWhere(
@@ -152,25 +155,96 @@ sherpa_onnx.OfflineModelConfig _modelConfig(
         tokens: tokens,
         numThreads: 4,
       );
-    case 'zipformer-ctc':
-      return sherpa_onnx.OfflineModelConfig(
-        zipformerCtc: sherpa_onnx.OfflineZipformerCtcModelConfig(
-          model: _find(directory, 'model'),
-        ),
-        tokens: tokens,
-        numThreads: 4,
-      );
-    case 'sense-voice':
-      return sherpa_onnx.OfflineModelConfig(
-        senseVoice: sherpa_onnx.OfflineSenseVoiceModelConfig(
-          model: _find(directory, 'model'),
-          language: 'en',
-        ),
-        tokens: tokens,
-        numThreads: 4,
-      );
     default:
       throw ArgumentError('Unknown --type "$type"');
+  }
+}
+
+/// One loaded engine: transcribe a WAV, then release it. Both engines
+/// expose this, so the manifest and directory runners are written once —
+/// the duplicated pair of runners is what let --manifest work on sherpa
+/// and silently do nothing on whisper_ggml.
+class _Engine {
+  const _Engine({required this.transcribe, required this.close});
+
+  final Future<String> Function(String wavPath) transcribe;
+  final Future<void> Function() close;
+}
+
+_Engine _sherpaEngine({
+  required String type,
+  required String modelDirectory,
+  required String language,
+  required String libraryDirectory,
+}) {
+  final normalized = libraryDirectory.replaceAll('/', '\\');
+  if (normalized.isNotEmpty) {
+    // Pre-pin the bundled onnxruntime BEFORE sherpa loads: Windows ML
+    // ships an older onnxruntime.dll in System32, which otherwise wins
+    // the dependency search and crashes with an ORT API mismatch. (The
+    // real app is immune — its own copy sits next to typemate.exe.)
+    DynamicLibrary.open('$normalized\\onnxruntime.dll');
+  }
+  sherpa_onnx.initBindings(normalized.isEmpty ? null : normalized);
+
+  final stopwatch = Stopwatch()..start();
+  final recognizer = sherpa_onnx.OfflineRecognizer(
+    sherpa_onnx.OfflineRecognizerConfig(
+      model: _modelConfig(type, modelDirectory, language),
+    ),
+  );
+  stdout.writeln('model_loaded_ms=${stopwatch.elapsedMilliseconds}');
+
+  return _Engine(
+    transcribe: (wavPath) async {
+      final wave = sherpa_onnx.readWave(wavPath);
+      final stream = recognizer.createStream();
+      stream.acceptWaveform(samples: wave.samples, sampleRate: wave.sampleRate);
+      recognizer.decode(stream);
+      final text = recognizer.getResult(stream).text;
+      stream.free();
+      return text;
+    },
+    close: () async => recognizer.free(),
+  );
+}
+
+Future<_Engine> _whisperGgmlEngine({
+  required String modelPath,
+  required String language,
+}) async {
+  final engine = WhisperGgmlSttEngine(
+    modelPath: modelPath,
+    language: language,
+    vadModelPath: 'models/ggml-silero-v5.1.2.bin',
+  );
+  final stopwatch = Stopwatch()..start();
+  await engine.prepare();
+  stdout.writeln('model_loaded_ms=${stopwatch.elapsedMilliseconds}');
+  return _Engine(
+    transcribe: (wavPath) => engine.transcribe(
+      AudioRecording(path: wavPath, duration: Duration.zero),
+    ),
+    close: engine.shutdown,
+  );
+}
+
+/// Seconds of audio in a PCM WAV, from its header — engine-agnostic, so
+/// both runners can report it.
+double _wavSeconds(File file) {
+  final header = file.openSync()..setPositionSync(0);
+  try {
+    final bytes = ByteData.sublistView(header.readSync(44));
+    final channels = bytes.getUint16(22, Endian.little);
+    final sampleRate = bytes.getUint32(24, Endian.little);
+    final bitsPerSample = bytes.getUint16(34, Endian.little);
+    final bytesPerFrame = channels * (bitsPerSample ~/ 8);
+    if (sampleRate == 0 || bytesPerFrame == 0) {
+      return 0;
+    }
+    return (file.lengthSync() - 44) / (sampleRate * bytesPerFrame);
+  } finally {
+    header.closeSync();
   }
 }
 
@@ -187,9 +261,6 @@ List<String> _normalizedWords(String text) => text
     .where((w) => w.isNotEmpty)
     .toList();
 
-/// Transcribes one WAV; lets the manifest scorer drive any engine.
-typedef ClipTranscriber = Future<String> Function(String wavPath);
-
 /// Word-level Levenshtein distance (substitutions + insertions + deletions).
 int _editDistance(List<String> reference, List<String> hypothesis) {
   final previous = List<int>.generate(hypothesis.length + 1, (i) => i);
@@ -199,11 +270,10 @@ int _editDistance(List<String> reference, List<String> hypothesis) {
     for (var j = 1; j <= hypothesis.length; j++) {
       final substitution =
           previous[j - 1] + (reference[i - 1] == hypothesis[j - 1] ? 0 : 1);
-      current[j] = [
+      current[j] = math.min(
         substitution,
-        previous[j] + 1,
-        current[j - 1] + 1,
-      ].reduce((a, b) => a < b ? a : b);
+        math.min(previous[j] + 1, current[j - 1] + 1),
+      );
     }
     previous.setAll(0, current);
   }
@@ -211,7 +281,7 @@ int _editDistance(List<String> reference, List<String> hypothesis) {
 }
 
 Future<void> _runManifest(
-  ClipTranscriber transcribe,
+  _Engine engine,
   String manifestPath,
   String language,
   String dialectFilter,
@@ -229,7 +299,6 @@ Future<void> _runManifest(
             dialectFilter.isEmpty ||
             (c['dialect'] as String? ?? '').contains(dialectFilter),
       )
-      .where((c) => (c['expected'] as String? ?? '').isNotEmpty)
       .toList();
   if (clips.isEmpty) {
     stderr.writeln('No manifest clips match language "$language".');
@@ -239,22 +308,27 @@ Future<void> _runManifest(
 
   final errorsByDialect = <String, int>{};
   final wordsByDialect = <String, int>{};
+  var missingAudio = 0;
+  var missingReference = 0;
   for (final clip in clips) {
     final wavPath = '$manifestDirectory/${clip['file']}';
     if (!File(wavPath).existsSync()) {
-      stderr.writeln('SKIPPED (file missing): ${clip['file']}');
+      stderr.writeln('SKIPPED (audio missing): ${clip['file']}');
+      missingAudio++;
       continue;
     }
-    final reference = _normalizedWords(clip['expected'] as String);
+    // Clips with no reference (or one that normalizes to nothing) cannot
+    // be scored. Counting them out loud matters: they used to vanish in a
+    // filter, so a run over 10 clips could report a number from 2 and
+    // still read like full coverage.
+    final reference = _normalizedWords(clip['expected'] as String? ?? '');
     if (reference.isEmpty) {
-      stderr.writeln(
-        'SKIPPED (reference normalizes to no words): '
-        '${clip['file']}',
-      );
+      stderr.writeln('SKIPPED (no reference transcript): ${clip['file']}');
+      missingReference++;
       continue;
     }
     final decodeStopwatch = Stopwatch()..start();
-    final text = await transcribe(wavPath);
+    final text = await engine.transcribe(wavPath);
     final errors = _editDistance(reference, _normalizedWords(text));
     final dialect = clip['dialect'] as String? ?? 'unknown';
     errorsByDialect[dialect] = (errorsByDialect[dialect] ?? 0) + errors;
@@ -271,11 +345,12 @@ Future<void> _runManifest(
       ..writeln('  got:      $text');
   }
 
+  final scored = clips.length - missingAudio - missingReference;
   if (wordsByDialect.isEmpty) {
-    // Every clip was skipped — missing audio (a fresh clone has only the
-    // committed synthetic clips) or references that normalize to nothing.
-    // Saying so beats printing NaN% and looking like a score.
-    stderr.writeln('No clip was scored: no audio present for "$language".');
+    stderr.writeln(
+      'No clip was scored for "$language": $missingAudio missing audio, '
+      '$missingReference without a reference transcript.',
+    );
     exitCode = 66;
     return;
   }
@@ -297,90 +372,58 @@ Future<void> _runManifest(
     'overall: ${(100 * totalErrors / totalWords).toStringAsFixed(1)}% '
     '($totalErrors/$totalWords words)',
   );
+  // The headline is only as broad as the clips behind it.
+  stdout.writeln(
+    'scored $scored of ${clips.length} clips '
+    '($missingAudio missing audio, $missingReference without a reference)',
+  );
 }
 
-List<File> _wavFiles(String directory) =>
-    Directory(directory)
-        .listSync()
-        .whereType<File>()
-        .where((f) => f.path.toLowerCase().endsWith('.wav'))
-        .toList()
-      ..sort((a, b) => a.path.compareTo(b.path));
-
-Future<void> _runWhisperGgml(
-  List<String> directories,
-  String modelPath,
-  String language,
-  String manifestPath,
-  String dialectFilter,
-) async {
-  final engine = WhisperGgmlSttEngine(
-    modelPath: modelPath,
-    language: language,
-    vadModelPath: 'models/ggml-silero-v5.1.2.bin',
-  );
-  final prepareStopwatch = Stopwatch()..start();
-  await engine.prepare();
-  stdout.writeln('model_loaded_ms=${prepareStopwatch.elapsedMilliseconds}');
-  if (manifestPath.isNotEmpty) {
-    await _runManifest(
-      (wavPath) => engine.transcribe(
-        AudioRecording(path: wavPath, duration: Duration.zero),
-      ),
-      manifestPath,
-      language,
-      dialectFilter,
-    );
-    await engine.shutdown();
-    return;
-  }
+Future<void> _runDirectories(_Engine engine, List<String> directories) async {
   for (final directory in directories) {
-    for (final wavFile in _wavFiles(directory)) {
+    final wavFiles =
+        Directory(directory)
+            .listSync()
+            .whereType<File>()
+            .where((f) => f.path.toLowerCase().endsWith('.wav'))
+            .toList()
+          ..sort((a, b) => a.path.compareTo(b.path));
+    for (final wavFile in wavFiles) {
       final decodeStopwatch = Stopwatch()..start();
-      final text = await engine.transcribe(
-        AudioRecording(path: wavFile.path, duration: Duration.zero),
-      );
+      final text = await engine.transcribe(wavFile.path);
       stdout
         ..writeln(
           'clip=${wavFile.uri.pathSegments.last} '
+          'audio_s=${_wavSeconds(wavFile).toStringAsFixed(1)} '
           'decode_ms=${decodeStopwatch.elapsedMilliseconds}',
         )
         ..writeln('  $text');
     }
   }
-  await engine.shutdown();
 }
 
 Future<void> main(List<String> arguments) async {
   final directories = <String>[];
-  var modelDirectory = 'models/parakeet-tdt-0.6b-v3-int8';
+  var modelDirectory = 'models/parakeet-unified-en-0.6b-int8';
   var libraryDirectory = _defaultLibraryDirectory();
   var type = 'transducer';
-  var engine = 'sherpa';
+  var engineName = 'sherpa';
   var language = 'en';
   var manifestPath = '';
   var dialectFilter = '';
-  // A trailing flag with no value is a typo, not a crash: report it
-  // instead of letting arguments[++i] throw a RangeError.
-  String? value(int index, String flag) {
-    if (index + 1 >= arguments.length) {
-      stderr.writeln('Missing value after $flag.');
-      exitCode = 64;
-      return null;
-    }
-    return arguments[index + 1];
-  }
-
   for (var i = 0; i < arguments.length; i++) {
     final flag = arguments[i];
     if (!flag.startsWith('--')) {
       directories.add(flag);
       continue;
     }
-    final argument = value(i++, flag);
-    if (argument == null) {
+    // A trailing flag with no value is a typo, not a crash.
+    if (i + 1 >= arguments.length) {
+      stderr.writeln('Missing value after $flag.');
+      exitCode = 64;
       return;
     }
+    final argument = arguments[++i];
     switch (flag) {
       // --model is the whisper-ggml spelling (a single .bin file);
       // --model-dir the sherpa one (a directory of ONNX files). Same
@@ -393,7 +436,7 @@ Future<void> main(List<String> arguments) async {
       case '--type':
         type = argument;
       case '--engine':
-        engine = argument;
+        engineName = argument;
       case '--language':
         language = argument;
       case '--manifest':
@@ -414,78 +457,22 @@ Future<void> main(List<String> arguments) async {
     exitCode = 64;
     return;
   }
-  if (engine == 'whisper-ggml') {
-    await _runWhisperGgml(
-      directories,
-      modelDirectory,
-      language,
-      manifestPath,
-      dialectFilter,
-    );
-    return;
-  }
 
-  final normalizedLibraryDirectory = libraryDirectory.replaceAll('/', '\\');
-  if (normalizedLibraryDirectory.isNotEmpty) {
-    // Pre-pin the bundled onnxruntime BEFORE sherpa loads: Windows ML
-    // ships an older onnxruntime.dll in System32, which otherwise wins
-    // the dependency search and crashes with an ORT API mismatch. (The
-    // real app is immune — its own copy sits next to typemate.exe.)
-    DynamicLibrary.open('$normalizedLibraryDirectory\\onnxruntime.dll');
-  }
-  sherpa_onnx.initBindings(
-    normalizedLibraryDirectory.isEmpty ? null : normalizedLibraryDirectory,
-  );
-
-  final loadStopwatch = Stopwatch()..start();
-  final recognizer = sherpa_onnx.OfflineRecognizer(
-    sherpa_onnx.OfflineRecognizerConfig(
-      model: _modelConfig(type, modelDirectory, language),
-    ),
-  );
-  stdout.writeln('model_loaded_ms=${loadStopwatch.elapsedMilliseconds}');
-
-  if (manifestPath.isNotEmpty) {
-    await _runManifest(
-      (wavPath) async {
-        final wave = sherpa_onnx.readWave(wavPath);
-        final stream = recognizer.createStream();
-        stream.acceptWaveform(
-          samples: wave.samples,
-          sampleRate: wave.sampleRate,
+  final engine = engineName == 'whisper-ggml'
+      ? await _whisperGgmlEngine(modelPath: modelDirectory, language: language)
+      : _sherpaEngine(
+          type: type,
+          modelDirectory: modelDirectory,
+          language: language,
+          libraryDirectory: libraryDirectory,
         );
-        recognizer.decode(stream);
-        final text = recognizer.getResult(stream).text;
-        stream.free();
-        return text;
-      },
-      manifestPath,
-      language,
-      dialectFilter,
-    );
-    recognizer.free();
-    return;
-  }
-
-  for (final directory in directories) {
-    for (final wavFile in _wavFiles(directory)) {
-      final decodeStopwatch = Stopwatch()..start();
-      final wave = sherpa_onnx.readWave(wavFile.path);
-      final stream = recognizer.createStream();
-      stream.acceptWaveform(samples: wave.samples, sampleRate: wave.sampleRate);
-      recognizer.decode(stream);
-      final text = recognizer.getResult(stream).text;
-      stream.free();
-      final seconds = (wave.samples.length / wave.sampleRate).toStringAsFixed(
-        1,
-      );
-      stdout
-        ..writeln(
-          'clip=${wavFile.uri.pathSegments.last} '
-          'audio_s=$seconds decode_ms=${decodeStopwatch.elapsedMilliseconds}',
-        )
-        ..writeln('  $text');
+  try {
+    if (manifestPath.isNotEmpty) {
+      await _runManifest(engine, manifestPath, language, dialectFilter);
+    } else {
+      await _runDirectories(engine, directories);
     }
+  } finally {
+    await engine.close();
   }
-  recognizer.free();
 }
