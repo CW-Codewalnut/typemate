@@ -1,4 +1,5 @@
 import 'sherpa_parakeet_stt_engine.dart';
+import 'speech_model_revisions.dart';
 import 'stt_model_provisioner.dart';
 
 /// Every downloadable speech model TypeMate uses, shared by the Android
@@ -8,60 +9,112 @@ import 'stt_model_provisioner.dart';
 /// aborts the whole process inside the native loader, so nothing
 /// unverified may ever reach it.
 
-/// Same model directory name on every platform, so tooling and docs talk
-/// about one model identity everywhere.
+/// Same model directory names on every platform, so tooling and docs talk
+/// about one model identity everywhere. English runs its own model:
+/// parakeet-unified-en-0.6b (NVIDIA Open Model License — commercial use
+/// and redistribution permitted) beat every candidate on the real-recording
+/// accent corpus (test_assets/stt_benchmark, 2026-08 sweep: 4.2% vs v3's
+/// 10.3% WER overall; Indian English 8.2% vs 13.3%) and its family has
+/// streaming exports if live dictation preview ever lands — v3 keeps
+/// serving the 24 multilingual languages it was adopted for.
 const parakeetModelDirectoryName = 'parakeet-tdt-0.6b-v3-int8';
+const parakeetEnglishModelDirectoryName = 'parakeet-unified-en-0.6b-int8';
 
-/// The official sherpa-onnx export of NVIDIA Parakeet TDT 0.6B v3 int8.
+/// The official sherpa-onnx exports of NVIDIA Parakeet 0.6B models
+/// (TDT v3 int8 multilingual; unified-en int8 non-streaming for English).
 /// Individual files (not the .tar.bz2 archive) so the download streams
 /// straight to disk with HTTP-range resume and no archive extraction.
 ///
-/// PINNED to a commit revision, never a branch: content at a commit is
-/// immutable, so a resume can never append bytes of a newer upload onto
-/// an older partial file, and we ship exactly the bytes that were
-/// validated — not whatever `main` points at later. The byte sizes come
-/// from the same revision and gate the rename-to-complete.
-const _parakeetModelRevision = '2bda32ec70b097a55adaa07d9a7173915b43cc78';
-const _parakeetModelBaseUrl =
-    'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/$_parakeetModelRevision';
+/// Size and SHA-256 live together per file, rather than in two maps keyed
+/// by the same names: this is the integrity path, and a typo in one key of
+/// a parallel map would be a null-assert crash at startup. The SHA-256s
+/// are the Hugging Face LFS oids at the pinned revision (tokens.txt hashed
+/// from the revision directly); update them together with the revision.
+typedef _ModelFile = ({int bytes, String sha256});
 
-const _parakeetModelFileSizes = {
-  'encoder.int8.onnx': 652184281,
-  'decoder.int8.onnx': 11845275,
-  'joiner.int8.onnx': 6355277,
-  'tokens.txt': 93939,
+const _parakeetMultilingualFiles = <String, _ModelFile>{
+  'encoder.int8.onnx': (
+    bytes: 652184281,
+    sha256: 'acfc2b4456377e15d04f0243af540b7fe7c992f8d898d751cf134c3a55fd2247',
+  ),
+  'decoder.int8.onnx': (
+    bytes: 11845275,
+    sha256: '179e50c43d1a9de79c8a24149a2f9bac6eb5981823f2a2ed88d655b24248db4e',
+  ),
+  'joiner.int8.onnx': (
+    bytes: 6355277,
+    sha256: '3164c13fc2821009440d20fcb5fdc78bff28b4db2f8d0f0b329101719c0948b3',
+  ),
+  'tokens.txt': (
+    bytes: 93939,
+    sha256: 'd58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d',
+  ),
 };
 
-/// SHA-256 of each file at the pinned revision (Hugging Face LFS oids;
-/// tokens.txt hashed from the revision directly). Update together with
-/// the revision and the sizes above.
-const _parakeetModelFileHashes = {
-  'encoder.int8.onnx':
-      'acfc2b4456377e15d04f0243af540b7fe7c992f8d898d751cf134c3a55fd2247',
-  'decoder.int8.onnx':
-      '179e50c43d1a9de79c8a24149a2f9bac6eb5981823f2a2ed88d655b24248db4e',
-  'joiner.int8.onnx':
-      '3164c13fc2821009440d20fcb5fdc78bff28b4db2f8d0f0b329101719c0948b3',
-  'tokens.txt':
-      'd58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d',
+/// Hosted on csukuangfj2 (the sherpa-onnx maintainer's secondary account,
+/// where the newer exports land) rather than the usual csukuangfj — no
+/// k2-fsa-org copy of this export exists. Deliberate, and the revision +
+/// SHA-256 pins make the host untrusted anyway: a byte that does not match
+/// never reaches the loader. Mirror to our own models-v1 release (as the
+/// Hinglish and Tamil GGMLs are) if that account ever goes away. These
+/// bytes are the ones the 2026-08 accent-corpus benchmark validated.
+const _parakeetEnglishFiles = <String, _ModelFile>{
+  'encoder.int8.onnx': (
+    bytes: 654040552,
+    sha256: '6716910b7a0833997fec7a410494c995d70124001a0e9b66d6370d6aced577e0',
+  ),
+  'decoder.int8.onnx': (
+    bytes: 7257753,
+    sha256: 'a5e223392c90e75f8144cdb5eb95af7625db389e39edef2bd1a9c872b3298fe6',
+  ),
+  'joiner.int8.onnx': (
+    bytes: 1735860,
+    sha256: '869f43f7d24595c55581ad3bf249a935fb8a71389fbdaa7504b9f46f93140f8a',
+  ),
+  'tokens.txt': (
+    bytes: 8952,
+    sha256: 'dc0b4584ab2e4ddbf888425c076c61b736e7356a015250db7d307e6f1a8188ff',
+  ),
 };
 
-final parakeetModelFiles = [
+List<SttModelFile> _parakeetFiles(
+  String baseUrl,
+  Map<String, _ModelFile> files,
+) => [
   for (final name in sherpaParakeetModelFileNames)
     SttModelFile(
-      url: '$_parakeetModelBaseUrl/$name',
+      url: '$baseUrl/$name',
       relativePath: name,
-      expectedBytes: _parakeetModelFileSizes[name]!,
-      expectedSha256: _parakeetModelFileHashes[name]!,
+      expectedBytes: files[name]!.bytes,
+      expectedSha256: files[name]!.sha256,
     ),
 ];
 
-/// The 25 languages Parakeet TDT 0.6B v3 transcribes, with automatic
-/// language detection — every one is served by the same model.
-const parakeetLanguageCodes = [
-  'en', 'bg', 'hr', 'cs', 'da', 'nl', 'et', 'fi', 'fr', 'de', 'el', 'hu', //
-  'it', 'lv', 'lt', 'mt', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'es', 'sv',
-  'uk',
+final parakeetModelFiles = _parakeetFiles(
+  'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8'
+  '/resolve/$parakeetMultilingualModelRevision',
+  _parakeetMultilingualFiles,
+);
+
+final parakeetEnglishModelFiles = _parakeetFiles(
+  'https://huggingface.co/csukuangfj2'
+  '/sherpa-onnx-nemo-parakeet-unified-en-0.6b-int8-non-streaming'
+  '/resolve/$parakeetEnglishModelRevision',
+  _parakeetEnglishFiles,
+);
+
+/// The 25 languages served by a Parakeet engine: English by the dedicated
+/// parakeet-unified-en model, the other 24 by the multilingual v3 with
+/// automatic language detection.
+const parakeetLanguageCodes = ['en', ...parakeetMultilingualLanguageCodes];
+
+/// The 24 languages the multilingual v3 model serves — every Parakeet
+/// language except English, which has its own model. Kept as its own
+/// const so routing and provisioning never re-derive it by filtering
+/// 'en' out of [parakeetLanguageCodes] at each call site.
+const parakeetMultilingualLanguageCodes = [
+  'bg', 'hr', 'cs', 'da', 'nl', 'et', 'fi', 'fr', 'de', 'el', 'hu', 'it', //
+  'lv', 'lt', 'mt', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'es', 'sv', 'uk',
 ];
 
 /// Vaani small fine-tune for Hindi (noise-robust, Devanagari output),

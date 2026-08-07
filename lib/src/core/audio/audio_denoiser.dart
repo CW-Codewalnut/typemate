@@ -28,15 +28,31 @@ abstract interface class AudioDenoiser {
 /// load costs milliseconds.
 class SherpaGtcrnAudioDenoiser implements AudioDenoiser {
   SherpaGtcrnAudioDenoiser({
-    required this.modelPath,
+    required this.modelPathCandidates,
     this.timeout = defaultTimeout,
-  });
+  }) {
+    // A real check, not an assert: asserts are stripped in release, and an
+    // empty list would surface as a confusing StateError from firstWhere
+    // mid-dictation rather than at construction.
+    if (modelPathCandidates.isEmpty) {
+      throw ArgumentError.value(
+        modelPathCandidates,
+        'modelPathCandidates',
+        'needs at least one path to look for the GTCRN model',
+      );
+    }
+  }
 
   /// GTCRN runs at well under 0.1x realtime, so even a two-minute dictation
   /// finishes in seconds; a run that hits this bound is hung.
   static const defaultTimeout = Duration(seconds: 15);
 
-  final String modelPath;
+  /// Where the GTCRN model may live, first existing wins: a bundled
+  /// install has exactly one location, but on Android the model rides
+  /// whichever Parakeet download (English unified or multilingual v3) happened
+  /// first, so both directories are candidates. Checked per call because
+  /// the download can complete after this object is built.
+  final List<String> modelPathCandidates;
   final Duration timeout;
 
   @override
@@ -44,7 +60,10 @@ class SherpaGtcrnAudioDenoiser implements AudioDenoiser {
     if (recording.path.isEmpty) {
       return recording;
     }
-    final model = modelPath;
+    final model = modelPathCandidates.firstWhere(
+      (path) => File(path).existsSync(),
+      orElse: () => modelPathCandidates.first,
+    );
     final wavPath = recording.path;
     try {
       await Isolate.run(() => _denoiseInPlace(model, wavPath)).timeout(timeout);

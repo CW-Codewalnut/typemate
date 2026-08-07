@@ -24,15 +24,27 @@ void main() {
     expect(runtime.engine, isA<LanguageRoutingSttEngine>());
     final routing = runtime.engine as LanguageRoutingSttEngine;
 
-    // Every Parakeet language shares the same in-process engine, loading
-    // the bundled model directory.
+    // English loads its own accent-robust model (parakeet-unified); the
+    // other 24 Parakeet languages share the multilingual v3 directory.
     expect(routing.routes.keys, containsAll(parakeetLanguageCodes));
-    final parakeet = routing.routes['en'] as SherpaParakeetSttEngine;
+    final english = routing.routes['en'] as SherpaParakeetSttEngine;
     expect(
-      parakeet.modelDirectoryPath,
+      english.modelDirectoryPath,
+      'C:/apps/typemate/models/parakeet-unified-en-0.6b-int8',
+    );
+    expect(english.numThreads, desktopParakeetNumThreads);
+    final german = routing.routes['de'] as SherpaParakeetSttEngine;
+    expect(
+      german.modelDirectoryPath,
       'C:/apps/typemate/models/parakeet-tdt-0.6b-v3-int8',
     );
-    expect(parakeet.numThreads, desktopParakeetNumThreads);
+    expect(identical(english, german), isFalse);
+    for (final code in parakeetLanguageCodes) {
+      if (code == 'en') {
+        continue;
+      }
+      expect(identical(routing.routes[code], german), isTrue);
+    }
 
     // Every whisper language runs in-process on its own fine-tune, with
     // the bundled Silero VAD trimming hold-to-talk silence.
@@ -79,7 +91,7 @@ void main() {
     final parakeet = routing.routes['en'] as SherpaParakeetSttEngine;
     expect(
       parakeet.modelDirectoryPath,
-      '$executableDirectory/models/parakeet-tdt-0.6b-v3-int8',
+      '$executableDirectory/models/parakeet-unified-en-0.6b-int8',
     );
     final hindi = routing.fallback as WhisperGgmlSttEngine;
     expect(
@@ -108,7 +120,7 @@ void main() {
     final parakeet = routing.routes['en'] as SherpaParakeetSttEngine;
     expect(
       parakeet.modelDirectoryPath,
-      '$dataDirectory/models/parakeet-tdt-0.6b-v3-int8',
+      '$dataDirectory/models/parakeet-unified-en-0.6b-int8',
     );
     final hindi = routing.routes['hi'] as WhisperGgmlSttEngine;
     expect(
@@ -117,18 +129,30 @@ void main() {
     );
 
     final provisioner = runtime.provisioner!;
-    // English needs the four Parakeet files (~640 MB total).
+    // English needs the four parakeet-unified files (~660 MB total).
     expect(provisioner.active, isNotNull);
     expect(
       provisioner.active!.files.map((f) => f.relativePath),
       containsAll(['encoder.int8.onnx', 'tokens.txt']),
     );
+    expect(
+      provisioner.active!.files.first.url,
+      contains('parakeet-unified-en-0.6b-int8'),
+    );
 
-    // Every Parakeet language shares one download; whisper languages get
-    // their own model file each.
+    // The 24 multilingual Parakeet languages share one v3 download,
+    // separate from English's unified model; whisper languages get their
+    // own model file each.
     final english = provisioner.active;
     languageCode = 'de';
-    expect(identical(provisioner.active, english), isTrue);
+    expect(identical(provisioner.active, english), isFalse);
+    expect(
+      provisioner.active!.files.first.url,
+      contains('parakeet-tdt-0.6b-v3-int8'),
+    );
+    final german = provisioner.active;
+    languageCode = 'fr';
+    expect(identical(provisioner.active, german), isTrue);
     languageCode = 'hi';
     expect(identical(provisioner.active, english), isFalse);
     expect(provisioner.active!.files.map((f) => f.relativePath), [
