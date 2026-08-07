@@ -92,12 +92,15 @@ void main() {
       paintsEdgeToEdge: false,
     );
 
-    final pill = tester.getSize(
-      find.ancestor(
-        of: find.text('Please download the speech model first.'),
-        matching: find.byType(Container),
-      ),
+    final capsule = find.ancestor(
+      of: find.text('Please download the speech model first.'),
+      matching: find.byType(Container),
     );
+    // Asserted before measuring: getSize on a finder matching several
+    // widgets fails with a confusing "matched multiple" error instead of
+    // saying the tree gained a wrapper.
+    expect(capsule, findsOneWidget);
+    final pill = tester.getSize(capsule);
     final text = tester.getSize(
       find.text('Please download the speech model first.'),
     );

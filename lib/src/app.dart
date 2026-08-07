@@ -117,6 +117,13 @@ class _TypeMateAppState extends State<TypeMateApp> {
     // recorded into a CWD-relative build/recordings, so sweep the copy
     // next to the executable too.
     unawaited(purgeStaleRecordings(recordingsDirectory));
+    // Kept failure audio lives one level down and is age-bounded, not
+    // wiped: a recent file is what its history entry retries from.
+    unawaited(
+      purgeExpiredFailedRecordings(
+        Directory('${recordingsDirectory.path}/failed'),
+      ),
+    );
     unawaited(
       purgeStaleRecordings(
         Directory(
@@ -351,6 +358,40 @@ Future<void> purgeStaleRecordings(Directory directory) async {
       } catch (_) {
         // A file still locked by a recorder is picked up next launch.
       }
+    }
+  }
+}
+
+/// Deletes kept failed-dictation audio older than [maxAge].
+///
+/// [purgeStaleRecordings] is deliberately non-recursive and skips this
+/// folder, because a recent WAV here is what its history entry retries
+/// from. But the history controller's own delete can fail (a locked file,
+/// a hand-edited or corrupted history JSON), and nothing swept afterwards
+/// — so audio could outlive its entry forever, against the promise that a
+/// recording dies with it. Anything past the retention window has no live
+/// entry by definition, so it is safe to remove.
+Future<void> purgeExpiredFailedRecordings(
+  Directory directory, {
+  Duration maxAge = const Duration(days: 30),
+  DateTime Function()? clock,
+}) async {
+  // Synchronous IO for the same reason as above: the widget-test fake-async
+  // zone never completes async file IO.
+  if (!directory.existsSync()) {
+    return;
+  }
+  final cutoff = (clock?.call() ?? DateTime.now()).subtract(maxAge);
+  for (final entry in directory.listSync()) {
+    if (entry is! File || !entry.path.toLowerCase().endsWith('.wav')) {
+      continue;
+    }
+    try {
+      if (entry.lastModifiedSync().isBefore(cutoff)) {
+        entry.deleteSync();
+      }
+    } catch (_) {
+      // Locked or already gone; the next launch sweeps again.
     }
   }
 }
