@@ -192,22 +192,24 @@ class _OverlayWindowAppState extends State<OverlayWindowApp> {
               const Expanded(child: _Bars()),
             ],
           );
+          // No Center inside the pill: Center expands to its incoming
+          // constraints, which inflated the capsule to the full overlay
+          // window instead of hugging the message.
           final textPill = Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-            child: Center(
-              child: Text(
-                _message,
-                textAlign: TextAlign.center,
-                style: textStyle,
-              ),
+            child: Text(
+              _message,
+              textAlign: TextAlign.center,
+              style: textStyle,
             ),
           );
           if (Platform.isLinux) {
             // The X11 shape cuts the rounded corners, so the pill paints
-            // edge to edge - a chroma margin would show as a border.
+            // edge to edge - a chroma margin would show as a border. The
+            // window is the capsule here, so the message centres in it.
             return Material(
               color: pillColor,
-              child: isTextPill ? textPill : barsPill,
+              child: isTextPill ? Center(child: textPill) : barsPill,
             );
           }
           // macOS composits true per-pixel alpha (window is non-opaque
