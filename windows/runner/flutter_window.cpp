@@ -48,9 +48,14 @@ bool InsertTextIntoFocusedField(const std::string& utf8_text) {
   std::vector<INPUT> inputs;
   inputs.reserve(wide_text.size() * 2);
   for (wchar_t unit : wide_text) {
-    // Edit controls expect carriage return for line breaks.
-    if (unit == L'\n') {
-      unit = L'\r';
+    // Never synthesize a line break. This used to send carriage return,
+    // which multi-line edit controls treat as a newline but chat boxes,
+    // search fields, and address bars treat as SUBMIT — so a transcript
+    // containing a newline would send a half-finished message. Inserting
+    // text must never perform an action on the user's behalf; a space
+    // keeps the words intact and lets the user press Enter themselves.
+    if (unit == L'\n' || unit == L'\r') {
+      unit = L' ';
     }
     INPUT key_down = {};
     key_down.type = INPUT_KEYBOARD;

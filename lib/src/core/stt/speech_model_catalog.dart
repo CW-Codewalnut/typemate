@@ -13,8 +13,9 @@ import 'stt_model_provisioner.dart';
 /// about one model identity everywhere. English runs its own model:
 /// parakeet-unified-en-0.6b (NVIDIA Open Model License — commercial use
 /// and redistribution permitted) beat every candidate on the real-recording
-/// accent corpus (test_assets/stt_benchmark, 2026-08 sweep: 4.2% vs v3's
-/// 10.3% WER overall; Indian English 8.2% vs 13.3%) and its family has
+/// accent corpus (test_assets/stt_benchmark, both models re-measured on the
+/// same 101 clips: 4.4% vs v3's 9.0% WER overall; Indian English 7.0% vs
+/// 11.7%; US English 4.8% vs 11.6%) and its family has
 /// streaming exports if live dictation preview ever lands — v3 keeps
 /// serving the 24 multilingual languages it was adopted for.
 const parakeetModelDirectoryName = 'parakeet-tdt-0.6b-v3-int8';

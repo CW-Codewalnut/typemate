@@ -34,7 +34,15 @@ class SherpaParakeetSttEngine implements DisposableSttEngine {
     required this.modelDirectoryPath,
     this.numThreads = 2,
     DiagnosticReporter? diagnostics,
-  }) : _diagnostics = diagnostics ?? DiagnosticReporter();
+    void Function(SherpaWorkerInit)? workerEntryPoint,
+  }) : _diagnostics = diagnostics ?? DiagnosticReporter(),
+       _workerEntryPoint = workerEntryPoint ?? _workerMain;
+
+  /// The isolate entrypoint. Tests inject a fake worker so the engine's own
+  /// lifecycle — the shutdown handshake, the death handling — is exercised
+  /// without loading 654 MB of weights over FFI. Must be a top-level or
+  /// static function, as Isolate.spawn requires.
+  final void Function(SherpaWorkerInit) _workerEntryPoint;
 
   final String modelDirectoryPath;
 
@@ -47,6 +55,14 @@ class SherpaParakeetSttEngine implements DisposableSttEngine {
   Isolate? _isolate;
   SendPort? _commands;
   Future<void>? _preparing;
+  ReceivePort? _deathPort;
+
+  /// Completes when the worker isolate dies (onExit/onError), for the whole
+  /// life of the isolate rather than just during startup. Without it a
+  /// worker that dies mid-decode leaves `transcribe()` awaiting a reply
+  /// that can never arrive, and every later dictation hangs the same way
+  /// because the handles still look alive.
+  Future<Object?>? _workerDied;
 
   @override
   Future<bool> isReady() async => _commands != null;
@@ -88,9 +104,17 @@ class SherpaParakeetSttEngine implements DisposableSttEngine {
     // would leave prepare() (and the "Preparing speech engine" UI)
     // waiting forever; with them, whichever signal arrives first wins.
     final deathPort = ReceivePort();
+    // Kept open for the isolate's whole life, not just startup: the same
+    // signal has to unblock a transcribe() whose worker died mid-decode.
+    final died = Completer<Object?>();
+    deathPort.listen((message) {
+      if (!died.isCompleted) {
+        died.complete(message);
+      }
+    });
     final isolate = await Isolate.spawn(
-      _workerMain,
-      _WorkerInit(
+      _workerEntryPoint,
+      SherpaWorkerInit(
         readyPort: readyPort.sendPort,
         modelDirectoryPath: modelDirectoryPath,
         numThreads: numThreads,
@@ -101,7 +125,7 @@ class SherpaParakeetSttEngine implements DisposableSttEngine {
     );
     final ready = await Future.any([
       readyPort.first,
-      deathPort.first.then(
+      died.future.then(
         // onExit sends null; onError sends [error, stackTrace].
         (message) => _WorkerFailure(
           message == null
@@ -112,18 +136,32 @@ class SherpaParakeetSttEngine implements DisposableSttEngine {
       ),
     ]);
     readyPort.close();
-    deathPort.close();
     if (ready is! SendPort) {
+      deathPort.close();
       isolate.kill(priority: Isolate.immediate);
       throw SttRuntimeException('Speech model failed to load: $ready');
     }
     _isolate = isolate;
     _commands = ready;
+    _deathPort = deathPort;
+    _workerDied = died.future;
+    // Drop the handles when the worker dies, so isReady() stops lying and
+    // prepare() spawns a fresh one instead of early-returning into a dead
+    // isolate for the rest of the process.
+    unawaited(died.future.then((_) => _forgetWorker()));
     _diagnostics.info(
       'engine',
       'parakeet on-device model loaded in '
           '${loadStopwatch.elapsedMilliseconds}ms',
     );
+  }
+
+  void _forgetWorker() {
+    _deathPort?.close();
+    _deathPort = null;
+    _workerDied = null;
+    _commands = null;
+    _isolate = null;
   }
 
   @override
@@ -134,8 +172,22 @@ class SherpaParakeetSttEngine implements DisposableSttEngine {
       throw SttRuntimeException('Speech engine is not loaded.');
     }
     final replyPort = ReceivePort();
-    commands.send(_TranscribeRequest(recording.path, replyPort.sendPort));
-    final reply = await replyPort.first;
+    commands.send(SherpaTranscribeRequest(recording.path, replyPort.sendPort));
+    // Race the reply against the worker dying, the same way _start() does:
+    // without this a worker killed mid-decode (native abort, OOM) leaves
+    // this future pending forever.
+    final workerDied = _workerDied;
+    final reply = await Future.any([
+      replyPort.first,
+      if (workerDied != null)
+        workerDied.then(
+          (message) => _WorkerFailure(
+            message == null
+                ? 'the model loader exited during transcription'
+                : (message as List).first.toString(),
+          ),
+        ),
+    ]);
     replyPort.close();
     if (reply is! String) {
       throw SttRuntimeException('On-device transcription failed: $reply');
@@ -143,17 +195,48 @@ class SherpaParakeetSttEngine implements DisposableSttEngine {
     return reply;
   }
 
+  /// How long shutdown waits for the worker to free the native recognizer
+  /// before killing it anyway.
+  static const shutdownAckTimeout = Duration(seconds: 5);
+
   @override
   Future<void> shutdown() async {
-    _commands?.send(const _ShutdownRequest());
-    _isolate?.kill(priority: Isolate.beforeNextEvent);
-    _isolate = null;
+    final commands = _commands;
+    final isolate = _isolate;
     _commands = null;
+    _isolate = null;
+    if (commands != null) {
+      // Wait for the worker to acknowledge, because the acknowledgement is
+      // sent AFTER recognizer.free(). Killing straight after sending the
+      // request usually preempted that call, so the model's native weights
+      // (a C++ allocation the Dart GC never touches) survived a language
+      // switch — exactly what the RAM policy exists to prevent.
+      final freedPort = ReceivePort();
+      try {
+        commands.send(SherpaShutdownRequest(freedPort.sendPort));
+        await freedPort.first.timeout(shutdownAckTimeout);
+      } catch (error) {
+        _diagnostics.info(
+          'engine',
+          'parakeet worker did not confirm shutdown, killing it: $error',
+        );
+      } finally {
+        freedPort.close();
+      }
+    }
+    // Always kill: the backstop for a wedged worker, and a no-op once the
+    // worker has already exited on its own.
+    isolate?.kill(priority: Isolate.beforeNextEvent);
+    _forgetWorker();
   }
 }
 
-class _WorkerInit {
-  const _WorkerInit({
+/// The worker protocol is public so tests can inject a fake worker
+/// entrypoint: the real one loads a 654 MB model over FFI, so the engine's
+/// own lifecycle (shutdown handshake, death handling) is otherwise
+/// unreachable from a unit test.
+class SherpaWorkerInit {
+  const SherpaWorkerInit({
     required this.readyPort,
     required this.modelDirectoryPath,
     required this.numThreads,
@@ -164,15 +247,19 @@ class _WorkerInit {
   final int numThreads;
 }
 
-class _TranscribeRequest {
-  const _TranscribeRequest(this.wavPath, this.replyPort);
+class SherpaTranscribeRequest {
+  const SherpaTranscribeRequest(this.wavPath, this.replyPort);
 
   final String wavPath;
   final SendPort replyPort;
 }
 
-class _ShutdownRequest {
-  const _ShutdownRequest();
+class SherpaShutdownRequest {
+  const SherpaShutdownRequest(this.freedPort);
+
+  /// Signalled once the worker has released the native recognizer, so the
+  /// caller can wait for the model's C++ memory to actually go.
+  final SendPort freedPort;
 }
 
 /// Transcription failures cross the isolate boundary as this type so the
@@ -186,7 +273,7 @@ class _WorkerFailure {
   String toString() => message;
 }
 
-Future<void> _workerMain(_WorkerInit init) async {
+Future<void> _workerMain(SherpaWorkerInit init) async {
   final sherpa_onnx.OfflineRecognizer recognizer;
   try {
     sherpa_onnx.initBindings();
@@ -212,11 +299,13 @@ Future<void> _workerMain(_WorkerInit init) async {
 
   final commands = ReceivePort();
   init.readyPort.send(commands.sendPort);
+  SherpaShutdownRequest? shutdown;
   await for (final message in commands) {
-    if (message is _ShutdownRequest) {
+    if (message is SherpaShutdownRequest) {
+      shutdown = message;
       break;
     }
-    if (message is! _TranscribeRequest) {
+    if (message is! SherpaTranscribeRequest) {
       continue;
     }
     try {
@@ -231,6 +320,10 @@ Future<void> _workerMain(_WorkerInit init) async {
       message.replyPort.send(_WorkerFailure('$error'));
     }
   }
+  // Free BEFORE acknowledging: the whole point of the handshake is that the
+  // caller learns the native recognizer is gone, not merely that the
+  // request was received.
   recognizer.free();
   commands.close();
+  shutdown?.freedPort.send(null);
 }

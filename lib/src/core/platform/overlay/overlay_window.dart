@@ -8,6 +8,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -26,14 +27,23 @@ typedef OverlayWindowCreator =
 /// The slice of [WindowController] the overlay needs; tests fake it.
 abstract interface class OverlayWindowHandle {
   Future<void> invokeMethod(String method, [dynamic arguments]);
+
+  /// Whether the native window this handle describes still exists.
+  ///
+  /// Needed because a failed [invokeMethod] does not say WHY: the overlay
+  /// engine may simply not have registered its handler yet (a show racing
+  /// bring-up), or the window may be gone for good. desktop_multi_window
+  /// offers no way to close a window, so rebuilding on a transient error
+  /// would strand the old window and its engine with no way to reclaim
+  /// them — worse than the missing-overlay bug this recovery exists for.
+  Future<bool> isAlive();
 }
 
 class _ChannelHandle implements OverlayWindowHandle {
   _ChannelHandle(this._controller);
 
-  // Held so the window's lifetime is tied to this handle even though
-  // calls flow over the fixed-name channel.
-  // ignore: unused_field
+  // Held both to tie the window's lifetime to this handle (calls flow
+  // over the fixed-name channel) and to identify it in getAll().
   final WindowController _controller;
 
   static const _channel = WindowMethodChannel(
@@ -44,6 +54,19 @@ class _ChannelHandle implements OverlayWindowHandle {
   @override
   Future<void> invokeMethod(String method, [dynamic arguments]) =>
       _channel.invokeMethod(method, arguments);
+
+  @override
+  Future<bool> isAlive() async {
+    try {
+      final windows = await WindowController.getAll();
+      return windows.any((window) => window.windowId == _controller.windowId);
+    } catch (_) {
+      // If we cannot tell, assume it is alive: keeping a possibly-dead
+      // window costs one missing overlay, recreating a live one leaks a
+      // window forever.
+      return true;
+    }
+  }
 }
 
 Future<OverlayWindowHandle> _createRealWindow({
@@ -167,9 +190,23 @@ class OverlayWindow {
       // its creation-time content; dictation itself must never be
       // affected.
       debugPrint('TypeMate: overlay state update failed: $error');
+      // A successful creation was memoized forever, so a window that died
+      // (crashed engine, closed by the OS) left every later show sending
+      // into nothing — no overlay for the rest of the process. Rebuild,
+      // but only once the window is confirmed gone: this same catch also
+      // covers the overlay engine merely not listening yet, and there is
+      // no API to close a window, so rebuilding on a transient error
+      // would orphan one permanently.
+      final handle = _handle;
+      if (handle != null && !await handle.isAlive()) {
+        _forgetWindow();
+      }
     }
     final isTextPill = variant != OverlayVariant.working;
-    driver.show(width: isTextPill ? 360 : 210, height: isTextPill ? 92 : 58);
+    driver.show(
+      width: isTextPill ? textPillWidth : 210,
+      height: isTextPill ? textPillHeightFor(message) : 58,
+    );
     if (isTextPill) {
       // Info/error are transient toasts: without this they would sit
       // topmost on screen forever (the native overlays auto-hid too).
@@ -178,6 +215,49 @@ class OverlayWindow {
         unawaited(hide());
       });
     }
+  }
+
+  /// The info/error pill's window width. The capsule inside is capped at
+  /// 340 and padded 18 each side, so text wraps at 304.
+  static const int textPillWidth = 360;
+  static const double _textPillTextWidth = 304;
+
+  /// 10px top and bottom, matching the capsule's padding.
+  static const double _textPillVerticalPadding = 20;
+
+  /// The pill renders in a second Flutter engine, so its font metrics can
+  /// differ slightly from what we measure here; a line of slack keeps a
+  /// rounding difference from clipping the last line.
+  static const double _textPillSlack = 8;
+
+  /// Height the window needs for [message].
+  ///
+  /// It used to be a fixed 92, which the two longest real failure messages
+  /// filled exactly — four lines of text plus the padding, with nothing to
+  /// spare. One more line of copy, a longer translation, or a larger text
+  /// scale would have overflowed and rendered as a pill filling the whole
+  /// window, which is precisely the bug the capsule fix removed. Measuring
+  /// also keeps Linux honest, where the window IS the capsule (the X11
+  /// shape supplies the corners), so a fixed height would show as a slab
+  /// of empty colour around a short message.
+  static int textPillHeightFor(String message) {
+    final painter = TextPainter(
+      text: TextSpan(text: message, style: const TextStyle(fontSize: 12.5)),
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: _textPillTextWidth);
+    final needed = painter.height + _textPillVerticalPadding + _textPillSlack;
+    painter.dispose();
+    // Never smaller than the single-line capsule.
+    return needed.ceil() < 44 ? 44 : needed.ceil();
+  }
+
+  /// Drops the memoized window so the next show rebuilds it. Creation is
+  /// memoized to keep one overlay per app; that memo must not outlive the
+  /// window it describes.
+  void _forgetWindow() {
+    _creating = null;
+    _handle = null;
   }
 
   Future<void> _ensureWindow(

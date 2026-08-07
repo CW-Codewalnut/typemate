@@ -65,13 +65,32 @@ class SherpaGtcrnAudioDenoiser implements AudioDenoiser {
       orElse: () => modelPathCandidates.first,
     );
     final wavPath = recording.path;
+    // Run the isolate by hand rather than Isolate.run, so a timeout can
+    // actually kill it. Isolate.run's timeout only stops waiting: the
+    // isolate keeps going and can renameSync its output over the recording
+    // after transcription has already started reading it.
+    final done = ReceivePort();
+    Isolate? worker;
     try {
-      await Isolate.run(() => _denoiseInPlace(model, wavPath)).timeout(timeout);
+      worker = await Isolate.spawn(
+        _denoiseEntryPoint,
+        _DenoiseRequest(model, wavPath, done.sendPort),
+        onError: done.sendPort,
+        onExit: done.sendPort,
+        debugName: 'typemate-denoise',
+      );
+      final result = await done.first.timeout(timeout);
+      if (result is List) {
+        throw StateError('${result.first}');
+      }
     } catch (error) {
       debugPrint(
         'TypeMate: noise suppression failed, using the raw recording: $error',
       );
       _deleteQuietly(File(_denoisedPathFor(wavPath)));
+    } finally {
+      worker?.kill(priority: Isolate.immediate);
+      done.close();
     }
     return recording;
   }
@@ -92,6 +111,22 @@ String _denoisedPathFor(String wavPath) => '$wavPath.denoised.wav';
 /// Isolate entry: loads GTCRN, denoises the WAV, and atomically replaces
 /// the original. Any throw is reported back to [SherpaGtcrnAudioDenoiser]
 /// as the isolate error and handled there.
+/// What the denoise isolate needs, plus where to report completion.
+class _DenoiseRequest {
+  const _DenoiseRequest(this.modelPath, this.wavPath, this.donePort);
+
+  final String modelPath;
+  final String wavPath;
+  final SendPort donePort;
+}
+
+/// Isolate entry: denoise, then report. A throw here arrives on the same
+/// port through onError, so the caller sees every outcome.
+void _denoiseEntryPoint(_DenoiseRequest request) {
+  _denoiseInPlace(request.modelPath, request.wavPath);
+  request.donePort.send(null);
+}
+
 void _denoiseInPlace(String modelPath, String wavPath) {
   sherpa_onnx.initBindings();
   final denoiser = sherpa_onnx.OfflineSpeechDenoiser(

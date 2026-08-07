@@ -290,6 +290,15 @@ jobs:
         shell: bash
         run: |
           set -e
-          for test_file in integration_test/*_test.dart; do
+          # Recursive on purpose: the e2e tests live in flows/ and
+          # platform/ subfolders, and a top-level-only glob would run
+          # app_smoke alone while reporting the job green.
+          test_files=$(find integration_test -name '*_test.dart' | sort)
+          if [ -z "$test_files" ]; then
+            echo "No e2e tests found under integration_test/" >&2
+            exit 1
+          fi
+          echo "$test_files"
+          for test_file in $test_files; do
             ${{ matrix.launcher }} flutter test "$test_file" ${{ matrix.device-flags }}
           done

@@ -48,7 +48,10 @@ class WhisperGgmlSttEngine implements DisposableSttEngine {
 
   final String vadModelPath;
 
-  /// Optional initial prompt (e.g. Hindi's Devanagari script prompt).
+  /// Optional initial prompt. Every shipped language passes null: the
+  /// fine-tunes carry their own script, and a prompt bleeds its own
+  /// characters into the transcript and slows decoding (corpus-verified).
+  /// Kept as a seam for evaluating a future model that needs one.
   final String? prompt;
 
   final int numThreads;
@@ -222,10 +225,20 @@ Future<String> _isolateRequest(String payload) {
 
 /// Whether to leak native responses instead of freeing them. The native
 /// side mallocs the response specifically so the caller can free it with
-/// the C allocator. In-app both modules share the release CRT; standalone
-/// harnesses against a debug-built DLL have mismatched CRT heaps and must
-/// leak the few bytes instead (benchmark tools set this). Read once per
-/// isolate, not per request.
+/// the C allocator. In-app both modules share the release CRT, so the app
+/// never needs this.
+///
+/// It exists for one case: a standalone harness loading a DEBUG-built
+/// plugin DLL, whose CRT heap differs from the release Dart VM's, where
+/// freeing aborts the process with 0xC0000374 (STATUS_HEAP_CORRUPTION)
+/// and leaking a few bytes per request is the lesser evil. Nothing in the
+/// repo can set it for itself — Dart cannot mutate its own environment —
+/// so it has to come from the shell:
+///
+///   TYPEMATE_GGML_NO_FREE=1 dart run tool/transcribe_directory.dart ...
+///
+/// Prefer pointing the tool at the Release build instead, which needs no
+/// flag. Read once per isolate, not per request.
 final bool _leakResponses =
     Platform.environment['TYPEMATE_GGML_NO_FREE'] == '1';
 

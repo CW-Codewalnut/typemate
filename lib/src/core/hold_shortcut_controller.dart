@@ -47,6 +47,11 @@ const holdShortcutOptions = [
   ),
 ];
 
+/// Shortcut ids that were offered by older builds and are migrated to the
+/// default on load. Every id here MUST be absent from [holdShortcutOptions]:
+/// listing a live option makes it unsavable, because the load path rewrites
+/// it to the default on the next launch. ('alt-shift-f9' was in both, so
+/// picking it silently reset on every restart.)
 const legacyShortcutIds = {
   'ctrl-double-tap-hold',
   'ctrl-shift',
@@ -54,7 +59,6 @@ const legacyShortcutIds = {
   'ctrl-alt-space',
   'ctrl-shift-space',
   'alt-shift-space',
-  'alt-shift-f9',
 };
 
 const customShortcutIdPrefix = 'custom:';
@@ -94,15 +98,60 @@ HoldShortcutOption _customShortcutFromId(String id) {
       .map(int.tryParse)
       .whereType<int>()
       .toList();
-  if (keyCodes.isEmpty) {
+  // Anything unusable falls back to the default, including a custom
+  // shortcut written by a build that predates the recorder's validation
+  // (or a hand-edited settings file). Validating only where shortcuts are
+  // recorded would leave `custom:65` on disk binding dictation to the A
+  // key on every launch, with no way to type out of it.
+  if (keyCodes.isEmpty || holdShortcutRejectionReason(keyCodes) != null) {
     return holdShortcutOptionById(defaultHoldShortcutId);
   }
   return customHoldShortcutOption(keyCodes);
 }
 
+/// Ctrl, Shift, Alt, and the two Windows keys.
+const holdShortcutModifierKeyCodes = [0x11, 0x10, 0x12, 0x5B, 0x5C];
+
+/// Combinations the OS (or every app) needs for itself. Binding hold-to-talk
+/// to one of these takes the behaviour away system-wide.
+const _reservedShortcuts = {
+  [0x11, 0x43], // Ctrl+C
+  [0x11, 0x56], // Ctrl+V
+  [0x11, 0x58], // Ctrl+X
+  [0x11, 0x5A], // Ctrl+Z
+  [0x11, 0x41], // Ctrl+A
+  [0x12, 0x09], // Alt+Tab
+  [0x12, 0x73], // Alt+F4
+  [0x11, 0x1B], // Ctrl+Esc
+};
+
+/// Why [virtualKeyCodes] cannot be a hold shortcut, or null if it can.
+///
+/// The hold shortcut is polled globally, so a single unmodified key turns
+/// every press of that key anywhere on the system into a dictation — and
+/// the user cannot type their way to Settings to undo it, because typing
+/// is what triggers it. A modifier plus at least one more key is the
+/// minimum that leaves the keyboard usable.
+String? holdShortcutRejectionReason(List<int> virtualKeyCodes) {
+  final keyCodes = _normalizedVirtualKeyCodes(virtualKeyCodes);
+  if (keyCodes.length < 2) {
+    return 'Use at least two keys, including a modifier like Ctrl or Alt.';
+  }
+  if (!keyCodes.any(holdShortcutModifierKeyCodes.contains)) {
+    return 'Include a modifier key like Ctrl, Shift, Alt, or Windows.';
+  }
+  for (final reserved in _reservedShortcuts) {
+    if (keyCodes.length == reserved.length &&
+        _normalizedVirtualKeyCodes(reserved).join('-') == keyCodes.join('-')) {
+      return '${labelForVirtualKeyCodes(keyCodes)} is reserved by the system.';
+    }
+  }
+  return null;
+}
+
 List<int> _normalizedVirtualKeyCodes(List<int> virtualKeyCodes) {
   final deduped = virtualKeyCodes.toSet().toList();
-  const modifierOrder = [0x11, 0x10, 0x12, 0x5B, 0x5C];
+  const modifierOrder = holdShortcutModifierKeyCodes;
   deduped.sort((left, right) {
     final leftModifierIndex = modifierOrder.indexOf(left);
     final rightModifierIndex = modifierOrder.indexOf(right);
@@ -260,21 +309,65 @@ class HoldShortcutController extends ChangeNotifier {
     await selectShortcutOption(holdShortcutOptionById(shortcutId));
   }
 
+  /// Applies [selected], or leaves the current shortcut untouched and
+  /// reports why in [statusMessage]. Callers can tell the two apart by
+  /// comparing [shortcut] afterwards; this never throws.
   Future<void> selectShortcutOption(HoldShortcutOption selected) async {
     if (selected.id == _shortcut.id) {
       return;
     }
 
-    _shortcut = selected;
-    await store.saveShortcutId(selected.id);
-    if (_isRegistered) {
-      await registrar.unregisterHoldShortcut();
-      await registrar.registerHoldShortcut(
-        shortcut: _shortcut,
-        onPressed: _handlePressed,
-        onReleased: _handleReleased,
-      );
-      _statusMessage = _readyMessageFor(_shortcut);
+    // The last gate before a shortcut goes live. The recorder UI checks
+    // too, but every other caller (a settings id, a restored value) would
+    // otherwise reach the registrar unvalidated.
+    final rejection = holdShortcutRejectionReason(selected.virtualKeyCodes);
+    if (rejection != null) {
+      _statusMessage = rejection;
+      notifyListeners();
+      return;
+    }
+
+    final previous = _shortcut;
+    try {
+      await store.saveShortcutId(selected.id);
+      if (_isRegistered) {
+        await registrar.unregisterHoldShortcut();
+        await registrar.registerHoldShortcut(
+          shortcut: selected,
+          onPressed: _handlePressed,
+          onReleased: _handleReleased,
+        );
+      }
+      // Only after the new shortcut is actually live: assigning first made
+      // a failed re-register look like a success to anyone reading
+      // `shortcut`, and the throw escaped into an unhandled Future error.
+      _shortcut = selected;
+      if (_isRegistered) {
+        _statusMessage = _readyMessageFor(_shortcut);
+      }
+    } catch (error) {
+      debugPrint('TypeMate: unable to apply shortcut ${selected.id}: $error');
+      // Put the previous shortcut back so the user is not left with no
+      // working hold key at all.
+      _shortcut = previous;
+      try {
+        await store.saveShortcutId(previous.id);
+        if (_isRegistered) {
+          await registrar.registerHoldShortcut(
+            shortcut: previous,
+            onPressed: _handlePressed,
+            onReleased: _handleReleased,
+          );
+        }
+        _statusMessage =
+            'Could not apply ${selected.label}. Still using '
+            '${previous.label}.';
+      } catch (_) {
+        _isRegistered = false;
+        _statusMessage =
+            'Could not apply ${selected.label}, and the previous shortcut '
+            'could not be restored. Try again from shortcut settings.';
+      }
     }
     notifyListeners();
   }

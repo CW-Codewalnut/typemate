@@ -6,7 +6,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:typemate/src/app.dart';
 import 'package:typemate/src/core/platform/mock_platform_bridge.dart';
 
-import 'support/fakes.dart';
+import '../support/fakes.dart';
 
 /// Settings, end to end: navigate there, see the discovered microphone
 /// selected, switch the speech language, and verify the choice is written

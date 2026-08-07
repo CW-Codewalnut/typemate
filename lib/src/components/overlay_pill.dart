@@ -178,6 +178,17 @@ class _OverlayWindowAppState extends State<OverlayWindowApp> {
           bodyMedium: TextStyle(fontSize: 12.5, color: Colors.white),
         ),
       ),
+      // Text scale pinned on purpose. The overlay's window is sized in
+      // the MAIN engine (OverlayWindow.textPillHeightFor), which cannot
+      // see this engine's scaler, so honouring the OS setting here would
+      // render text the window was never measured for: at 1.3x the same
+      // four lines overflow a window sized for 1.0 and the pill fills it,
+      // which is exactly the look the capsule fix removed. This is a
+      // transient HUD, not body content — the app's own UI still scales.
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
+        child: child!,
+      ),
       // Material ancestor: without it Text falls back to the yellow
       // double-underline error style.
       home: Builder(

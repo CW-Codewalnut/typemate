@@ -110,6 +110,31 @@ void main() {
     expect(wav.existsSync(), isFalse);
   });
 
+  test('an entry held from before a reload still deletes', () async {
+    // A widget can hold an entry captured before load() rebuilt the list.
+    // It is the same dictation but a different object, and matching on
+    // object identity made the delete silently do nothing.
+    final store = _MemoryStore();
+    final controller = DictationHistoryController(store: store);
+    await controller.addTranscript('keep me');
+    await controller.addTranscript('delete me');
+    final stale = controller.entries.firstWhere(
+      (entry) => entry.text == 'delete me',
+    );
+
+    // Reload: same values, fresh objects.
+    await controller.load();
+    expect(
+      controller.entries.any((entry) => identical(entry, stale)),
+      isFalse,
+      reason: 'the reload must produce new objects for this to be a test',
+    );
+
+    await controller.removeEntry(stale);
+
+    expect(controller.entries.map((entry) => entry.text), ['keep me']);
+  });
+
   test('failedEntryExpiry is the entry age limit from creation', () async {
     final controller = DictationHistoryController(
       store: _MemoryStore(),
