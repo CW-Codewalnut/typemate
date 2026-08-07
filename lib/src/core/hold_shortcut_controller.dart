@@ -98,7 +98,12 @@ HoldShortcutOption _customShortcutFromId(String id) {
       .map(int.tryParse)
       .whereType<int>()
       .toList();
-  if (keyCodes.isEmpty) {
+  // Anything unusable falls back to the default, including a custom
+  // shortcut written by a build that predates the recorder's validation
+  // (or a hand-edited settings file). Validating only where shortcuts are
+  // recorded would leave `custom:65` on disk binding dictation to the A
+  // key on every launch, with no way to type out of it.
+  if (keyCodes.isEmpty || holdShortcutRejectionReason(keyCodes) != null) {
     return holdShortcutOptionById(defaultHoldShortcutId);
   }
   return customHoldShortcutOption(keyCodes);
@@ -304,21 +309,65 @@ class HoldShortcutController extends ChangeNotifier {
     await selectShortcutOption(holdShortcutOptionById(shortcutId));
   }
 
+  /// Applies [selected], or leaves the current shortcut untouched and
+  /// reports why in [statusMessage]. Callers can tell the two apart by
+  /// comparing [shortcut] afterwards; this never throws.
   Future<void> selectShortcutOption(HoldShortcutOption selected) async {
     if (selected.id == _shortcut.id) {
       return;
     }
 
-    _shortcut = selected;
-    await store.saveShortcutId(selected.id);
-    if (_isRegistered) {
-      await registrar.unregisterHoldShortcut();
-      await registrar.registerHoldShortcut(
-        shortcut: _shortcut,
-        onPressed: _handlePressed,
-        onReleased: _handleReleased,
-      );
-      _statusMessage = _readyMessageFor(_shortcut);
+    // The last gate before a shortcut goes live. The recorder UI checks
+    // too, but every other caller (a settings id, a restored value) would
+    // otherwise reach the registrar unvalidated.
+    final rejection = holdShortcutRejectionReason(selected.virtualKeyCodes);
+    if (rejection != null) {
+      _statusMessage = rejection;
+      notifyListeners();
+      return;
+    }
+
+    final previous = _shortcut;
+    try {
+      await store.saveShortcutId(selected.id);
+      if (_isRegistered) {
+        await registrar.unregisterHoldShortcut();
+        await registrar.registerHoldShortcut(
+          shortcut: selected,
+          onPressed: _handlePressed,
+          onReleased: _handleReleased,
+        );
+      }
+      // Only after the new shortcut is actually live: assigning first made
+      // a failed re-register look like a success to anyone reading
+      // `shortcut`, and the throw escaped into an unhandled Future error.
+      _shortcut = selected;
+      if (_isRegistered) {
+        _statusMessage = _readyMessageFor(_shortcut);
+      }
+    } catch (error) {
+      debugPrint('TypeMate: unable to apply shortcut ${selected.id}: $error');
+      // Put the previous shortcut back so the user is not left with no
+      // working hold key at all.
+      _shortcut = previous;
+      try {
+        await store.saveShortcutId(previous.id);
+        if (_isRegistered) {
+          await registrar.registerHoldShortcut(
+            shortcut: previous,
+            onPressed: _handlePressed,
+            onReleased: _handleReleased,
+          );
+        }
+        _statusMessage =
+            'Could not apply ${selected.label}. Still using '
+            '${previous.label}.';
+      } catch (_) {
+        _isRegistered = false;
+        _statusMessage =
+            'Could not apply ${selected.label}, and the previous shortcut '
+            'could not be restored. Try again from shortcut settings.';
+      }
     }
     notifyListeners();
   }

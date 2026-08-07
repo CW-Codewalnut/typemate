@@ -150,10 +150,12 @@ class _ShortcutSettingsPanelState extends State<ShortcutSettingsPanel> {
       return;
     }
     setState(() {
+      // selectShortcutOption reports failure by leaving `shortcut` alone
+      // and explaining itself in statusMessage, so surface that rather
+      // than a guess.
       _recordingLabel = widget.controller.shortcut.id == shortcut.id
           ? 'Recorded ${shortcut.label}.'
-          : 'Could not apply ${shortcut.label}. The previous shortcut is '
-                'still active.';
+          : widget.controller.statusMessage;
     });
   }
 }

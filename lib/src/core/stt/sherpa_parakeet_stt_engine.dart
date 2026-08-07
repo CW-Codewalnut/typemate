@@ -34,7 +34,15 @@ class SherpaParakeetSttEngine implements DisposableSttEngine {
     required this.modelDirectoryPath,
     this.numThreads = 2,
     DiagnosticReporter? diagnostics,
-  }) : _diagnostics = diagnostics ?? DiagnosticReporter();
+    void Function(SherpaWorkerInit)? workerEntryPoint,
+  }) : _diagnostics = diagnostics ?? DiagnosticReporter(),
+       _workerEntryPoint = workerEntryPoint ?? _workerMain;
+
+  /// The isolate entrypoint. Tests inject a fake worker so the engine's own
+  /// lifecycle — the shutdown handshake, the death handling — is exercised
+  /// without loading 654 MB of weights over FFI. Must be a top-level or
+  /// static function, as Isolate.spawn requires.
+  final void Function(SherpaWorkerInit) _workerEntryPoint;
 
   final String modelDirectoryPath;
 
@@ -105,8 +113,8 @@ class SherpaParakeetSttEngine implements DisposableSttEngine {
       }
     });
     final isolate = await Isolate.spawn(
-      _workerMain,
-      _WorkerInit(
+      _workerEntryPoint,
+      SherpaWorkerInit(
         readyPort: readyPort.sendPort,
         modelDirectoryPath: modelDirectoryPath,
         numThreads: numThreads,
@@ -164,7 +172,7 @@ class SherpaParakeetSttEngine implements DisposableSttEngine {
       throw SttRuntimeException('Speech engine is not loaded.');
     }
     final replyPort = ReceivePort();
-    commands.send(_TranscribeRequest(recording.path, replyPort.sendPort));
+    commands.send(SherpaTranscribeRequest(recording.path, replyPort.sendPort));
     // Race the reply against the worker dying, the same way _start() does:
     // without this a worker killed mid-decode (native abort, OOM) leaves
     // this future pending forever.
@@ -205,7 +213,7 @@ class SherpaParakeetSttEngine implements DisposableSttEngine {
       // switch — exactly what the RAM policy exists to prevent.
       final freedPort = ReceivePort();
       try {
-        commands.send(_ShutdownRequest(freedPort.sendPort));
+        commands.send(SherpaShutdownRequest(freedPort.sendPort));
         await freedPort.first.timeout(shutdownAckTimeout);
       } catch (error) {
         _diagnostics.info(
@@ -223,8 +231,12 @@ class SherpaParakeetSttEngine implements DisposableSttEngine {
   }
 }
 
-class _WorkerInit {
-  const _WorkerInit({
+/// The worker protocol is public so tests can inject a fake worker
+/// entrypoint: the real one loads a 654 MB model over FFI, so the engine's
+/// own lifecycle (shutdown handshake, death handling) is otherwise
+/// unreachable from a unit test.
+class SherpaWorkerInit {
+  const SherpaWorkerInit({
     required this.readyPort,
     required this.modelDirectoryPath,
     required this.numThreads,
@@ -235,15 +247,15 @@ class _WorkerInit {
   final int numThreads;
 }
 
-class _TranscribeRequest {
-  const _TranscribeRequest(this.wavPath, this.replyPort);
+class SherpaTranscribeRequest {
+  const SherpaTranscribeRequest(this.wavPath, this.replyPort);
 
   final String wavPath;
   final SendPort replyPort;
 }
 
-class _ShutdownRequest {
-  const _ShutdownRequest(this.freedPort);
+class SherpaShutdownRequest {
+  const SherpaShutdownRequest(this.freedPort);
 
   /// Signalled once the worker has released the native recognizer, so the
   /// caller can wait for the model's C++ memory to actually go.
@@ -261,7 +273,7 @@ class _WorkerFailure {
   String toString() => message;
 }
 
-Future<void> _workerMain(_WorkerInit init) async {
+Future<void> _workerMain(SherpaWorkerInit init) async {
   final sherpa_onnx.OfflineRecognizer recognizer;
   try {
     sherpa_onnx.initBindings();
@@ -287,13 +299,13 @@ Future<void> _workerMain(_WorkerInit init) async {
 
   final commands = ReceivePort();
   init.readyPort.send(commands.sendPort);
-  _ShutdownRequest? shutdown;
+  SherpaShutdownRequest? shutdown;
   await for (final message in commands) {
-    if (message is _ShutdownRequest) {
+    if (message is SherpaShutdownRequest) {
       shutdown = message;
       break;
     }
-    if (message is! _TranscribeRequest) {
+    if (message is! SherpaTranscribeRequest) {
       continue;
     }
     try {
