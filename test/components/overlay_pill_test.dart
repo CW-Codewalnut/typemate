@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:typemate/src/core/dictation_controller.dart';
+import 'package:typemate/src/core/platform/overlay/overlay_window.dart';
 import 'package:typemate/src/components/overlay_pill.dart';
 import 'package:typemate/src/core/platform/overlay/overlay_variant.dart';
 
@@ -152,5 +154,52 @@ void main() {
 
     expect(find.text("Couldn't capture your voice."), findsOneWidget);
     expect(pillColor(tester), const OverlayTheme.native().errorBackground);
+  });
+
+  testWidgets('a large system text scale cannot overflow the window', (
+    tester,
+  ) async {
+    // The window is measured in the MAIN engine at scale 1.0 and cannot
+    // see this engine's scaler, so an OS setting of 1.3x would render four
+    // lines into a window sized for four smaller ones — the pill fills it
+    // and we are back to the bug the capsule fix removed. The pill pins
+    // its own scale so measurement and render agree by construction.
+    const message = DictationController.insertionFailedMessage;
+    final windowHeight = OverlayWindow.textPillHeightFor(message);
+    tester.view.physicalSize = Size(
+      OverlayWindow.textPillWidth.toDouble(),
+      windowHeight.toDouble(),
+    );
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    // Set on the dispatcher, not via a wrapping MediaQuery: MaterialApp
+    // builds its own MediaQuery from the view, so a wrapper is ignored and
+    // the test would pass with or without the fix.
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await tester.pumpWidget(
+      const OverlayWindowApp(
+        initialVariant: OverlayVariant.error,
+        initialMessage: message,
+        connectChannel: false,
+        paintsEdgeToEdge: false,
+      ),
+    );
+
+    // Assert the rendered scaler, not the laid-out size: layout clamps the
+    // capsule to the window, so a size check can never fail even when the
+    // text overflows it. The scaler is what actually decides whether the
+    // render matches what the main engine measured.
+    final rendered = tester.widget<RichText>(
+      find.descendant(of: find.text(message), matching: find.byType(RichText)),
+    );
+    expect(
+      rendered.textScaler,
+      TextScaler.noScaling,
+      reason: 'the pill must render at the scale the window was sized for',
+    );
+    expect(windowHeight, greaterThan(0));
   });
 }

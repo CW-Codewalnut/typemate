@@ -27,14 +27,23 @@ typedef OverlayWindowCreator =
 /// The slice of [WindowController] the overlay needs; tests fake it.
 abstract interface class OverlayWindowHandle {
   Future<void> invokeMethod(String method, [dynamic arguments]);
+
+  /// Whether the native window this handle describes still exists.
+  ///
+  /// Needed because a failed [invokeMethod] does not say WHY: the overlay
+  /// engine may simply not have registered its handler yet (a show racing
+  /// bring-up), or the window may be gone for good. desktop_multi_window
+  /// offers no way to close a window, so rebuilding on a transient error
+  /// would strand the old window and its engine with no way to reclaim
+  /// them — worse than the missing-overlay bug this recovery exists for.
+  Future<bool> isAlive();
 }
 
 class _ChannelHandle implements OverlayWindowHandle {
   _ChannelHandle(this._controller);
 
-  // Held so the window's lifetime is tied to this handle even though
-  // calls flow over the fixed-name channel.
-  // ignore: unused_field
+  // Held both to tie the window's lifetime to this handle (calls flow
+  // over the fixed-name channel) and to identify it in getAll().
   final WindowController _controller;
 
   static const _channel = WindowMethodChannel(
@@ -45,6 +54,19 @@ class _ChannelHandle implements OverlayWindowHandle {
   @override
   Future<void> invokeMethod(String method, [dynamic arguments]) =>
       _channel.invokeMethod(method, arguments);
+
+  @override
+  Future<bool> isAlive() async {
+    try {
+      final windows = await WindowController.getAll();
+      return windows.any((window) => window.windowId == _controller.windowId);
+    } catch (_) {
+      // If we cannot tell, assume it is alive: keeping a possibly-dead
+      // window costs one missing overlay, recreating a live one leaks a
+      // window forever.
+      return true;
+    }
+  }
 }
 
 Future<OverlayWindowHandle> _createRealWindow({
@@ -168,12 +190,17 @@ class OverlayWindow {
       // its creation-time content; dictation itself must never be
       // affected.
       debugPrint('TypeMate: overlay state update failed: $error');
-      // The handle is the only evidence the window still exists, and a
-      // successful creation was memoized forever — so a window that died
+      // A successful creation was memoized forever, so a window that died
       // (crashed engine, closed by the OS) left every later show sending
-      // into nothing and showing an empty overlay for the rest of the
-      // process. Forgetting it lets the next show rebuild the window.
-      _forgetWindow();
+      // into nothing — no overlay for the rest of the process. Rebuild,
+      // but only once the window is confirmed gone: this same catch also
+      // covers the overlay engine merely not listening yet, and there is
+      // no API to close a window, so rebuilding on a transient error
+      // would orphan one permanently.
+      final handle = _handle;
+      if (handle != null && !await handle.isAlive()) {
+        _forgetWindow();
+      }
     }
     final isTextPill = variant != OverlayVariant.working;
     driver.show(

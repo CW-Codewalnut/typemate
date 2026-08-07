@@ -49,11 +49,28 @@ class _FakeDriver extends OverlayWindowDriver {
 }
 
 class _FakeHandle implements OverlayWindowHandle {
+  _FakeHandle({this.failInvocations = false, this.alive = true});
+
   final List<(String, Object?)> invocations = [];
+
+  /// Simulates the overlay engine not answering: either it has not
+  /// registered its handler yet (transient) or the window is gone (fatal).
+  final bool failInvocations;
+  bool alive;
+  int aliveChecks = 0;
 
   @override
   Future<void> invokeMethod(String method, [dynamic arguments]) async {
     invocations.add((method, arguments));
+    if (failInvocations) {
+      throw StateError('overlay engine not listening');
+    }
+  }
+
+  @override
+  Future<bool> isAlive() async {
+    aliveChecks += 1;
+    return alive;
   }
 }
 
@@ -319,5 +336,45 @@ void main() {
     // A one-liner must not render as a slab, which is what a fixed height
     // would do on Linux where the window itself is the capsule.
     expect(short, lessThan(60));
+  });
+
+  test('a not-listening engine does not orphan a live window', () async {
+    // desktop_multi_window cannot close a window, so rebuilding on a
+    // transient channel error would strand the old window and its engine
+    // forever. The rebuild is gated on the window actually being gone.
+    final driver = _FakeDriver();
+    final handle = _FakeHandle(failInvocations: true, alive: true);
+    var creations = 0;
+    final overlay = OverlayWindow(
+      driver: driver,
+      createWindow: ({required hiddenAtLaunch, required arguments}) async {
+        creations += 1;
+        return handle;
+      },
+    );
+
+    await overlay.showInfo('first');
+    await overlay.showInfo('second');
+
+    expect(handle.aliveChecks, 2, reason: 'each failure must be classified');
+    expect(creations, 1, reason: 'a live window must be reused, not orphaned');
+  });
+
+  test('a dead window is rebuilt on the next show', () async {
+    final driver = _FakeDriver();
+    final handle = _FakeHandle(failInvocations: true, alive: false);
+    var creations = 0;
+    final overlay = OverlayWindow(
+      driver: driver,
+      createWindow: ({required hiddenAtLaunch, required arguments}) async {
+        creations += 1;
+        return handle;
+      },
+    );
+
+    await overlay.showInfo('first');
+    await overlay.showInfo('second');
+
+    expect(creations, 2, reason: 'a window confirmed gone must be rebuilt');
   });
 }
