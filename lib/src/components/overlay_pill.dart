@@ -102,6 +102,7 @@ class OverlayWindowApp extends StatefulWidget {
     this.initialVariant = OverlayVariant.working,
     this.initialMessage = '',
     this.connectChannel = true,
+    this.paintsEdgeToEdge,
     super.key,
   });
 
@@ -111,6 +112,14 @@ class OverlayWindowApp extends StatefulWidget {
   /// Widget tests render the pill without a second engine; false skips
   /// the cross-engine channel registration.
   final bool connectChannel;
+
+  /// Whether the pill paints edge to edge (Linux: the X11 shape supplies
+  /// the corners, so the window IS the capsule) instead of drawing a
+  /// rounded capsule on a backdrop (Windows/macOS). Defaults to the host
+  /// platform; tests pass it explicitly so BOTH layouts are covered on
+  /// every host — otherwise a Linux-only tree is unreachable from a
+  /// Windows test run, and breaks first in CI.
+  final bool? paintsEdgeToEdge;
 
   @override
   State<OverlayWindowApp> createState() => _OverlayWindowAppState();
@@ -192,22 +201,24 @@ class _OverlayWindowAppState extends State<OverlayWindowApp> {
               const Expanded(child: _Bars()),
             ],
           );
+          // No Center inside the pill: Center expands to its incoming
+          // constraints, which inflated the capsule to the full overlay
+          // window instead of hugging the message.
           final textPill = Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-            child: Center(
-              child: Text(
-                _message,
-                textAlign: TextAlign.center,
-                style: textStyle,
-              ),
+            child: Text(
+              _message,
+              textAlign: TextAlign.center,
+              style: textStyle,
             ),
           );
-          if (Platform.isLinux) {
+          if (widget.paintsEdgeToEdge ?? Platform.isLinux) {
             // The X11 shape cuts the rounded corners, so the pill paints
-            // edge to edge - a chroma margin would show as a border.
+            // edge to edge - a chroma margin would show as a border. The
+            // window is the capsule here, so the message centres in it.
             return Material(
               color: pillColor,
-              child: isTextPill ? textPill : barsPill,
+              child: isTextPill ? Center(child: textPill) : barsPill,
             );
           }
           // macOS composits true per-pixel alpha (window is non-opaque
