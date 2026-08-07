@@ -47,6 +47,11 @@ const holdShortcutOptions = [
   ),
 ];
 
+/// Shortcut ids that were offered by older builds and are migrated to the
+/// default on load. Every id here MUST be absent from [holdShortcutOptions]:
+/// listing a live option makes it unsavable, because the load path rewrites
+/// it to the default on the next launch. ('alt-shift-f9' was in both, so
+/// picking it silently reset on every restart.)
 const legacyShortcutIds = {
   'ctrl-double-tap-hold',
   'ctrl-shift',
@@ -54,7 +59,6 @@ const legacyShortcutIds = {
   'ctrl-alt-space',
   'ctrl-shift-space',
   'alt-shift-space',
-  'alt-shift-f9',
 };
 
 const customShortcutIdPrefix = 'custom:';
@@ -100,9 +104,49 @@ HoldShortcutOption _customShortcutFromId(String id) {
   return customHoldShortcutOption(keyCodes);
 }
 
+/// Ctrl, Shift, Alt, and the two Windows keys.
+const holdShortcutModifierKeyCodes = [0x11, 0x10, 0x12, 0x5B, 0x5C];
+
+/// Combinations the OS (or every app) needs for itself. Binding hold-to-talk
+/// to one of these takes the behaviour away system-wide.
+const _reservedShortcuts = {
+  [0x11, 0x43], // Ctrl+C
+  [0x11, 0x56], // Ctrl+V
+  [0x11, 0x58], // Ctrl+X
+  [0x11, 0x5A], // Ctrl+Z
+  [0x11, 0x41], // Ctrl+A
+  [0x12, 0x09], // Alt+Tab
+  [0x12, 0x73], // Alt+F4
+  [0x11, 0x1B], // Ctrl+Esc
+};
+
+/// Why [virtualKeyCodes] cannot be a hold shortcut, or null if it can.
+///
+/// The hold shortcut is polled globally, so a single unmodified key turns
+/// every press of that key anywhere on the system into a dictation — and
+/// the user cannot type their way to Settings to undo it, because typing
+/// is what triggers it. A modifier plus at least one more key is the
+/// minimum that leaves the keyboard usable.
+String? holdShortcutRejectionReason(List<int> virtualKeyCodes) {
+  final keyCodes = _normalizedVirtualKeyCodes(virtualKeyCodes);
+  if (keyCodes.length < 2) {
+    return 'Use at least two keys, including a modifier like Ctrl or Alt.';
+  }
+  if (!keyCodes.any(holdShortcutModifierKeyCodes.contains)) {
+    return 'Include a modifier key like Ctrl, Shift, Alt, or Windows.';
+  }
+  for (final reserved in _reservedShortcuts) {
+    if (keyCodes.length == reserved.length &&
+        _normalizedVirtualKeyCodes(reserved).join('-') == keyCodes.join('-')) {
+      return '${labelForVirtualKeyCodes(keyCodes)} is reserved by the system.';
+    }
+  }
+  return null;
+}
+
 List<int> _normalizedVirtualKeyCodes(List<int> virtualKeyCodes) {
   final deduped = virtualKeyCodes.toSet().toList();
-  const modifierOrder = [0x11, 0x10, 0x12, 0x5B, 0x5C];
+  const modifierOrder = holdShortcutModifierKeyCodes;
   deduped.sort((left, right) {
     final leftModifierIndex = modifierOrder.indexOf(left);
     final rightModifierIndex = modifierOrder.indexOf(right);

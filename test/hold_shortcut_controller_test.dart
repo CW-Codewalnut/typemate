@@ -22,8 +22,43 @@ void main() {
     expect(registrar.shortcut?.virtualKeyCodes, [0x11, 0x5B]);
   });
 
+  test('every offered shortcut survives a save and reload', () async {
+    // legacyShortcutIds is the migration list; an id in BOTH it and the
+    // picker can never persist, because loading rewrites it to the
+    // default. Iterating the picker catches that, where iterating the
+    // constant only ever asserts whatever the constant already says.
+    for (final option in holdShortcutOptions) {
+      final registrar = FakeHoldShortcutRegistrar();
+      final store = MemoryHoldShortcutSettingsStore(option.id);
+      final controller = HoldShortcutController(
+        dictationController: createDictationController(),
+        registrar: registrar,
+        store: store,
+      );
+
+      await controller.register();
+
+      expect(
+        controller.shortcut.id,
+        option.id,
+        reason: '${option.label} must load back as itself',
+      );
+      expect(registrar.shortcut?.id, option.id);
+    }
+  });
+
   test('migrates old shortcuts to Ctrl+Win hold', () async {
-    for (final legacyShortcutId in legacyShortcutIds) {
+    // An explicit list: iterating legacyShortcutIds would make this test
+    // agree with the constant no matter what the constant contains.
+    const retiredShortcutIds = [
+      'ctrl-double-tap-hold',
+      'ctrl-shift',
+      'ctrl',
+      'ctrl-alt-space',
+      'ctrl-shift-space',
+      'alt-shift-space',
+    ];
+    for (final legacyShortcutId in retiredShortcutIds) {
       final registrar = FakeHoldShortcutRegistrar();
       final store = MemoryHoldShortcutSettingsStore(legacyShortcutId);
       final controller = HoldShortcutController(
