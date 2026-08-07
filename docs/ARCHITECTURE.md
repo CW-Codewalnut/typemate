@@ -42,9 +42,13 @@ Native, per platform
   the whole stack for **every** platform: a `LanguageRoutingSttEngine`
   over the in-process engines, the GTCRN denoiser, and per-language
   model provisioners.
-- **English + 24 European languages**: `SherpaParakeetSttEngine` — the
-  sherpa_onnx plugin running NVIDIA Parakeet TDT 0.6B v3 int8 in a
-  long-lived isolate.
+- **English**: `SherpaParakeetSttEngine` — the sherpa_onnx plugin running
+  NVIDIA parakeet-unified-en-0.6b int8 in a long-lived isolate (chosen on
+  the real-recording accent corpus: best on all seven English accent
+  clusters).
+- **24 European languages**: a second `SherpaParakeetSttEngine` on NVIDIA
+  Parakeet TDT 0.6B v3 int8 with automatic language detection; it
+  provisions independently from English.
 - **Hindi / Hinglish / Tamil**: `WhisperGgmlSttEngine` — a thin FFI
   client of the whisper_ggml plugin's native layer (whisper.cpp
   v1.9.1, AVX2 baseline; our fork adds a resident-model cache and
