@@ -83,6 +83,11 @@ class TypeMateAccessibilityService : AccessibilityService() {
         // un-wedges itself (recorder-stop + transcribe timeouts on the
         // Dart side are well under this).
         const val TRANSCRIBE_WATCHDOG_MS = 40_000L
+
+        // Longest a single hold-to-talk dictation may run before the
+        // service assumes the release was missed. Generous: a long
+        // dictated paragraph is normal, a two-minute hold is not.
+        const val DICTATION_WATCHDOG_MS = 120_000L
         val MIC_IDLE = Color.parseColor("#E6DEDCF9")
         val INK = Color.parseColor("#3A3A56")
 
@@ -502,6 +507,13 @@ class TypeMateAccessibilityService : AccessibilityService() {
         }
         dictating = true
         renderBubbleState()
+        // Watchdog: a key-up can go missing (focus change, screen off, the
+        // window losing the key stream), and there is no other signal that
+        // the user let go — so without this the mic stays open until some
+        // later key event happens to arrive. Mirrors the transcribing
+        // watchdog below.
+        mainHandler.removeCallbacks(dictationWatchdog)
+        mainHandler.postDelayed(dictationWatchdog, DICTATION_WATCHDOG_MS)
         // Felt confirmation that listening started; dictation is used
         // eyes-elsewhere (the user is looking at the field, not the mic).
         vibrate(strong = true)
@@ -526,10 +538,19 @@ class TypeMateAccessibilityService : AccessibilityService() {
         )
     }
 
+    // Ends a dictation the user appears to have abandoned: a missed
+    // key-up would otherwise leave the microphone open indefinitely.
+    private val dictationWatchdog = Runnable {
+        if (dictating) {
+            endDictation()
+        }
+    }
+
     private fun endDictation() {
         if (!dictating) {
             return
         }
+        mainHandler.removeCallbacks(dictationWatchdog)
         dictating = false
         transcribing = true
         renderBubbleState()
