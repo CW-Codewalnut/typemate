@@ -1151,6 +1151,67 @@
       "source": "Speech Accent Archive twi1 (kumasi, ghana)",
       "license": "CC-BY-NC-SA-4.0 (internal benchmarking only, do not redistribute)",
       "verified": true
+    },
+    {
+      "file": "english (en)/south-asia/real-telegram-01.wav",
+      "language": "en",
+      "dialect": "en-IN",
+      "cluster": "south-asia",
+      "expected": "One more thing, Claude is running in the background in the same port. If you want, you can use the same R drive project folder TypeMate, but create a new worktree.",
+      "source": "own Telegram voice note (phone capture, OPUS, normalized by Telegram) — reference reconstructed from Whisper base + Whisper medium + Parakeet consensus plus known product names, NOT transcribed by ear. Do not treat as ground truth until Ranjan confirms; never re-derive it from one engine, which is what made the original telegram-bench circular.",
+      "license": "internal",
+      "verified": false,
+      "disputed": "claw/cloud -> Claude?; 'same port' (whisper) vs 'same code base' (parakeet); 'R drive' (whisper) vs 'hard drive' (parakeet)"
+    },
+    {
+      "file": "english (en)/south-asia/real-telegram-02.wav",
+      "language": "en",
+      "dialect": "en-IN",
+      "cluster": "south-asia",
+      "expected": "Do one thing. You have all my Telegram audios, right? Do a comparison with the model that you are using, Whisper base, Whisper medium, and the model that I am using in TypeMate. Run it and see which one is giving you faster, more accurate results.",
+      "source": "own Telegram voice note (phone capture, OPUS, normalized by Telegram) — reference reconstructed from Whisper base + Whisper medium + Parakeet consensus plus known product names, NOT transcribed by ear. Do not treat as ground truth until Ranjan confirms; never re-derive it from one engine, which is what made the original telegram-bench circular.",
+      "license": "internal",
+      "verified": false
+    },
+    {
+      "file": "english (en)/south-asia/real-telegram-03.wav",
+      "language": "en",
+      "dialect": "en-IN",
+      "cluster": "south-asia",
+      "expected": "How many language does this Whisper base supports? What is the parameter size? How does it compare with the current model that I am using in TypeMate? And what is the accuracy and error rate?",
+      "source": "own Telegram voice note (phone capture, OPUS, normalized by Telegram) — reference reconstructed from Whisper base + Whisper medium + Parakeet consensus plus known product names, NOT transcribed by ear. Do not treat as ground truth until Ranjan confirms; never re-derive it from one engine, which is what made the original telegram-bench circular.",
+      "license": "internal",
+      "verified": false
+    },
+    {
+      "file": "english (en)/south-asia/real-telegram-04.wav",
+      "language": "en",
+      "dialect": "en-IN",
+      "cluster": "south-asia",
+      "expected": "I have already implemented what you are saying, but how can you give me the link of this model that you are using? How many languages it supports? When you say Whisper fast, you mean it's an engine or it's a model? What is Hermes STT? I am really confused. Just explain me like a baby.",
+      "source": "own Telegram voice note (phone capture, OPUS, normalized by Telegram) — reference reconstructed from Whisper base + Whisper medium + Parakeet consensus plus known product names, NOT transcribed by ear. Do not treat as ground truth until Ranjan confirms; never re-derive it from one engine, which is what made the original telegram-bench circular.",
+      "license": "internal",
+      "verified": false
+    },
+    {
+      "file": "english (en)/south-asia/real-telegram-05.wav",
+      "language": "en",
+      "dialect": "en-IN",
+      "cluster": "south-asia",
+      "expected": "How many language does this Whisper fast supports? Currently in the TypeMate I am using NVIDIA Parakeet 0.6 billion parameter unified model, which is supposed to be good, and it is good, but I feel like you are doing much better.",
+      "source": "own Telegram voice note (phone capture, OPUS, normalized by Telegram) — reference reconstructed from Whisper base + Whisper medium + Parakeet consensus plus known product names, NOT transcribed by ear. Do not treat as ground truth until Ranjan confirms; never re-derive it from one engine, which is what made the original telegram-bench circular.",
+      "license": "internal",
+      "verified": false
+    },
+    {
+      "file": "english (en)/south-asia/real-telegram-06.wav",
+      "language": "en",
+      "dialect": "en-IN",
+      "cluster": "south-asia",
+      "expected": "I am confused. You are saying Hermes STT model, then you are saying Whisper. Are you using two model or single model, or how is it?",
+      "source": "own Telegram voice note (phone capture, OPUS, normalized by Telegram) — reference reconstructed from Whisper base + Whisper medium + Parakeet consensus plus known product names, NOT transcribed by ear. Do not treat as ground truth until Ranjan confirms; never re-derive it from one engine, which is what made the original telegram-bench circular.",
+      "license": "internal",
+      "verified": false
     }
   ]
 }
