@@ -18,11 +18,11 @@ const sherpaParakeetModelFileNames = [
   'tokens.txt',
 ];
 
-/// On-device English/European transcription with NVIDIA Parakeet TDT 0.6B
-/// v3 through the sherpa-onnx FFI bindings, on every platform. No server
-/// process, no port, no startup handshake: the model loads in this
-/// process, so a load failure surfaces as a real exception instead of a
-/// connection timeout.
+/// On-device transcription with an NVIDIA Parakeet TDT 0.6B transducer
+/// (v2 for English, v3 for the 24 multilingual languages) through the
+/// sherpa-onnx FFI bindings, on every platform. No server process, no
+/// port, no startup handshake: the model loads in this process, so a load
+/// failure surfaces as a real exception instead of a connection timeout.
 ///
 /// The recognizer lives in a dedicated long-lived isolate: loading ~620 MB
 /// of weights and decoding a clip are blocking FFI calls that would freeze
