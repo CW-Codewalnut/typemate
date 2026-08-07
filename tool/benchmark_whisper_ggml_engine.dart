@@ -31,28 +31,28 @@ Future<void> main() async {
       model: 'ggml-small-vaani-hindi-q6.bin',
       language: 'hi',
       prompt: null,
-      clip: 'hi-market.wav',
+      clip: 'hindi (hi)/hi-market.wav',
     ),
     (
       label: 'hindi-noisy',
       model: 'ggml-small-vaani-hindi-q6.bin',
       language: 'hi',
       prompt: null,
-      clip: 'hi-market-noisy.wav',
+      clip: 'hindi (hi)/hi-market-noisy.wav',
     ),
     (
       label: 'hinglish',
       model: 'ggml-hindi2hinglish-swift.bin',
       language: 'hi',
       prompt: null,
-      clip: 'hi-market.wav',
+      clip: 'hindi (hi)/hi-market.wav',
     ),
     (
       label: 'tamil',
       model: 'ggml-vistaar-tamil-small-q5_0.bin',
       language: 'ta',
       prompt: null,
-      clip: 'ta-market.wav',
+      clip: 'tamil (ta)/ta-market.wav',
     ),
   ];
 
