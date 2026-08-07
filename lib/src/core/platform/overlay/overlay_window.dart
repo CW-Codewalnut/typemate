@@ -8,6 +8,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -167,9 +168,18 @@ class OverlayWindow {
       // its creation-time content; dictation itself must never be
       // affected.
       debugPrint('TypeMate: overlay state update failed: $error');
+      // The handle is the only evidence the window still exists, and a
+      // successful creation was memoized forever — so a window that died
+      // (crashed engine, closed by the OS) left every later show sending
+      // into nothing and showing an empty overlay for the rest of the
+      // process. Forgetting it lets the next show rebuild the window.
+      _forgetWindow();
     }
     final isTextPill = variant != OverlayVariant.working;
-    driver.show(width: isTextPill ? 360 : 210, height: isTextPill ? 92 : 58);
+    driver.show(
+      width: isTextPill ? textPillWidth : 210,
+      height: isTextPill ? textPillHeightFor(message) : 58,
+    );
     if (isTextPill) {
       // Info/error are transient toasts: without this they would sit
       // topmost on screen forever (the native overlays auto-hid too).
@@ -178,6 +188,49 @@ class OverlayWindow {
         unawaited(hide());
       });
     }
+  }
+
+  /// The info/error pill's window width. The capsule inside is capped at
+  /// 340 and padded 18 each side, so text wraps at 304.
+  static const int textPillWidth = 360;
+  static const double _textPillTextWidth = 304;
+
+  /// 10px top and bottom, matching the capsule's padding.
+  static const double _textPillVerticalPadding = 20;
+
+  /// The pill renders in a second Flutter engine, so its font metrics can
+  /// differ slightly from what we measure here; a line of slack keeps a
+  /// rounding difference from clipping the last line.
+  static const double _textPillSlack = 8;
+
+  /// Height the window needs for [message].
+  ///
+  /// It used to be a fixed 92, which the two longest real failure messages
+  /// filled exactly — four lines of text plus the padding, with nothing to
+  /// spare. One more line of copy, a longer translation, or a larger text
+  /// scale would have overflowed and rendered as a pill filling the whole
+  /// window, which is precisely the bug the capsule fix removed. Measuring
+  /// also keeps Linux honest, where the window IS the capsule (the X11
+  /// shape supplies the corners), so a fixed height would show as a slab
+  /// of empty colour around a short message.
+  static int textPillHeightFor(String message) {
+    final painter = TextPainter(
+      text: TextSpan(text: message, style: const TextStyle(fontSize: 12.5)),
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: _textPillTextWidth);
+    final needed = painter.height + _textPillVerticalPadding + _textPillSlack;
+    painter.dispose();
+    // Never smaller than the single-line capsule.
+    return needed.ceil() < 44 ? 44 : needed.ceil();
+  }
+
+  /// Drops the memoized window so the next show rebuilds it. Creation is
+  /// memoized to keep one overlay per app; that memo must not outlive the
+  /// window it describes.
+  void _forgetWindow() {
+    _creating = null;
+    _handle = null;
   }
 
   Future<void> _ensureWindow(

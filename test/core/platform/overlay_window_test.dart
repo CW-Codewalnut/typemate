@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/painting.dart';
+import 'package:typemate/src/core/dictation_controller.dart';
 import 'package:typemate/src/core/platform/overlay/overlay_window.dart';
 import 'package:typemate/src/core/platform/overlay/overlay_window_driver.dart';
 
@@ -140,11 +142,15 @@ void main() {
     });
     expect(payload(handle, 1)['variant'], 'info');
     expect(payload(handle, 2)['variant'], 'error');
-    // The bars pill is the native 210x58; text pills get the wide pill.
+    // The bars pill is the native 210x58; text pills are the wide pill,
+    // sized to their own message rather than a fixed height — a short one
+    // must not reserve room for four lines.
+    const info = 'Please download the speech model first.';
+    const error = "Couldn't capture your voice.";
     expect(driver.calls.where((call) => call.startsWith('show:')), [
       'show:210x58',
-      'show:360x92',
-      'show:360x92',
+      'show:360x${OverlayWindow.textPillHeightFor(info)}',
+      'show:360x${OverlayWindow.textPillHeightFor(error)}',
     ]);
   });
 
@@ -271,4 +277,47 @@ void main() {
       expect(created, 0);
     },
   );
+
+  test('the text pill window fits the longest real failure messages', () {
+    // These two used to measure 92.0 against a hard-coded 92 window: four
+    // lines plus padding, exactly full, nothing to spare. One more line of
+    // copy, a longer translation, or a larger text scale would overflow
+    // and render as a pill filling the window — the very look the capsule
+    // fix removed.
+    const longest = [
+      DictationController.insertionFailedMessage,
+      DictationController.failedToStartRecordingMessage,
+      DictationController.failedToFinishRecordingMessage,
+      DictationController.transcriptionFailedMessage,
+      DictationController.transcriptionTimeoutMessage,
+    ];
+
+    for (final message in longest) {
+      final height = OverlayWindow.textPillHeightFor(message);
+      final painter = TextPainter(
+        text: TextSpan(text: message, style: const TextStyle(fontSize: 12.5)),
+        textAlign: TextAlign.center,
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: 304);
+
+      expect(
+        height,
+        greaterThan(painter.height + 20),
+        reason: 'no headroom for: $message',
+      );
+      painter.dispose();
+    }
+  });
+
+  test('the text pill window grows with the message', () {
+    final short = OverlayWindow.textPillHeightFor('Short.');
+    final long = OverlayWindow.textPillHeightFor(
+      DictationController.insertionFailedMessage,
+    );
+
+    expect(short, lessThan(long));
+    // A one-liner must not render as a slab, which is what a fixed height
+    // would do on Linux where the window itself is the capsule.
+    expect(short, lessThan(60));
+  });
 }

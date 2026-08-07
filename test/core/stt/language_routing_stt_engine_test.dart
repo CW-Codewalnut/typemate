@@ -75,6 +75,31 @@ void main() {
     expect(await engine.isReady(), isFalse);
   });
 
+  test('a failing idle-engine shutdown does not fail the dictation', () async {
+    // Releasing an engine we are not about to use is a memory
+    // optimisation; its failure used to propagate straight out of
+    // prepare()/transcribe() and break the dictation on the active engine.
+    final english = DisposableRecordingSttEngine('english transcript');
+    final hindi = DisposableRecordingSttEngine(
+      'hindi transcript',
+      shutdownThrows: true,
+    );
+    final engine = LanguageRoutingSttEngine(
+      routes: {'en': english, 'hi': hindi},
+      fallback: english,
+      languageCodeProvider: () => 'en',
+    );
+
+    await expectLater(engine.prepare(), completes);
+    expect(
+      await engine.transcribe(
+        const AudioRecording(path: 'clip.wav', duration: Duration.zero),
+      ),
+      'english transcript',
+    );
+    expect(hindi.shutdownCalls, greaterThan(0));
+  });
+
   test('shutdown reaches every disposable engine', () async {
     final english = DisposableRecordingSttEngine('a');
     final hindi = DisposableRecordingSttEngine('b');
@@ -92,9 +117,13 @@ void main() {
 }
 
 class DisposableRecordingSttEngine implements DisposableSttEngine {
-  DisposableRecordingSttEngine(this.transcript);
+  DisposableRecordingSttEngine(this.transcript, {this.shutdownThrows = false});
 
   final String transcript;
+
+  /// Simulates an idle engine whose release fails; shutting down an engine
+  /// we are not about to use must not fail the dictation on the one we are.
+  final bool shutdownThrows;
   bool ready = true;
   int prepareCalls = 0;
   int transcribeCalls = 0;
@@ -117,5 +146,8 @@ class DisposableRecordingSttEngine implements DisposableSttEngine {
   @override
   Future<void> shutdown() async {
     shutdownCalls += 1;
+    if (shutdownThrows) {
+      throw StateError('idle engine failed to release');
+    }
   }
 }

@@ -97,6 +97,10 @@ class _TypeMateAppState extends State<TypeMateApp> {
   late final DiagnosticReporter _diagnostics;
   late final bool _useMobileShell;
   SpeechModelProvisioner? _modelProvisioner;
+
+  /// Serialises language-change preparation; see
+  /// [_prepareForSelectedLanguage].
+  Future<void>? _languagePreparation;
   FloatingMicController? _floatingMicController;
   late String _lastPreparedLanguageCode;
   AudioDenoiser? _audioDenoiser;
@@ -250,6 +254,23 @@ class _TypeMateAppState extends State<TypeMateApp> {
   /// downloaded yet, in which case the dictation surface offers the
   /// download and preparation happens once it completes.
   Future<void> _prepareForSelectedLanguage() async {
+    // Fired unawaited on every language change, so rapid switching used to
+    // run shutdown and prepare concurrently against the same engines.
+    // Chaining serialises them: the newest selection is always the one
+    // prepared last, and therefore the one left warm.
+    final previous = _languagePreparation ?? Future<void>.value();
+    final attempt = previous.then((_) => _prepareSelectedLanguageOnce());
+    _languagePreparation = attempt;
+    try {
+      await attempt;
+    } finally {
+      if (identical(_languagePreparation, attempt)) {
+        _languagePreparation = null;
+      }
+    }
+  }
+
+  Future<void> _prepareSelectedLanguageOnce() async {
     final provisioner = _modelProvisioner;
     if (provisioner != null) {
       await provisioner.refresh();
