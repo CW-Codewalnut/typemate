@@ -84,7 +84,9 @@ log.txt
 .sentry-native/
 
 # STT benchmark audio inside language/cluster subfolders: personal
-# recordings plus dataset clips we may not redistribute. Already-tracked
-# synthetic clips stay tracked (gitignore never applies to tracked files);
-# manifest.json sits at the corpus root and stays committed.
+# recordings plus dataset clips we may not redistribute. The 18 synthetic
+# edge-tts clips ARE committed, but only because they were added with
+# `git add -f` — this rule would otherwise swallow them, so a new
+# synthetic clip needs the same -f or it silently never lands in the
+# repo. manifest.json sits at the corpus root and is never ignored.
 /test_assets/stt_benchmark/*/**
