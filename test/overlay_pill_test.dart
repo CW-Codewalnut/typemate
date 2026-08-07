@@ -72,6 +72,37 @@ void main() {
     expect(pillColor(tester), const OverlayTheme.native().pillBackground);
   });
 
+  testWidgets('the text pill hugs its message instead of the window', (
+    tester,
+  ) async {
+    // The overlay window is 360x92 for text pills; a one-line message
+    // must not inflate the capsule to fill it (a Center inside the pill
+    // used to do exactly that, padding the text on all four sides).
+    tester.view.physicalSize = const Size(360, 92);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await pump(
+      tester,
+      variant: OverlayVariant.info,
+      message: 'Please download the speech model first.',
+    );
+
+    final pill = tester.getSize(
+      find.ancestor(
+        of: find.text('Please download the speech model first.'),
+        matching: find.byType(Container),
+      ),
+    );
+    final text = tester.getSize(
+      find.text('Please download the speech model first.'),
+    );
+    // 10px vertical / 18px horizontal padding, and nothing more.
+    expect(pill.height, text.height + 20);
+    expect(pill.width, text.width + 36);
+    expect(pill.height, lessThan(92));
+  });
+
   testWidgets('only the error variant renders the red pill', (tester) async {
     await pump(
       tester,

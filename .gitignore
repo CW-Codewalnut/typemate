@@ -21,10 +21,8 @@ migrate_working_dir/
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# Editor settings are per-developer, not project configuration.
+.vscode/
 
 # Flutter/Dart/Pub related
 **/doc/api/
@@ -49,6 +47,10 @@ node_modules/
 /bin/whisper/*.exe
 /bin/whisper/*.dll
 /bin/sherpa/*.exe
+
+# Play Store artwork staged locally for the listing upload; the listing
+# copy itself lives in docs/android/play-store-listing.md.
+/docs/android/store-assets/
 
 # Symbolication related
 app.*.symbols
