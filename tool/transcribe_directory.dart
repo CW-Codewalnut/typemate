@@ -62,7 +62,11 @@ String _find(String directory, String nameFragment, {bool optional = false}) {
   );
 }
 
-sherpa_onnx.OfflineModelConfig _modelConfig(String type, String directory) {
+sherpa_onnx.OfflineModelConfig _modelConfig(
+  String type,
+  String directory,
+  String language,
+) {
   if (type == 'qwen3-asr') {
     // Qwen3-ASR ships a tokenizer directory instead of a tokens.txt.
     return sherpa_onnx.OfflineModelConfig(
@@ -105,7 +109,9 @@ sherpa_onnx.OfflineModelConfig _modelConfig(String type, String directory) {
         whisper: sherpa_onnx.OfflineWhisperModelConfig(
           encoder: _find(directory, 'encoder'),
           decoder: _find(directory, 'decoder'),
-          language: 'en',
+          // Multilingual whisper exports decode whatever language they are
+          // told to; forcing 'en' on non-English audio measures nothing.
+          language: language,
           task: 'transcribe',
         ),
         tokens: tokens,
@@ -355,7 +361,7 @@ Future<void> main(List<String> arguments) async {
   final loadStopwatch = Stopwatch()..start();
   final recognizer = sherpa_onnx.OfflineRecognizer(
     sherpa_onnx.OfflineRecognizerConfig(
-      model: _modelConfig(type, modelDirectory),
+      model: _modelConfig(type, modelDirectory, language),
     ),
   );
   stdout.writeln('model_loaded_ms=${loadStopwatch.elapsedMilliseconds}');

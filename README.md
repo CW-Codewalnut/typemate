@@ -85,7 +85,8 @@ The key design decision is the **resident in-process engine**. Loading a speech 
 
 | Language | Model | Typical latency* |
 |---|---|---|
-| English + 24 European languages | NVIDIA Parakeet TDT 0.6B v3 (int8) | ~1s |
+| English | NVIDIA parakeet-unified-en-0.6b (int8) | ~1s |
+| 24 European languages | NVIDIA Parakeet TDT 0.6B v3 (int8) | ~1s |
 | Hindi | Vaani whisper fine-tune (noise-robust Devanagari) | ~5s |
 | Hinglish | Oriserve Swift whisper fine-tune (romanized output) | ~1.5s |
 | Tamil | AI4Bharat Vistaar whisper fine-tune | ~6-11s |
@@ -97,7 +98,7 @@ To keep memory honest, **only the selected language's engine stays loaded** — 
 ## How it's made
 
 - **App shell:** [Flutter](https://flutter.dev) — one codebase for the Windows, Linux, and Android apps, with the platform-specific pieces (global hold-shortcut polling, system tray, focused-field text insertion, listening/error overlays, Android's accessibility floating mic) written natively per platform and hidden behind small Dart interfaces so everything is testable with fakes.
-- **English + European speech:** the [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) plugin running NVIDIA's Parakeet TDT 0.6B v3 in-process — the most accurate model we benchmarked at any size for Indian-accented English, with automatic language detection across its 25 languages and native punctuation.
+- **English + European speech:** the [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) plugin running NVIDIA Parakeet models in-process — parakeet-unified-en-0.6b for English (the most accurate model we benchmarked at any size across seven real-recording accent clusters, Indian English included, with native punctuation) and Parakeet TDT 0.6B v3 for the 24 European languages with automatic language detection.
 - **Indian-language speech:** [whisper.cpp](https://github.com/ggml-org/whisper.cpp) in-process via the [whisper_ggml](https://github.com/sk3llo/whisper_ggml) plugin (our fork adds a resident-model cache and Silero VAD, offered upstream), running community fine-tunes of OpenAI's Whisper, one dedicated model per language. Audio is pre-trimmed with Silero voice-activity detection (without it, Whisper hallucinates and repeats sentences while decoding silence).
 - **Model curation:** every language in the picker earned its place on a persistent benchmark corpus (`test_assets/stt_benchmark/` — identical audio clips with expected transcripts, replayed against every candidate model). Models that hallucinated, corrupted output, or decoded non-deterministically were **rejected** — which is why some Indian languages aren't in the list yet: Telugu, Kannada, and Gujarati checkpoints all failed repeat-request stability testing (the same audio flips between a correct transcript and fabricated text), and Marathi passed but was cut because its only checkpoint adds ~514 MB. The bar is simple: *if a language is visible, it must work.*
 - **Distribution:** installers ship slim — the app downloads your selected language's model on first use and verifies its exact size and SHA-256 against a pinned catalog before the engine may load it. The Windows installer is built with [Inno Setup](https://jrsoftware.org/isinfo.php); Linux ships `.deb`, `.rpm`, and a portable tarball; Android ships an APK. CI runs the analyzer, 320+ unit/widget tests, and end-to-end suites on all four platforms for every PR.
