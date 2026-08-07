@@ -48,7 +48,7 @@ class InsightsStats {
       wordsByDay[day] = (wordsByDay[day] ?? 0) + words;
     }
 
-    final previousSevenDayStart = today.subtract(const Duration(days: 7));
+    final previousSevenDayStart = _addDays(today, -7);
     return InsightsStats(
       totalWords: totalWords,
       averageWordsPerMinute: calculateAverageWordsPerMinute(
@@ -72,6 +72,14 @@ class InsightsStats {
 
   static DateTime _dateOnly(DateTime date) =>
       DateTime(date.year, date.month, date.day);
+
+  /// Calendar-day arithmetic, never `Duration(days:)`. A day is not always
+  /// 24 hours: across a DST boundary subtracting 24 hours from local
+  /// midnight lands on 23:00 the previous day, which no longer equals any
+  /// key in a day map — streaks reset and the activity grid shifts. The
+  /// DateTime constructor normalizes out-of-range days for us.
+  static DateTime _addDays(DateTime date, int days) =>
+      DateTime(date.year, date.month, date.day + days);
 
   static int _sumWordsBetween(
     Map<DateTime, int> wordsByDay, {
@@ -103,7 +111,7 @@ class InsightsStats {
     var cursor = today;
     while (daySet.contains(cursor)) {
       streak++;
-      cursor = cursor.subtract(const Duration(days: 1));
+      cursor = _addDays(cursor, -1);
     }
     return streak;
   }
@@ -115,7 +123,7 @@ class InsightsStats {
     DateTime? previous;
 
     for (final day in sortedDays) {
-      if (previous == null || day.difference(previous).inDays == 1) {
+      if (previous == null || day == _addDays(previous, 1)) {
         current++;
       } else if (day != previous) {
         current = 1;
@@ -132,12 +140,10 @@ class InsightsStats {
     Map<DateTime, int> wordsByDay,
     DateTime today,
   ) {
-    final start = today.subtract(
-      Duration(
-        days:
-            (today.weekday % DateTime.daysPerWeek) +
-            ((activityGridColumns - 1) * DateTime.daysPerWeek),
-      ),
+    final start = _addDays(
+      today,
+      -((today.weekday % DateTime.daysPerWeek) +
+          ((activityGridColumns - 1) * DateTime.daysPerWeek)),
     );
     final maxWords = wordsByDay.values.fold(
       0,
@@ -149,7 +155,7 @@ class InsightsStats {
         for (var column = 0; column < activityGridColumns; column++)
           _activityCell(
             wordsByDay,
-            start.add(Duration(days: column * DateTime.daysPerWeek + row)),
+            _addDays(start, column * DateTime.daysPerWeek + row),
             maxWords,
           ),
     ];
