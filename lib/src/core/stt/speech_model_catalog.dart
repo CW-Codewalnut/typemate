@@ -8,11 +8,19 @@ import 'stt_model_provisioner.dart';
 /// aborts the whole process inside the native loader, so nothing
 /// unverified may ever reach it.
 
-/// Same model directory name on every platform, so tooling and docs talk
-/// about one model identity everywhere.
+/// Same model directory names on every platform, so tooling and docs talk
+/// about one model identity everywhere. English runs its own model:
+/// parakeet-unified-en-0.6b (NVIDIA Open Model License — commercial use
+/// and redistribution permitted) beat every candidate on the real-recording
+/// accent corpus (test_assets/stt_benchmark, 2026-08 sweep: 6.0% vs v3's
+/// 10.3% WER overall; Indian English 8.3% vs 13.3%) and its family has
+/// streaming exports if live dictation preview ever lands — v3 keeps
+/// serving the 24 multilingual languages it was adopted for.
 const parakeetModelDirectoryName = 'parakeet-tdt-0.6b-v3-int8';
+const parakeetEnglishModelDirectoryName = 'parakeet-unified-en-0.6b-int8';
 
-/// The official sherpa-onnx export of NVIDIA Parakeet TDT 0.6B v3 int8.
+/// The official sherpa-onnx exports of NVIDIA Parakeet 0.6B models
+/// (TDT v3 int8 multilingual; unified-en int8 non-streaming for English).
 /// Individual files (not the .tar.bz2 archive) so the download streams
 /// straight to disk with HTTP-range resume and no archive extraction.
 ///
@@ -56,8 +64,46 @@ final parakeetModelFiles = [
     ),
 ];
 
-/// The 25 languages Parakeet TDT 0.6B v3 transcribes, with automatic
-/// language detection — every one is served by the same model.
+const _parakeetEnglishModelRevision =
+    '8c3a10fb13408c7a7054f6898958bf1c64a8d6c7';
+const _parakeetEnglishModelBaseUrl =
+    'https://huggingface.co/csukuangfj2/sherpa-onnx-nemo-parakeet-unified-en-0.6b-int8-non-streaming/resolve/$_parakeetEnglishModelRevision';
+
+const _parakeetEnglishModelFileSizes = {
+  'encoder.int8.onnx': 654040552,
+  'decoder.int8.onnx': 7257753,
+  'joiner.int8.onnx': 1735860,
+  'tokens.txt': 8952,
+};
+
+/// SHA-256 of each file at the pinned revision (Hugging Face LFS oids;
+/// tokens.txt hashed from the revision directly), byte-identical to the
+/// files the 2026-08 accent-corpus benchmark validated. Update together
+/// with the revision and the sizes above.
+const _parakeetEnglishModelFileHashes = {
+  'encoder.int8.onnx':
+      '6716910b7a0833997fec7a410494c995d70124001a0e9b66d6370d6aced577e0',
+  'decoder.int8.onnx':
+      'a5e223392c90e75f8144cdb5eb95af7625db389e39edef2bd1a9c872b3298fe6',
+  'joiner.int8.onnx':
+      '869f43f7d24595c55581ad3bf249a935fb8a71389fbdaa7504b9f46f93140f8a',
+  'tokens.txt':
+      'dc0b4584ab2e4ddbf888425c076c61b736e7356a015250db7d307e6f1a8188ff',
+};
+
+final parakeetEnglishModelFiles = [
+  for (final name in sherpaParakeetModelFileNames)
+    SttModelFile(
+      url: '$_parakeetEnglishModelBaseUrl/$name',
+      relativePath: name,
+      expectedBytes: _parakeetEnglishModelFileSizes[name]!,
+      expectedSha256: _parakeetEnglishModelFileHashes[name]!,
+    ),
+];
+
+/// The 25 languages served by a Parakeet engine: English by the dedicated
+/// v2 model, the other 24 by the multilingual v3 with automatic language
+/// detection.
 const parakeetLanguageCodes = [
   'en', 'bg', 'hr', 'cs', 'da', 'nl', 'et', 'fi', 'fr', 'de', 'el', 'hu', //
   'it', 'lv', 'lt', 'mt', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'es', 'sv',

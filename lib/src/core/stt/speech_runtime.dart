@@ -71,6 +71,8 @@ const whisperLanguages = [
 // loops and repeats sentences while decoding the silent tail.
 const bundledVadModelRelativePath = 'models/ggml-silero-v5.1.2.bin';
 const bundledParakeetDirRelativePath = 'models/$parakeetModelDirectoryName';
+const bundledParakeetEnglishDirRelativePath =
+    'models/$parakeetEnglishModelDirectoryName';
 
 /// Threads for the in-process Parakeet recognizer — matches the
 /// `--num-work-threads=4` the retired websocket server ran with, so
@@ -147,17 +149,22 @@ SpeechRuntime createSpeechRuntime({
       : <SttModelFile>[];
 
   // Noise suppression: bundled GTCRN wins; otherwise the tiny model rides
-  // the Parakeet download. An env override points anywhere.
+  // whichever Parakeet download (English v2 or multilingual v3) happens
+  // first, so both directories are candidates. An env override points
+  // anywhere.
   final envDenoiserModel = values['TYPEMATE_DENOISER_MODEL']?.trim() ?? '';
   final bundledGtcrn = findBundled('models/${gtcrnModelFile.relativePath}');
   final denoiser = SherpaGtcrnAudioDenoiser(
-    // When unbundled it rides the Parakeet download, landing inside the
-    // Parakeet directory.
-    modelPath: envDenoiserModel.isNotEmpty
-        ? envDenoiserModel
-        : bundledGtcrn ??
-              '$downloadedModelsDirectory/$parakeetModelDirectoryName/'
-                  '${gtcrnModelFile.relativePath}',
+    modelPathCandidates: envDenoiserModel.isNotEmpty
+        ? [envDenoiserModel]
+        : bundledGtcrn != null
+        ? [bundledGtcrn]
+        : [
+            '$downloadedModelsDirectory/$parakeetEnglishModelDirectoryName/'
+                '${gtcrnModelFile.relativePath}',
+            '$downloadedModelsDirectory/$parakeetModelDirectoryName/'
+                '${gtcrnModelFile.relativePath}',
+          ],
   );
   final gtcrnDownloads = bundledGtcrn == null && envDenoiserModel.isEmpty
       ? [gtcrnModelFile]
@@ -191,34 +198,65 @@ SpeechRuntime createSpeechRuntime({
 
   // Parakeet is all-or-nothing: the recognizer needs every file, so a
   // bundled copy only counts when the whole directory is present.
-  String? bundledParakeetDirectory;
-  for (final directory in searchDirectories) {
-    final candidate = '$directory/$bundledParakeetDirRelativePath';
-    if (sherpaParakeetModelFileNames.every(
-      (name) => exists('$candidate/$name'),
-    )) {
-      bundledParakeetDirectory = candidate;
-      break;
+  String? findBundledParakeetDirectory(String relativePath) {
+    for (final directory in searchDirectories) {
+      final candidate = '$directory/$relativePath';
+      if (sherpaParakeetModelFileNames.every(
+        (name) => exists('$candidate/$name'),
+      )) {
+        return candidate;
+      }
     }
+    return null;
   }
-  final parakeetDirectory =
-      bundledParakeetDirectory ??
-      '$downloadedModelsDirectory/$parakeetModelDirectoryName';
-  if (bundledParakeetDirectory == null) {
-    final parakeetProvisioner = SttModelProvisioner(
-      modelDirectory: Directory(parakeetDirectory),
-      // The GTCRN denoiser model rides the Parakeet download when it is
-      // not bundled (Android); it lands beside the Parakeet files.
-      files: [...parakeetModelFiles, ...gtcrnDownloads],
+
+  // English runs the dedicated parakeet-unified model (accent-robust,
+  // corpus-verified); the other 24 Parakeet languages share the
+  // multilingual v3. Each model provisions independently, so an
+  // English-only user never downloads v3.
+  SherpaParakeetSttEngine parakeetEngineFor({
+    required String bundledDirRelativePath,
+    required String directoryName,
+    required List<SttModelFile> modelFiles,
+    required List<String> languageCodes,
+  }) {
+    final bundledDirectory = findBundledParakeetDirectory(
+      bundledDirRelativePath,
     );
-    for (final code in parakeetLanguageCodes) {
-      provisionersByLanguageCode[code] = parakeetProvisioner;
+    final modelDirectory =
+        bundledDirectory ?? '$downloadedModelsDirectory/$directoryName';
+    if (bundledDirectory == null) {
+      final provisioner = SttModelProvisioner(
+        modelDirectory: Directory(modelDirectory),
+        // The GTCRN denoiser model rides the Parakeet download when it is
+        // not bundled (Android); it lands beside the Parakeet files.
+        files: [...modelFiles, ...gtcrnDownloads],
+      );
+      for (final code in languageCodes) {
+        provisionersByLanguageCode[code] = provisioner;
+      }
     }
+    return SherpaParakeetSttEngine(
+      modelDirectoryPath: modelDirectory,
+      numThreads: desktopParakeetNumThreads,
+      diagnostics: diagnostics,
+    );
   }
-  final parakeet = SherpaParakeetSttEngine(
-    modelDirectoryPath: parakeetDirectory,
-    numThreads: desktopParakeetNumThreads,
-    diagnostics: diagnostics,
+
+  final englishParakeet = parakeetEngineFor(
+    bundledDirRelativePath: bundledParakeetEnglishDirRelativePath,
+    directoryName: parakeetEnglishModelDirectoryName,
+    modelFiles: parakeetEnglishModelFiles,
+    languageCodes: const ['en'],
+  );
+  final multilingualParakeet = parakeetEngineFor(
+    bundledDirRelativePath: bundledParakeetDirRelativePath,
+    directoryName: parakeetModelDirectoryName,
+    modelFiles: parakeetModelFiles,
+    languageCodes: [
+      for (final code in parakeetLanguageCodes)
+        if (code != 'en') code,
+    ],
   );
 
   final whisperEnginesByCode = <String, WhisperGgmlSttEngine>{};
@@ -249,7 +287,8 @@ SpeechRuntime createSpeechRuntime({
   return SpeechRuntime(
     engine: LanguageRoutingSttEngine(
       routes: {
-        for (final code in parakeetLanguageCodes) code: parakeet,
+        for (final code in parakeetLanguageCodes)
+          code: code == 'en' ? englishParakeet : multilingualParakeet,
         ...whisperEnginesByCode,
       },
       fallback: whisperEnginesByCode['hi']!,

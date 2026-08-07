@@ -31,7 +31,7 @@ void main() {
     // covers: the original recording must come back untouched.
     final file = writeRecordingFile();
     final denoiser = SherpaGtcrnAudioDenoiser(
-      modelPath: '${tempDirectory.path}/missing-gtcrn.onnx',
+      modelPathCandidates: ['${tempDirectory.path}/missing-gtcrn.onnx'],
     );
 
     final result = await denoiser.denoise(recordingFor(file));
@@ -43,7 +43,7 @@ void main() {
   });
 
   test('skips empty recordings without touching the filesystem', () async {
-    final denoiser = SherpaGtcrnAudioDenoiser(modelPath: 'model');
+    final denoiser = SherpaGtcrnAudioDenoiser(modelPathCandidates: ['model']);
 
     final result = await denoiser.denoise(
       const AudioRecording(path: '', duration: Duration.zero),

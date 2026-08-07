@@ -16,7 +16,8 @@ set -euo pipefail
 BUNDLE_DIR="${1:?usage: slim-speech-models.sh <bundle-dir>}"
 test -d "$BUNDLE_DIR" || { echo "not a directory: $BUNDLE_DIR" >&2; exit 1; }
 
-rm -rf "$BUNDLE_DIR/models/parakeet-tdt-0.6b-v3-int8" \
+rm -rf "$BUNDLE_DIR/models/parakeet-unified-en-0.6b-int8" \
+       "$BUNDLE_DIR/models/parakeet-tdt-0.6b-v3-int8" \
        "$BUNDLE_DIR/bin/sherpa" \
        "$BUNDLE_DIR/bin/whisper"
 rm -f "$BUNDLE_DIR/models/ggml-small-vaani-hindi-q6.bin" \
