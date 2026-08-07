@@ -21,7 +21,7 @@ Future<void> main(List<String> arguments) async {
       : '$root/models/ggml-small-vaani-hindi-q6.bin';
   final clip = arguments.length > 1
       ? arguments[1]
-      : '$root/test_assets/stt_benchmark/hi-market.wav';
+      : '$root/test_assets/stt_benchmark/hindi (hi)/hi-market.wav';
   final staged = '${Directory.systemTemp.path}/ggml-probe.wav';
   File(clip).copySync(staged);
 

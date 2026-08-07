@@ -61,6 +61,11 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Play upload signing secrets — never commit the keystore or its passwords.
+/android/key.properties
+*.jks
+*.keystore
+
 # sherpa-onnx websocket server log when run manually from the repo root
 log.txt
 
@@ -73,3 +78,9 @@ log.txt
 
 # Sentry native runtime artifacts
 .sentry-native/
+
+# STT benchmark audio inside language/cluster subfolders: personal
+# recordings plus dataset clips we may not redistribute. Already-tracked
+# synthetic clips stay tracked (gitignore never applies to tracked files);
+# manifest.json sits at the corpus root and stays committed.
+/test_assets/stt_benchmark/*/**
