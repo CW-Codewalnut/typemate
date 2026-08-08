@@ -1,5 +1,19 @@
 final RegExp _whitespacePattern = RegExp(r'\s+');
 
+/// The transcript as it should reach a text field.
+///
+/// Collapses whitespace runs to single spaces, which matters because a
+/// line break is not text to whatever receives it: chat boxes, search
+/// fields and address bars read it as SEND, so a transcript containing one
+/// fires the message off mid-sentence instead of typing it. Dictation is a
+/// single spoken utterance, so nothing is lost.
+///
+/// Lives here so every surface shares it — the desktop controller and the
+/// Android floating mic take different paths to insertion, and only one of
+/// them used to normalize.
+String normalizeTranscript(String text) =>
+    text.replaceAll(_whitespacePattern, ' ').trim();
+
 int wordCount(String text) =>
     text.trim().isEmpty ? 0 : text.trim().split(_whitespacePattern).length;
 

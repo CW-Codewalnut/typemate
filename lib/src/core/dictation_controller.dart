@@ -573,14 +573,7 @@ class DictationController extends ChangeNotifier {
   }
 
   String _normalizeTranscript(String transcript) {
-    // Line breaks are collapsed to spaces for EVERY platform, because a
-    // newline is not text to those that receive it: a chat box, search
-    // field or address bar reads it as SEND, so a transcript containing
-    // one fires the message off mid-sentence instead of typing it. (Seen
-    // in WhatsApp on Android; the Windows insertion layer guards natively
-    // too, but the transcript should never carry one in the first place.)
-    // Dictation is one spoken utterance, so nothing is lost.
-    final normalized = transcript.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final normalized = normalizeTranscript(transcript);
     if (normalized.isEmpty || isSilentAudioTranscript(normalized)) {
       return '';
     }
