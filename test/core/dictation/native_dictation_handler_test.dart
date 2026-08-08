@@ -145,6 +145,32 @@ void main() {
     expect(calls, hasLength(1), reason: 'Silence writes no history entry.');
   });
 
+  test('a line break never reaches the focused field', () async {
+    // This is the surface the floating mic and the physical-keyboard
+    // shortcut use, and it inserts straight into whatever app is focused.
+    // A newline is not text there: chat boxes, search fields and address
+    // bars read it as SEND, so a transcript carrying one fires the message
+    // off mid-sentence. Trimming alone leaves interior breaks, which is
+    // exactly the case that bites.
+    final calls = <String>[];
+    final handler = NativeDictationHandler(
+      engine: _FakeEngine('  ship it\nby friday\r\nplease  '),
+      recorderFactory: _FakeRecorderFactory(
+        _FakeRecorder(recordingFor(recordingFile())),
+      ),
+      onTranscriptGenerated: (transcript, {required duration}) async =>
+          calls.add(transcript),
+    );
+
+    await handler.start();
+    final transcript = await handler.stop();
+
+    expect(transcript, 'ship it by friday please');
+    expect(calls, [
+      'ship it by friday please',
+    ], reason: 'History stores what was typed, not the raw engine output.');
+  });
+
   test('silence comes back as an empty transcript', () async {
     final recorder = _FakeRecorder(recordingFor(recordingFile()));
     final handler = NativeDictationHandler(

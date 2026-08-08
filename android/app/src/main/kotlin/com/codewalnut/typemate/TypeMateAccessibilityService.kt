@@ -771,12 +771,12 @@ class TypeMateAccessibilityService : AccessibilityService() {
 // Pure decision, so it can be tested without an Android node — a JVM test
 // cannot construct an AccessibilityService, so this lives outside the class.
 //
-// KNOWN LIMIT: when the text equals the hint exactly, this treats the field
-// as empty, which also discards the word if the user genuinely typed the
-// placeholder ("Message" in WhatsApp). A node carries no way to tell those
-// two states apart, so the choice is between losing a rare typed word and
-// prepending the placeholder to every dictation. It is not handled; it is
-// traded.
+// KNOWN LIMIT: when the text matches the hint once both are trimmed, this
+// treats the field as empty, which also discards the word if the user
+// genuinely typed the placeholder ("Message" in WhatsApp). A node carries
+// no way to tell those two states apart, so the choice is between losing a
+// rare typed word and prepending the placeholder to every dictation. It is
+// not handled; it is traded.
 internal fun existingTextFrom(
     text: String?,
     hint: String?,
