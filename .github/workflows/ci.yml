@@ -107,6 +107,17 @@ jobs:
       - name: Build release APK
         run: flutter build apk --release
 
+      # The accessibility service decides what gets typed into other apps'
+      # text fields, and it is Kotlin, so `flutter test` never sees it.
+      # Without this step those tests exist but nothing runs them.
+      #
+      # After the APK build on purpose: a bare `gradlew` invocation needs
+      # the local.properties and plugin resolution that `flutter build`
+      # generates.
+      - name: Run Android unit tests
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest --console=plain
+
   # Android runs the same e2e suite as the desktop matrix, on a real
   # emulator (GitHub's ubuntu runners have KVM).
   e2e-android:

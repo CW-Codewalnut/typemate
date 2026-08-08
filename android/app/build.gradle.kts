@@ -43,3 +43,9 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // JUnit for the pure-Kotlin unit tests under src/test (no device or
+    // emulator needed).
+    testImplementation("junit:junit:4.13.2")
+}
