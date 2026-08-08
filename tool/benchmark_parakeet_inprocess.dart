@@ -15,7 +15,7 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa_onnx;
-import 'package:typemate/src/core/stt/sherpa_parakeet_stt_engine.dart';
+import 'package:typemate/src/core/audio/wave_audio_guard.dart';
 
 const _corpusDirectory = 'test_assets/stt_benchmark';
 
@@ -79,7 +79,7 @@ Future<void> main(List<String> arguments) async {
     final wave = sherpa_onnx.readWave(wavPath);
     // Zero samples or an unreadable file aborts the process inside
     // sherpa's native code, the same way it does in the app engine.
-    if (parakeetAudioRefusal(
+    if (waveAudioRefusal(
           sampleCount: wave.samples.length,
           sampleRate: wave.sampleRate,
         ) !=

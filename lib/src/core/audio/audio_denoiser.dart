@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa_onnx;
 
 import 'audio_recorder.dart';
+import 'wave_audio_guard.dart';
 
 /// Cleans steady background noise out of a finished recording before it is
 /// transcribed. Implementations never throw and never lose the recording:
@@ -141,19 +142,18 @@ void _denoiseInPlace(String modelPath, String wavPath) {
   try {
     final wave = sherpa_onnx.readWave(wavPath);
     // GTCRN runs BEFORE transcription and noise suppression is on by
-    // default, so this is the first native code a bad recording reaches —
+    // default, so this is the first native code a bad recording reaches:
     // guarding only the recognizer left the reported crash in place.
-    // readWave never throws: an unreadable file (missing, 0 bytes,
-    // truncated header) comes back with sampleRate 0, and sherpa builds a
-    // resampler from it, dividing by zero. That abort is EXACTLY the
-    // c0000094 in the field report; it kills the process, and the isolate
-    // does not contain it. Throwing here is caught by denoise(), which
-    // falls back to the raw recording.
-    if (wave.sampleRate <= 0) {
-      throw StateError('recording could not be read: $wavPath');
-    }
-    if (wave.samples.isEmpty) {
-      throw StateError('recording contains no audio: $wavPath');
+    // Throwing is caught by denoise(), which falls back to the raw
+    // recording, so nothing is lost.
+    final refusal = waveAudioRefusal(
+      sampleCount: wave.samples.length,
+      sampleRate: wave.sampleRate,
+    );
+    if (refusal != null) {
+      throw StateError(
+        refusal.isEmpty ? 'recording contains no audio' : refusal,
+      );
     }
     final denoised = denoiser.run(
       samples: wave.samples,

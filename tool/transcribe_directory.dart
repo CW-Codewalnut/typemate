@@ -37,6 +37,7 @@ import 'dart:typed_data';
 
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa_onnx;
 import 'package:typemate/src/core/audio/audio_recorder.dart';
+import 'package:typemate/src/core/audio/wave_audio_guard.dart';
 import 'package:typemate/src/core/stt/whisper_ggml_stt_engine.dart';
 
 /// The sherpa_onnx_windows copy THIS project resolved, read from the
@@ -198,10 +199,16 @@ _Engine _sherpaEngine({
   return _Engine(
     transcribe: (wavPath) async {
       final wave = sherpa_onnx.readWave(wavPath);
-      // Zero samples aborts the process inside sherpa's native code, the
-      // same way it does in the app engine; a corpus clip that failed to
-      // convert should report itself, not kill the run.
-      if (wave.samples.isEmpty) {
+      // Degenerate audio aborts the process inside sherpa's native code,
+      // the same way it does in the app engine; a corpus clip that failed
+      // to convert should report itself, not kill the run. Checks the
+      // sample RATE too: an unreadable file is the case that actually
+      // crashes, and checking only for zero samples missed it.
+      if (waveAudioRefusal(
+            sampleCount: wave.samples.length,
+            sampleRate: wave.sampleRate,
+          ) !=
+          null) {
         return '';
       }
       final stream = recognizer.createStream();

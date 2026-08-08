@@ -5,6 +5,7 @@ import 'dart:isolate';
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa_onnx;
 
 import '../audio/audio_recorder.dart';
+import '../audio/wave_audio_guard.dart';
 import '../diagnostics/diagnostic_reporter.dart';
 import 'stt_engine.dart';
 import 'whisper_cli_stt_engine.dart' show SttRuntimeException;
@@ -17,32 +18,6 @@ const sherpaParakeetModelFileNames = [
   'joiner.int8.onnx',
   'tokens.txt',
 ];
-
-/// Why [sampleCount]/[sampleRate] must not be handed to the recognizer,
-/// or null when they are safe to decode.
-///
-/// Returns an EMPTY string when nothing was spoken — the honest answer is
-/// an empty transcript — and a non-empty reason when the recording could
-/// not be read at all, which is a real failure the user should be able to
-/// retry from History rather than see reported as silence.
-///
-/// This exists as a pure function so it can be tested. Feeding either case
-/// to sherpa aborts the process natively — an invalid input shape for zero
-/// samples, a divide-by-zero building a resampler for a zero sample rate —
-/// and a native abort cannot be caught from Dart, so the app simply
-/// vanishes with no error and no history entry.
-String? parakeetAudioRefusal({
-  required int sampleCount,
-  required int sampleRate,
-}) {
-  if (sampleRate <= 0) {
-    return 'the recording could not be read';
-  }
-  if (sampleCount == 0) {
-    return '';
-  }
-  return null;
-}
 
 /// On-device transcription with an NVIDIA Parakeet 0.6B transducer
 /// (parakeet-unified-en for English, TDT v3 for the 24 multilingual
@@ -336,7 +311,7 @@ Future<void> _workerMain(SherpaWorkerInit init) async {
     }
     try {
       final wave = sherpa_onnx.readWave(message.wavPath);
-      final refusal = parakeetAudioRefusal(
+      final refusal = waveAudioRefusal(
         sampleCount: wave.samples.length,
         sampleRate: wave.sampleRate,
       );
