@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:flutter/foundation.dart';
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa_onnx;
 
 import '../audio/audio_recorder.dart';
@@ -287,6 +288,7 @@ class SherpaWorkerFailure {
 /// cannot be tested is how the denoiser stayed unguarded through the first
 /// fix. `WaveData` is a plain Dart class, so a test can hand this the
 /// exact shapes that abort natively.
+@visibleForTesting
 Object transcribeWaveRequest(
   String wavPath, {
   required sherpa_onnx.WaveData Function(String wavPath) readWave,

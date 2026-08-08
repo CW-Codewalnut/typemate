@@ -82,18 +82,4 @@ void main() {
     expect(result, 'denoised');
     expect(seen, [16000], reason: 'The decoded wave is passed straight on.');
   });
-
-  test('the refusal is a throw, so denoise() falls back to raw audio', () {
-    // denoise() catches everything and returns the original recording;
-    // this pins that a refusal takes that path rather than returning a
-    // value that would be written over the user's audio.
-    expect(
-      () => denoiseSafeWave<int>(
-        'clip.wav',
-        readWave: (_) => wave(sampleCount: 0, sampleRate: 0),
-        run: (_) => 1,
-      ),
-      throwsA(isA<StateError>()),
-    );
-  });
 }

@@ -253,6 +253,33 @@ Future<_Engine> _whisperGgmlEngine({
   );
 }
 
+/// Whether a WAV is too degenerate to hand to any engine, from its header
+/// alone — engine-agnostic on purpose.
+///
+/// The sherpa engines abort the PROCESS on this input rather than failing,
+/// and whisper has no such guard of its own, so the check has to happen
+/// before dispatch: guarding only the sherpa path left every Hindi,
+/// Hinglish and Tamil clip able to be scored as a fully-wrong hypothesis.
+bool _unreadableWav(File file) {
+  if (!file.existsSync() || file.lengthSync() <= 44) {
+    return true;
+  }
+  final header = file.openSync()..setPositionSync(0);
+  try {
+    final bytes = ByteData.sublistView(header.readSync(44));
+    final channels = bytes.getUint16(22, Endian.little);
+    final sampleRate = bytes.getUint32(24, Endian.little);
+    final bitsPerSample = bytes.getUint16(34, Endian.little);
+    return sampleRate == 0 || channels * (bitsPerSample ~/ 8) == 0;
+  } catch (_) {
+    // A header too short or malformed to parse is exactly the case that
+    // comes back with sampleRate 0 and crashes the native engine.
+    return true;
+  } finally {
+    header.closeSync();
+  }
+}
+
 /// Seconds of audio in a PCM WAV, from its header — engine-agnostic, so
 /// both runners can report it.
 double _wavSeconds(File file) {
@@ -340,6 +367,15 @@ Future<void> _runManifest(
     if (!File(wavPath).existsSync()) {
       stderr.writeln('SKIPPED (audio missing): ${clip['file']}');
       missingAudio++;
+      continue;
+    }
+    // Before dispatch, so it covers every engine: an empty hypothesis is
+    // scored as a fully-wrong transcript, and a batch of clips that failed
+    // to convert would quietly inflate the error rate of whichever model
+    // is being measured.
+    if (_unreadableWav(File(wavPath))) {
+      stderr.writeln('SKIPPED (no readable audio): ${clip['file']}');
+      unreadableAudio++;
       continue;
     }
     // Clips with no reference (or one that normalizes to nothing) cannot
