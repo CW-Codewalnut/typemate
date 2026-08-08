@@ -18,6 +18,32 @@ const sherpaParakeetModelFileNames = [
   'tokens.txt',
 ];
 
+/// Why [sampleCount]/[sampleRate] must not be handed to the recognizer,
+/// or null when they are safe to decode.
+///
+/// Returns an EMPTY string when nothing was spoken — the honest answer is
+/// an empty transcript — and a non-empty reason when the recording could
+/// not be read at all, which is a real failure the user should be able to
+/// retry from History rather than see reported as silence.
+///
+/// This exists as a pure function so it can be tested. Feeding either case
+/// to sherpa aborts the process natively — an invalid input shape for zero
+/// samples, a divide-by-zero building a resampler for a zero sample rate —
+/// and a native abort cannot be caught from Dart, so the app simply
+/// vanishes with no error and no history entry.
+String? parakeetAudioRefusal({
+  required int sampleCount,
+  required int sampleRate,
+}) {
+  if (sampleRate <= 0) {
+    return 'the recording could not be read';
+  }
+  if (sampleCount == 0) {
+    return '';
+  }
+  return null;
+}
+
 /// On-device transcription with an NVIDIA Parakeet 0.6B transducer
 /// (parakeet-unified-en for English, TDT v3 for the 24 multilingual
 /// languages) through the sherpa-onnx FFI bindings, on every platform. No
@@ -310,25 +336,27 @@ Future<void> _workerMain(SherpaWorkerInit init) async {
     }
     try {
       final wave = sherpa_onnx.readWave(message.wavPath);
-      // A recording with no samples KILLS THE PROCESS. The encoder runs a
-      // convolution over the feature frames, and zero frames reaches
-      // native code as an invalid shape / divide by zero inside
-      // sherpa-onnx-c-api — an abort Dart cannot catch, so the whole app
-      // vanishes with no error and no history entry. Reachable in
-      // practice: pressing the shortcut before the mic has produced
-      // anything (seen right after a first-run model download, crash
-      // signature c0000094 in sherpa-onnx-c-api.dll). Nothing was spoken,
-      // so an empty transcript is the honest answer.
-      if (wave.samples.isEmpty) {
-        message.replyPort.send('');
+      final refusal = parakeetAudioRefusal(
+        sampleCount: wave.samples.length,
+        sampleRate: wave.sampleRate,
+      );
+      if (refusal != null) {
+        message.replyPort.send(refusal.isEmpty ? '' : _WorkerFailure(refusal));
         continue;
       }
       final stream = recognizer.createStream();
-      stream.acceptWaveform(samples: wave.samples, sampleRate: wave.sampleRate);
-      recognizer.decode(stream);
-      final text = recognizer.getResult(stream).text;
-      stream.free();
-      message.replyPort.send(text);
+      try {
+        stream.acceptWaveform(
+          samples: wave.samples,
+          sampleRate: wave.sampleRate,
+        );
+        recognizer.decode(stream);
+        message.replyPort.send(recognizer.getResult(stream).text);
+      } finally {
+        // Freed on every path: the failure path used to leak a native
+        // stream for the life of the isolate.
+        stream.free();
+      }
     } catch (error) {
       message.replyPort.send(_WorkerFailure('$error'));
     }

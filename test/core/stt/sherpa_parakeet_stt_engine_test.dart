@@ -16,21 +16,12 @@ import 'package:typemate/src/core/stt/whisper_cli_stt_engine.dart'
 /// over FFI and cannot run in a unit test — so injecting it is the only way
 /// to exercise the engine's own lifecycle rather than a hand-written mock
 /// of it.
-/// Mirrors the production worker's empty-audio guard, so the engine's
-/// contract for a silent recording is pinned even though the real
-/// recognizer cannot run in a unit test.
-void emptyAudioWorker(SherpaWorkerInit init) {
-  final commands = ReceivePort();
-  init.readyPort.send(commands.sendPort);
-  commands.listen((message) {
-    if (message is SherpaTranscribeRequest) {
-      // The real worker returns '' rather than handing zero samples to
-      // the recognizer, which aborts the process natively.
-      message.replyPort.send('');
-    }
-  });
-}
-
+/// A worker that answers the real protocol without sherpa. It reports each
+/// step over [SherpaWorkerInit.modelDirectoryPath], reused as a send-port
+/// address, so the test sees the order the engine actually drives.
+///
+/// Stands in for the production entrypoint, which loads 654 MB of weights
+/// over FFI and cannot run in a unit test.
 void fakeWorker(SherpaWorkerInit init) {
   final events = IsolateNameServer.lookupPortByName(init.modelDirectoryPath);
   final commands = ReceivePort();
@@ -194,26 +185,38 @@ void main() {
     expect(await engine.isReady(), isFalse);
   });
 
-  test(
-    'a recording with no audio yields an empty transcript, not a crash',
-    () async {
-      // Zero samples reaching the recognizer aborts the whole process
-      // inside sherpa-onnx-c-api (crash signature c0000094), which is
-      // uncatchable from Dart: the app vanishes with no error and no
-      // history entry. Reproduced with a 0-sample WAV through the real
-      // engine before the guard existed; the tool exited 127. Nothing was
-      // spoken, so an empty transcript is the honest result.
-      final engine = SherpaParakeetSttEngine(
-        modelDirectoryPath: stubModelDirectory().path,
-        workerEntryPoint: emptyAudioWorker,
-      );
+  group('parakeetAudioRefusal', () {
+    // The production worker asks this before touching the recognizer.
+    // Handing either case to sherpa aborts the process natively, which
+    // Dart cannot catch: the app vanishes with no error and no history
+    // entry. Both were proved against the real library — zero samples
+    // dies with 'Invalid input shape: {0,128}', and a zero sample rate
+    // dies building a resampler, the c0000094 divide-by-zero in the field
+    // report.
+    test('silence is refused as an empty transcript', () {
+      expect(parakeetAudioRefusal(sampleCount: 0, sampleRate: 16000), isEmpty);
+    });
 
-      final transcript = await engine.transcribe(
-        const AudioRecording(path: 'silent.wav', duration: Duration.zero),
-      );
+    test('an unreadable recording is refused as a real failure', () {
+      // readWave reports sampleRate 0 for a missing, empty or truncated
+      // file. That is not silence: the user should be able to retry it
+      // from History rather than be told they said nothing.
+      final reason = parakeetAudioRefusal(sampleCount: 0, sampleRate: 0);
+      expect(reason, isNotEmpty);
+      expect(reason, contains('could not be read'));
+    });
 
-      expect(transcript, isEmpty);
-      await engine.shutdown();
-    },
-  );
+    test('a normal recording is allowed through', () {
+      expect(
+        parakeetAudioRefusal(sampleCount: 16000, sampleRate: 16000),
+        isNull,
+      );
+    });
+
+    test('short audio is allowed through', () {
+      // A 10ms clip decodes fine against the real recognizer; only zero
+      // is fatal, so the guard must not reject short audio.
+      expect(parakeetAudioRefusal(sampleCount: 160, sampleRate: 16000), isNull);
+    });
+  });
 }

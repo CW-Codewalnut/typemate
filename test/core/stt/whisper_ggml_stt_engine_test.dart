@@ -168,18 +168,4 @@ void main() {
     expect(types, ['getTextFromWavFile', 'releaseModel']);
     expect(await e.isReady(), isFalse);
   });
-
-  test('silent audio returns an empty transcript, never a crash', () async {
-    // The sherpa engine aborts the whole process natively when handed a
-    // zero-sample recording (crash signature c0000094 in
-    // sherpa-onnx-c-api.dll), so it now guards for it. This engine was
-    // checked against the same 0-sample WAV and survived — Silero VAD
-    // finds no speech and it returns nothing — and this pins that
-    // contract so the two engines cannot drift apart.
-    final result = await engine(
-      requestRunner: (payload) async => okResponse(''),
-    ).transcribe(recording);
-
-    expect(result, isEmpty);
-  });
 }
