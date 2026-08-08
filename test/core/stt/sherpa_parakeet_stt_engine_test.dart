@@ -16,6 +16,21 @@ import 'package:typemate/src/core/stt/whisper_cli_stt_engine.dart'
 /// over FFI and cannot run in a unit test — so injecting it is the only way
 /// to exercise the engine's own lifecycle rather than a hand-written mock
 /// of it.
+/// Mirrors the production worker's empty-audio guard, so the engine's
+/// contract for a silent recording is pinned even though the real
+/// recognizer cannot run in a unit test.
+void emptyAudioWorker(SherpaWorkerInit init) {
+  final commands = ReceivePort();
+  init.readyPort.send(commands.sendPort);
+  commands.listen((message) {
+    if (message is SherpaTranscribeRequest) {
+      // The real worker returns '' rather than handing zero samples to
+      // the recognizer, which aborts the process natively.
+      message.replyPort.send('');
+    }
+  });
+}
+
 void fakeWorker(SherpaWorkerInit init) {
   final events = IsolateNameServer.lookupPortByName(init.modelDirectoryPath);
   final commands = ReceivePort();
@@ -178,4 +193,27 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(await engine.isReady(), isFalse);
   });
+
+  test(
+    'a recording with no audio yields an empty transcript, not a crash',
+    () async {
+      // Zero samples reaching the recognizer aborts the whole process
+      // inside sherpa-onnx-c-api (crash signature c0000094), which is
+      // uncatchable from Dart: the app vanishes with no error and no
+      // history entry. Reproduced with a 0-sample WAV through the real
+      // engine before the guard existed; the tool exited 127. Nothing was
+      // spoken, so an empty transcript is the honest result.
+      final engine = SherpaParakeetSttEngine(
+        modelDirectoryPath: stubModelDirectory().path,
+        workerEntryPoint: emptyAudioWorker,
+      );
+
+      final transcript = await engine.transcribe(
+        const AudioRecording(path: 'silent.wav', duration: Duration.zero),
+      );
+
+      expect(transcript, isEmpty);
+      await engine.shutdown();
+    },
+  );
 }

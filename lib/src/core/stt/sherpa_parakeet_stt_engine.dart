@@ -310,6 +310,19 @@ Future<void> _workerMain(SherpaWorkerInit init) async {
     }
     try {
       final wave = sherpa_onnx.readWave(message.wavPath);
+      // A recording with no samples KILLS THE PROCESS. The encoder runs a
+      // convolution over the feature frames, and zero frames reaches
+      // native code as an invalid shape / divide by zero inside
+      // sherpa-onnx-c-api — an abort Dart cannot catch, so the whole app
+      // vanishes with no error and no history entry. Reachable in
+      // practice: pressing the shortcut before the mic has produced
+      // anything (seen right after a first-run model download, crash
+      // signature c0000094 in sherpa-onnx-c-api.dll). Nothing was spoken,
+      // so an empty transcript is the honest answer.
+      if (wave.samples.isEmpty) {
+        message.replyPort.send('');
+        continue;
+      }
       final stream = recognizer.createStream();
       stream.acceptWaveform(samples: wave.samples, sampleRate: wave.sampleRate);
       recognizer.decode(stream);

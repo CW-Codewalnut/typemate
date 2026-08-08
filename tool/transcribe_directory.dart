@@ -198,6 +198,12 @@ _Engine _sherpaEngine({
   return _Engine(
     transcribe: (wavPath) async {
       final wave = sherpa_onnx.readWave(wavPath);
+      // Zero samples aborts the process inside sherpa's native code, the
+      // same way it does in the app engine; a corpus clip that failed to
+      // convert should report itself, not kill the run.
+      if (wave.samples.isEmpty) {
+        return '';
+      }
       final stream = recognizer.createStream();
       stream.acceptWaveform(samples: wave.samples, sampleRate: wave.sampleRate);
       recognizer.decode(stream);
