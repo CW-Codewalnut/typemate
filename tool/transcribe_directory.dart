@@ -168,7 +168,13 @@ sherpa_onnx.OfflineModelConfig _modelConfig(
 class _Engine {
   const _Engine({required this.transcribe, required this.close});
 
-  final Future<String> Function(String wavPath) transcribe;
+  /// Null when the clip has no readable audio. It must NOT come back as
+  /// an empty string: the WER path would score that as a fully-wrong
+  /// transcript, so a batch of clips that failed to convert would quietly
+  /// inflate the error rate of whichever model is being measured. This
+  /// corpus is what model decisions are made on, so a silent scoring
+  /// corruption is worse than a loud skip.
+  final Future<String?> Function(String wavPath) transcribe;
   final Future<void> Function() close;
 }
 
@@ -200,23 +206,28 @@ _Engine _sherpaEngine({
     transcribe: (wavPath) async {
       final wave = sherpa_onnx.readWave(wavPath);
       // Degenerate audio aborts the process inside sherpa's native code,
-      // the same way it does in the app engine; a corpus clip that failed
-      // to convert should report itself, not kill the run. Checks the
-      // sample RATE too: an unreadable file is the case that actually
-      // crashes, and checking only for zero samples missed it.
-      if (waveAudioRefusal(
-            sampleCount: wave.samples.length,
-            sampleRate: wave.sampleRate,
-          ) !=
-          null) {
-        return '';
-      }
-      final stream = recognizer.createStream();
-      stream.acceptWaveform(samples: wave.samples, sampleRate: wave.sampleRate);
-      recognizer.decode(stream);
-      final text = recognizer.getResult(stream).text;
-      stream.free();
-      return text;
+      // the same way it does in the app engine, so a corpus clip that
+      // failed to convert would kill the whole run. Checks the sample RATE
+      // too: an unreadable file is the case that actually crashes, and
+      // checking only for zero samples missed it.
+      return runOnSafeWave<String?>(
+        sampleCount: wave.samples.length,
+        sampleRate: wave.sampleRate,
+        refuse: (_) => null,
+        run: () {
+          final stream = recognizer.createStream();
+          try {
+            stream.acceptWaveform(
+              samples: wave.samples,
+              sampleRate: wave.sampleRate,
+            );
+            recognizer.decode(stream);
+            return recognizer.getResult(stream).text;
+          } finally {
+            stream.free();
+          }
+        },
+      );
     },
     close: () async => recognizer.free(),
   );
@@ -322,6 +333,7 @@ Future<void> _runManifest(
   final errorsByDialect = <String, int>{};
   final wordsByDialect = <String, int>{};
   var missingAudio = 0;
+  var unreadableAudio = 0;
   var missingReference = 0;
   for (final clip in clips) {
     final wavPath = '$manifestDirectory/${clip['file']}';
@@ -342,6 +354,13 @@ Future<void> _runManifest(
     }
     final decodeStopwatch = Stopwatch()..start();
     final text = await engine.transcribe(wavPath);
+    if (text == null) {
+      // Loudly, and excluded from scoring: an empty hypothesis would be
+      // scored as a fully-wrong transcript and inflate this model's WER.
+      stderr.writeln('SKIPPED (no readable audio): ${clip['file']}');
+      unreadableAudio++;
+      continue;
+    }
     final errors = _editDistance(reference, _normalizedWords(text));
     final dialect = clip['dialect'] as String? ?? 'unknown';
     errorsByDialect[dialect] = (errorsByDialect[dialect] ?? 0) + errors;
@@ -358,10 +377,12 @@ Future<void> _runManifest(
       ..writeln('  got:      $text');
   }
 
-  final scored = clips.length - missingAudio - missingReference;
+  final scored =
+      clips.length - missingAudio - missingReference - unreadableAudio;
   if (wordsByDialect.isEmpty) {
     stderr.writeln(
       'No clip was scored for "$language": $missingAudio missing audio, '
+      '$unreadableAudio unreadable, '
       '$missingReference without a reference transcript.',
     );
     exitCode = 66;
@@ -388,7 +409,8 @@ Future<void> _runManifest(
   // The headline is only as broad as the clips behind it.
   stdout.writeln(
     'scored $scored of ${clips.length} clips '
-    '($missingAudio missing audio, $missingReference without a reference)',
+    '($missingAudio missing audio, $unreadableAudio unreadable, '
+    '$missingReference without a reference)',
   );
 }
 
@@ -410,7 +432,7 @@ Future<void> _runDirectories(_Engine engine, List<String> directories) async {
           'audio_s=${_wavSeconds(wavFile).toStringAsFixed(1)} '
           'decode_ms=${decodeStopwatch.elapsedMilliseconds}',
         )
-        ..writeln('  $text');
+        ..writeln('  ${text ?? 'SKIPPED (no readable audio)'}');
     }
   }
 }

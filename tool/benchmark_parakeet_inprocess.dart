@@ -79,7 +79,7 @@ Future<void> main(List<String> arguments) async {
     final wave = sherpa_onnx.readWave(wavPath);
     // Zero samples or an unreadable file aborts the process inside
     // sherpa's native code, the same way it does in the app engine.
-    if (waveAudioRefusal(
+    if (waveAudioProblem(
           sampleCount: wave.samples.length,
           sampleRate: wave.sampleRate,
         ) !=

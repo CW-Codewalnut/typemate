@@ -128,7 +128,7 @@ class SherpaParakeetSttEngine implements DisposableSttEngine {
       readyPort.first,
       died.future.then(
         // onExit sends null; onError sends [error, stackTrace].
-        (message) => _WorkerFailure(
+        (message) => SherpaWorkerFailure(
           message == null
               ? 'the model loader exited before the model finished loading '
                     '(possibly out of memory)'
@@ -182,7 +182,7 @@ class SherpaParakeetSttEngine implements DisposableSttEngine {
       replyPort.first,
       if (workerDied != null)
         workerDied.then(
-          (message) => _WorkerFailure(
+          (message) => SherpaWorkerFailure(
             message == null
                 ? 'the model loader exited during transcription'
                 : (message as List).first.toString(),
@@ -265,13 +265,49 @@ class SherpaShutdownRequest {
 
 /// Transcription failures cross the isolate boundary as this type so the
 /// caller can tell them apart from a successful transcript String.
-class _WorkerFailure {
-  const _WorkerFailure(this.message);
+///
+/// Public for the same reason the protocol classes are: it is what a
+/// refused request looks like, and a test has to be able to recognise one.
+class SherpaWorkerFailure {
+  const SherpaWorkerFailure(this.message);
 
   final String message;
 
   @override
   String toString() => message;
+}
+
+/// Handles one transcribe request: reads the WAV and decodes it, unless
+/// the audio is degenerate — in which case [decode] is never called, which
+/// is the entire point. Returns the transcript, `''` for silence, or a
+/// [SherpaWorkerFailure].
+///
+/// [readWave] and [decode] are parameters so this is reachable from a unit
+/// test: the real ones need a 654 MB model over FFI, and a guard that
+/// cannot be tested is how the denoiser stayed unguarded through the first
+/// fix. `WaveData` is a plain Dart class, so a test can hand this the
+/// exact shapes that abort natively.
+Object transcribeWaveRequest(
+  String wavPath, {
+  required sherpa_onnx.WaveData Function(String wavPath) readWave,
+  required String Function(sherpa_onnx.WaveData wave) decode,
+}) {
+  final wave = readWave(wavPath);
+  return runOnSafeWave<Object>(
+    sampleCount: wave.samples.length,
+    sampleRate: wave.sampleRate,
+    run: () => decode(wave),
+    refuse: (problem) => switch (problem) {
+      // Nothing was spoken: the honest answer, and what the caller turns
+      // into "Silent audio. Ready for the next dictation."
+      WaveAudioProblem.silent => '',
+      // A real failure the user can see, rather than being told they said
+      // nothing when the recording was lost.
+      WaveAudioProblem.unreadable => const SherpaWorkerFailure(
+        'the recording could not be read',
+      ),
+    },
+  );
 }
 
 Future<void> _workerMain(SherpaWorkerInit init) async {
@@ -294,7 +330,7 @@ Future<void> _workerMain(SherpaWorkerInit init) async {
       ),
     );
   } catch (error) {
-    init.readyPort.send(_WorkerFailure('$error'));
+    init.readyPort.send(SherpaWorkerFailure('$error'));
     return;
   }
 
@@ -310,30 +346,32 @@ Future<void> _workerMain(SherpaWorkerInit init) async {
       continue;
     }
     try {
-      final wave = sherpa_onnx.readWave(message.wavPath);
-      final refusal = waveAudioRefusal(
-        sampleCount: wave.samples.length,
-        sampleRate: wave.sampleRate,
+      // Every decision about whether to touch the recognizer lives in
+      // transcribeWaveRequest, which is tested. This is only the wiring:
+      // the real readWave and the real FFI decode.
+      message.replyPort.send(
+        transcribeWaveRequest(
+          message.wavPath,
+          readWave: sherpa_onnx.readWave,
+          decode: (wave) {
+            final stream = recognizer.createStream();
+            try {
+              stream.acceptWaveform(
+                samples: wave.samples,
+                sampleRate: wave.sampleRate,
+              );
+              recognizer.decode(stream);
+              return recognizer.getResult(stream).text;
+            } finally {
+              // Freed on every path: the failure path used to leak a
+              // native stream for the life of the isolate.
+              stream.free();
+            }
+          },
+        ),
       );
-      if (refusal != null) {
-        message.replyPort.send(refusal.isEmpty ? '' : _WorkerFailure(refusal));
-        continue;
-      }
-      final stream = recognizer.createStream();
-      try {
-        stream.acceptWaveform(
-          samples: wave.samples,
-          sampleRate: wave.sampleRate,
-        );
-        recognizer.decode(stream);
-        message.replyPort.send(recognizer.getResult(stream).text);
-      } finally {
-        // Freed on every path: the failure path used to leak a native
-        // stream for the life of the isolate.
-        stream.free();
-      }
     } catch (error) {
-      message.replyPort.send(_WorkerFailure('$error'));
+      message.replyPort.send(SherpaWorkerFailure('$error'));
     }
   }
   // Free BEFORE acknowledging: the whole point of the handshake is that the
