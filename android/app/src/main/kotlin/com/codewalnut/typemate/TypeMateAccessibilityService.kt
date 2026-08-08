@@ -608,6 +608,29 @@ class TypeMateAccessibilityService : AccessibilityService() {
     /// whole content, so the existing text is read and re-written with the
     /// transcript joined on; fields that refuse SET_TEXT get a clipboard
     /// paste instead.
+    // What the user has actually typed, as opposed to the field's
+    // placeholder.
+    //
+    // isShowingHintText alone is not enough: some apps render their
+    // placeholder as the node's own text without setting that flag, so it
+    // arrives looking exactly like typed content. WhatsApp is one — its
+    // "Message" placeholder was treated as existing text, and dictation
+    // merged into it, producing "Message, the actual message" instead of
+    // "the actual message". Comparing against the declared hint catches
+    // that, and only when the two match exactly, so a user who really did
+    // type the same word as the placeholder keeps it.
+    private fun existingTextOf(node: AccessibilityNodeInfo): String {
+        if (node.isShowingHintText) {
+            return ""
+        }
+        val text = node.text?.toString().orEmpty()
+        val hint = node.hintText?.toString().orEmpty()
+        if (text.isNotEmpty() && text == hint) {
+            return ""
+        }
+        return text
+    }
+
     private fun insertTranscript(transcript: String) {
         val node = focusedEditableNode()
         if (node == null) {
@@ -615,8 +638,7 @@ class TypeMateAccessibilityService : AccessibilityService() {
             return
         }
         node.refresh()
-        val current =
-            if (node.isShowingHintText) "" else node.text?.toString().orEmpty()
+        val current = existingTextOf(node)
         val merged = when {
             current.isEmpty() -> transcript
             current.endsWith(" ") || current.endsWith("\n") ->
