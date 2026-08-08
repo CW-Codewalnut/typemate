@@ -573,7 +573,7 @@ class DictationController extends ChangeNotifier {
   }
 
   String _normalizeTranscript(String transcript) {
-    final normalized = transcript.trim();
+    final normalized = normalizeTranscript(transcript);
     if (normalized.isEmpty || isSilentAudioTranscript(normalized)) {
       return '';
     }

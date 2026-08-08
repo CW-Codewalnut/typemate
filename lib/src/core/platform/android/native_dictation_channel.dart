@@ -141,8 +141,13 @@ class NativeDictationHandler {
     }
     try {
       final timeout = _timeoutFor(recording.duration);
-      final transcript = (await engine.transcribe(recording).timeout(timeout))
-          .trim();
+      // The floating mic does NOT go through DictationController, so it
+      // needs the same normalization applied there: this is the path that
+      // inserts into other apps, where a line break is read as SEND and
+      // would fire off a half-typed message.
+      final transcript = normalizeTranscript(
+        await engine.transcribe(recording).timeout(timeout),
+      );
       if (isSilentAudioTranscript(transcript)) {
         return '';
       }

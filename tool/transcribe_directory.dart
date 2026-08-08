@@ -37,6 +37,7 @@ import 'dart:typed_data';
 
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa_onnx;
 import 'package:typemate/src/core/audio/audio_recorder.dart';
+import 'package:typemate/src/core/audio/wave_audio_guard.dart';
 import 'package:typemate/src/core/stt/whisper_ggml_stt_engine.dart';
 
 /// The sherpa_onnx_windows copy THIS project resolved, read from the
@@ -167,7 +168,13 @@ sherpa_onnx.OfflineModelConfig _modelConfig(
 class _Engine {
   const _Engine({required this.transcribe, required this.close});
 
-  final Future<String> Function(String wavPath) transcribe;
+  /// Null when the clip has no readable audio. It must NOT come back as
+  /// an empty string: the WER path would score that as a fully-wrong
+  /// transcript, so a batch of clips that failed to convert would quietly
+  /// inflate the error rate of whichever model is being measured. This
+  /// corpus is what model decisions are made on, so a silent scoring
+  /// corruption is worse than a loud skip.
+  final Future<String?> Function(String wavPath) transcribe;
   final Future<void> Function() close;
 }
 
@@ -198,12 +205,29 @@ _Engine _sherpaEngine({
   return _Engine(
     transcribe: (wavPath) async {
       final wave = sherpa_onnx.readWave(wavPath);
-      final stream = recognizer.createStream();
-      stream.acceptWaveform(samples: wave.samples, sampleRate: wave.sampleRate);
-      recognizer.decode(stream);
-      final text = recognizer.getResult(stream).text;
-      stream.free();
-      return text;
+      // Degenerate audio aborts the process inside sherpa's native code,
+      // the same way it does in the app engine, so a corpus clip that
+      // failed to convert would kill the whole run. Checks the sample RATE
+      // too: an unreadable file is the case that actually crashes, and
+      // checking only for zero samples missed it.
+      return runOnSafeWave<String?>(
+        sampleCount: wave.samples.length,
+        sampleRate: wave.sampleRate,
+        refuse: (_) => null,
+        run: () {
+          final stream = recognizer.createStream();
+          try {
+            stream.acceptWaveform(
+              samples: wave.samples,
+              sampleRate: wave.sampleRate,
+            );
+            recognizer.decode(stream);
+            return recognizer.getResult(stream).text;
+          } finally {
+            stream.free();
+          }
+        },
+      );
     },
     close: () async => recognizer.free(),
   );
@@ -229,23 +253,55 @@ Future<_Engine> _whisperGgmlEngine({
   );
 }
 
+/// The fields of a PCM WAV header that matter here, or null when the file
+/// is too short, unopenable or malformed to parse — which is exactly the
+/// state that comes back with sampleRate 0 and aborts the native engines.
+({int sampleRate, int bytesPerFrame})? _wavHeader(File file) {
+  RandomAccessFile? handle;
+  try {
+    if (!file.existsSync() || file.lengthSync() < 44) {
+      return null;
+    }
+    // Opened inside the try: a file that vanished or is unreadable between
+    // the check and the open must skip the clip, not kill the run.
+    handle = file.openSync()..setPositionSync(0);
+    final bytes = ByteData.sublistView(handle.readSync(44));
+    return (
+      sampleRate: bytes.getUint32(24, Endian.little),
+      bytesPerFrame:
+          bytes.getUint16(22, Endian.little) *
+          (bytes.getUint16(34, Endian.little) ~/ 8),
+    );
+  } catch (_) {
+    return null;
+  } finally {
+    handle?.closeSync();
+  }
+}
+
+/// Whether a WAV is too degenerate to hand to any engine — engine-agnostic
+/// on purpose.
+///
+/// The sherpa engines abort the PROCESS on this input rather than failing,
+/// and whisper has no such guard of its own, so the check has to happen
+/// before dispatch: guarding only the sherpa path left every Hindi,
+/// Hinglish and Tamil clip able to be scored as a fully-wrong hypothesis.
+bool _unreadableWav(File file) {
+  final header = _wavHeader(file);
+  return header == null ||
+      header.sampleRate == 0 ||
+      header.bytesPerFrame == 0 ||
+      file.lengthSync() <= 44;
+}
+
 /// Seconds of audio in a PCM WAV, from its header — engine-agnostic, so
 /// both runners can report it.
 double _wavSeconds(File file) {
-  final header = file.openSync()..setPositionSync(0);
-  try {
-    final bytes = ByteData.sublistView(header.readSync(44));
-    final channels = bytes.getUint16(22, Endian.little);
-    final sampleRate = bytes.getUint32(24, Endian.little);
-    final bitsPerSample = bytes.getUint16(34, Endian.little);
-    final bytesPerFrame = channels * (bitsPerSample ~/ 8);
-    if (sampleRate == 0 || bytesPerFrame == 0) {
-      return 0;
-    }
-    return (file.lengthSync() - 44) / (sampleRate * bytesPerFrame);
-  } finally {
-    header.closeSync();
+  final header = _wavHeader(file);
+  if (header == null || header.sampleRate == 0 || header.bytesPerFrame == 0) {
+    return 0;
   }
+  return (file.lengthSync() - 44) / (header.sampleRate * header.bytesPerFrame);
 }
 
 /// Lowercases, strips punctuation, and splits into words so WER measures
@@ -309,12 +365,22 @@ Future<void> _runManifest(
   final errorsByDialect = <String, int>{};
   final wordsByDialect = <String, int>{};
   var missingAudio = 0;
+  var unreadableAudio = 0;
   var missingReference = 0;
   for (final clip in clips) {
     final wavPath = '$manifestDirectory/${clip['file']}';
     if (!File(wavPath).existsSync()) {
       stderr.writeln('SKIPPED (audio missing): ${clip['file']}');
       missingAudio++;
+      continue;
+    }
+    // Before dispatch, so it covers every engine: an empty hypothesis is
+    // scored as a fully-wrong transcript, and a batch of clips that failed
+    // to convert would quietly inflate the error rate of whichever model
+    // is being measured.
+    if (_unreadableWav(File(wavPath))) {
+      stderr.writeln('SKIPPED (no readable audio): ${clip['file']}');
+      unreadableAudio++;
       continue;
     }
     // Clips with no reference (or one that normalizes to nothing) cannot
@@ -329,6 +395,13 @@ Future<void> _runManifest(
     }
     final decodeStopwatch = Stopwatch()..start();
     final text = await engine.transcribe(wavPath);
+    if (text == null) {
+      // Loudly, and excluded from scoring: an empty hypothesis would be
+      // scored as a fully-wrong transcript and inflate this model's WER.
+      stderr.writeln('SKIPPED (no readable audio): ${clip['file']}');
+      unreadableAudio++;
+      continue;
+    }
     final errors = _editDistance(reference, _normalizedWords(text));
     final dialect = clip['dialect'] as String? ?? 'unknown';
     errorsByDialect[dialect] = (errorsByDialect[dialect] ?? 0) + errors;
@@ -345,10 +418,12 @@ Future<void> _runManifest(
       ..writeln('  got:      $text');
   }
 
-  final scored = clips.length - missingAudio - missingReference;
+  final scored =
+      clips.length - missingAudio - missingReference - unreadableAudio;
   if (wordsByDialect.isEmpty) {
     stderr.writeln(
       'No clip was scored for "$language": $missingAudio missing audio, '
+      '$unreadableAudio unreadable, '
       '$missingReference without a reference transcript.',
     );
     exitCode = 66;
@@ -375,7 +450,8 @@ Future<void> _runManifest(
   // The headline is only as broad as the clips behind it.
   stdout.writeln(
     'scored $scored of ${clips.length} clips '
-    '($missingAudio missing audio, $missingReference without a reference)',
+    '($missingAudio missing audio, $unreadableAudio unreadable, '
+    '$missingReference without a reference)',
   );
 }
 
@@ -389,6 +465,12 @@ Future<void> _runDirectories(_Engine engine, List<String> directories) async {
             .toList()
           ..sort((a, b) => a.path.compareTo(b.path));
     for (final wavFile in wavFiles) {
+      if (_unreadableWav(wavFile)) {
+        stdout.writeln(
+          'clip=${wavFile.uri.pathSegments.last} SKIPPED (no readable audio)',
+        );
+        continue;
+      }
       final decodeStopwatch = Stopwatch()..start();
       final text = await engine.transcribe(wavFile.path);
       stdout
@@ -397,7 +479,7 @@ Future<void> _runDirectories(_Engine engine, List<String> directories) async {
           'audio_s=${_wavSeconds(wavFile).toStringAsFixed(1)} '
           'decode_ms=${decodeStopwatch.elapsedMilliseconds}',
         )
-        ..writeln('  $text');
+        ..writeln('  ${text ?? 'SKIPPED (no readable audio)'}');
     }
   }
 }

@@ -50,6 +50,27 @@ void main() {
     expect(recorder.calls, ['start', 'stop']);
   });
 
+  test('a transcript never carries a line break into the field', () async {
+    // A newline is not text to whatever receives it: chat boxes, search
+    // fields and address bars read it as SEND, so a two-line transcript
+    // fires the message off mid-sentence instead of typing it. Reported
+    // in WhatsApp on Android. Dictation is one utterance, so collapsing
+    // to spaces loses nothing.
+    final bridge = MockPlatformBridge();
+    final controller = DictationController(
+      platformBridge: bridge,
+      sttEngine: FakeSttEngine(transcript: 'first line\nsecond line'),
+      audioRecorder: FakeAudioRecorder(),
+    );
+
+    await controller.startListening();
+    await controller.stopListening();
+
+    expect(controller.latestTranscript, 'first line second line');
+    expect(bridge.lastInsertedText, isNot(contains('\n')));
+    expect(bridge.lastInsertedText, 'first line second line');
+  });
+
   test('markReady shows ready without loading the engine', () async {
     final engine = FakeSttEngine();
     final controller = DictationController(

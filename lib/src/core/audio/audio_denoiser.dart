@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa_onnx;
 
 import 'audio_recorder.dart';
+import 'wave_audio_guard.dart';
 
 /// Cleans steady background noise out of a finished recording before it is
 /// transcribed. Implementations never throw and never lose the recording:
@@ -127,6 +128,35 @@ void _denoiseEntryPoint(_DenoiseRequest request) {
   request.donePort.send(null);
 }
 
+/// Reads [wavPath] and hands it to [run] only when the audio is safe for
+/// native code; throws otherwise, without ever calling [run].
+///
+/// GTCRN runs BEFORE transcription and noise suppression is on by default,
+/// so this is the first native code a bad recording reaches — guarding only
+/// the recognizer left the reported crash exactly where it was. The throw
+/// is caught by [SherpaGtcrnAudioDenoiser.denoise], which falls back to the
+/// raw recording, so nothing is lost.
+///
+/// [readWave] and [run] are parameters so this is reachable from a unit
+/// test: the real ones need the GTCRN model over FFI.
+@visibleForTesting
+T denoiseSafeWave<T>(
+  String wavPath, {
+  required sherpa_onnx.WaveData Function(String wavPath) readWave,
+  required T Function(sherpa_onnx.WaveData wave) run,
+}) {
+  final wave = readWave(wavPath);
+  return runOnSafeWave<T>(
+    sampleCount: wave.samples.length,
+    sampleRate: wave.sampleRate,
+    run: () => run(wave),
+    refuse: (problem) => throw StateError(switch (problem) {
+      WaveAudioProblem.silent => 'the recording contains no audio',
+      WaveAudioProblem.unreadable => 'the recording could not be read',
+    }),
+  );
+}
+
 void _denoiseInPlace(String modelPath, String wavPath) {
   sherpa_onnx.initBindings();
   final denoiser = sherpa_onnx.OfflineSpeechDenoiser(
@@ -139,10 +169,12 @@ void _denoiseInPlace(String modelPath, String wavPath) {
     ),
   );
   try {
-    final wave = sherpa_onnx.readWave(wavPath);
-    final denoised = denoiser.run(
-      samples: wave.samples,
-      sampleRate: wave.sampleRate,
+    // Only the wiring lives here; the guard is in denoiseSafeWave.
+    final denoised = denoiseSafeWave(
+      wavPath,
+      readWave: sherpa_onnx.readWave,
+      run: (wave) =>
+          denoiser.run(samples: wave.samples, sampleRate: wave.sampleRate),
     );
     if (denoised.samples.isEmpty) {
       throw StateError('the denoiser produced no audio');
