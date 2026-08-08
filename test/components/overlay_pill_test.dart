@@ -1,0 +1,205 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:typemate/src/core/dictation_controller.dart';
+import 'package:typemate/src/core/platform/overlay/overlay_window.dart';
+import 'package:typemate/src/components/overlay_pill.dart';
+import 'package:typemate/src/core/platform/overlay/overlay_variant.dart';
+
+void main() {
+  Future<void> pump(
+    WidgetTester tester, {
+    required OverlayVariant variant,
+    required String message,
+    bool? paintsEdgeToEdge,
+  }) {
+    return tester.pumpWidget(
+      OverlayWindowApp(
+        initialVariant: variant,
+        initialMessage: message,
+        connectChannel: false,
+        paintsEdgeToEdge: paintsEdgeToEdge,
+      ),
+    );
+  }
+
+  /// The pill's effective colour on any platform: Linux paints it on
+  /// the root Material (the X11 shape supplies the corners), the others
+  /// on a rounded Container inside the chroma backdrop.
+  Color pillColor(WidgetTester tester) {
+    for (final container in tester.widgetList<Container>(
+      find.byType(Container),
+    )) {
+      final decoration = container.decoration;
+      if (decoration is BoxDecoration && decoration.color != null) {
+        return decoration.color!;
+      }
+    }
+    return tester.widgetList<Material>(find.byType(Material)).first.color!;
+  }
+
+  testWidgets('working variant shows the caller label with bars', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      variant: OverlayVariant.working,
+      message: 'TypeMate is listening...',
+    );
+
+    expect(find.text('TypeMate is listening...'), findsOneWidget);
+
+    // Fresh tree: the message is initial state, not a prop update.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await pump(
+      tester,
+      variant: OverlayVariant.working,
+      message: 'Transcribing locally...',
+    );
+    expect(find.text('Transcribing locally...'), findsOneWidget);
+    // Cap the bars animation timer before the test ends.
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('info guidance renders on the primary pill, not red', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      variant: OverlayVariant.info,
+      message: 'Please download the speech model first.',
+    );
+
+    expect(
+      find.text('Please download the speech model first.'),
+      findsOneWidget,
+    );
+    expect(pillColor(tester), const OverlayTheme.native().pillBackground);
+  });
+
+  testWidgets('the capsule hugs its message instead of the window', (
+    tester,
+  ) async {
+    // The overlay window is 360x92 for text pills; a one-line message
+    // must not inflate the capsule to fill it (a Center inside the pill
+    // used to do exactly that, padding the text on all four sides).
+    tester.view.physicalSize = const Size(360, 92);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await pump(
+      tester,
+      variant: OverlayVariant.info,
+      message: 'Please download the speech model first.',
+      // The capsule layout, whatever host the suite runs on.
+      paintsEdgeToEdge: false,
+    );
+
+    final capsule = find.ancestor(
+      of: find.text('Please download the speech model first.'),
+      matching: find.byType(Container),
+    );
+    // Asserted before measuring: getSize on a finder matching several
+    // widgets fails with a confusing "matched multiple" error instead of
+    // saying the tree gained a wrapper.
+    expect(capsule, findsOneWidget);
+    final pill = tester.getSize(capsule);
+    final text = tester.getSize(
+      find.text('Please download the speech model first.'),
+    );
+    // 10px vertical / 18px horizontal padding, and nothing more.
+    expect(pill.height, text.height + 20);
+    expect(pill.width, text.width + 36);
+    expect(pill.height, lessThan(92));
+  });
+
+  testWidgets('the edge-to-edge pill fills the window and centres its text', (
+    tester,
+  ) async {
+    // Linux draws no capsule: the X11 shape cuts the window itself to the
+    // pill outline, so the Material paints to every edge and the message
+    // centres inside it. Exercised here explicitly because a host-only
+    // branch is otherwise unreachable until CI runs it.
+    tester.view.physicalSize = const Size(360, 92);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await pump(
+      tester,
+      variant: OverlayVariant.info,
+      message: 'Please download the speech model first.',
+      paintsEdgeToEdge: true,
+    );
+
+    expect(
+      find.descendant(
+        of: find.byType(Material),
+        matching: find.byType(Container),
+      ),
+      findsNothing,
+      reason: 'a capsule would show as a border once X11 shapes the window',
+    );
+    expect(tester.getSize(find.byType(Material)), const Size(360, 92));
+    final textCentre = tester.getCenter(
+      find.text('Please download the speech model first.'),
+    );
+    expect(textCentre.dy, closeTo(46, 0.01));
+  });
+
+  testWidgets('only the error variant renders the red pill', (tester) async {
+    await pump(
+      tester,
+      variant: OverlayVariant.error,
+      message: "Couldn't capture your voice.",
+    );
+
+    expect(find.text("Couldn't capture your voice."), findsOneWidget);
+    expect(pillColor(tester), const OverlayTheme.native().errorBackground);
+  });
+
+  testWidgets('a large system text scale cannot overflow the window', (
+    tester,
+  ) async {
+    // The window is measured in the MAIN engine at scale 1.0 and cannot
+    // see this engine's scaler, so an OS setting of 1.3x would render four
+    // lines into a window sized for four smaller ones — the pill fills it
+    // and we are back to the bug the capsule fix removed. The pill pins
+    // its own scale so measurement and render agree by construction.
+    const message = DictationController.insertionFailedMessage;
+    final windowHeight = OverlayWindow.textPillHeightFor(message);
+    tester.view.physicalSize = Size(
+      OverlayWindow.textPillWidth.toDouble(),
+      windowHeight.toDouble(),
+    );
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    // Set on the dispatcher, not via a wrapping MediaQuery: MaterialApp
+    // builds its own MediaQuery from the view, so a wrapper is ignored and
+    // the test would pass with or without the fix.
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await tester.pumpWidget(
+      const OverlayWindowApp(
+        initialVariant: OverlayVariant.error,
+        initialMessage: message,
+        connectChannel: false,
+        paintsEdgeToEdge: false,
+      ),
+    );
+
+    // Assert the rendered scaler, not the laid-out size: layout clamps the
+    // capsule to the window, so a size check can never fail even when the
+    // text overflows it. The scaler is what actually decides whether the
+    // render matches what the main engine measured.
+    final rendered = tester.widget<RichText>(
+      find.descendant(of: find.text(message), matching: find.byType(RichText)),
+    );
+    expect(
+      rendered.textScaler,
+      TextScaler.noScaling,
+      reason: 'the pill must render at the scale the window was sized for',
+    );
+    expect(windowHeight, greaterThan(0));
+  });
+}

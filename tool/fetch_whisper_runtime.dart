@@ -1,7 +1,10 @@
 import 'dart:io';
 
+import 'package:typemate/src/core/stt/speech_model_revisions.dart';
+
 /// Provisions the speech runtimes that ship with TypeMate:
-/// - models/parakeet-tdt-0.6b-v3-int8/ (English, in-process engine)
+/// - models/parakeet-unified-en-0.6b-int8/ (English, in-process engine)
+/// - models/parakeet-tdt-0.6b-v3-int8/ (24 multilingual languages)
 /// - models/ggml-small-vaani-hindi-q6.bin (Hindi, Vaani fine-tune)
 /// - models/ggml-hindi2hinglish-swift.bin (Hinglish, Oriserve Swift)
 /// - models/ggml-silero-v5.1.2.bin (VAD)
@@ -13,12 +16,12 @@ import 'dart:io';
 /// (they download on first use per selected language); dev builds keep
 /// everything bundled so nothing downloads at runtime.
 ///
-/// Runtime revision 2026-08-04 — CI caches models/ and bin/ keyed on this
+/// Runtime revision 2026-08-07 — CI caches models/ and bin/ keyed on this
 /// file's hash, so bump this line whenever a hosted binary is replaced
-/// under the same asset name (this revision: no speech binaries are
-/// fetched at all — Parakeet, the whisper fine-tunes, and the GTCRN
-/// denoiser all run in-process via plugins; bin/ only remains on Linux
-/// for ffmpeg and xdotool; the overlay is a Flutter window now).
+/// under the same asset name (this revision: English moves to the
+/// dedicated parakeet-unified-en-0.6b model — accent-robust,
+/// corpus-verified — while v3 keeps the 24 multilingual languages; both
+/// fetch here).
 ///
 /// TYPEMATE_FETCH_SKIP_LARGE_MODELS=1 skips the multi-hundred-MB models
 /// that only real dictation needs. CI e2e sets it: those runs inject mock
@@ -43,10 +46,43 @@ class _ModelSpec {
   final bool large;
 }
 
+// The revisions come from speech_model_revisions.dart, the same consts the
+// catalog pins its SHA-256s to, so the two can never drift: a bundled copy
+// always wins over downloading, and fetching `main` here would let a dev
+// checkout or a release bundle carry different bytes from what users
+// download and what the corpus benchmark validated. That file imports
+// nothing, which is why this tool can reach it under plain `dart run`
+// (the catalog itself pulls in package:flutter through the provisioner).
 const _parakeetBaseUrl =
-    'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main';
+    'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/$parakeetMultilingualModelRevision';
+const _parakeetEnglishBaseUrl =
+    'https://huggingface.co/csukuangfj2/sherpa-onnx-nemo-parakeet-unified-en-0.6b-int8-non-streaming/resolve/$parakeetEnglishModelRevision';
 
 const _models = [
+  _ModelSpec(
+    'parakeet-unified-en-0.6b-int8/encoder.int8.onnx',
+    '$_parakeetEnglishBaseUrl/encoder.int8.onnx',
+    654040552,
+    large: true,
+  ),
+  _ModelSpec(
+    'parakeet-unified-en-0.6b-int8/decoder.int8.onnx',
+    '$_parakeetEnglishBaseUrl/decoder.int8.onnx',
+    7257753,
+    large: true,
+  ),
+  _ModelSpec(
+    'parakeet-unified-en-0.6b-int8/joiner.int8.onnx',
+    '$_parakeetEnglishBaseUrl/joiner.int8.onnx',
+    1735860,
+    large: true,
+  ),
+  _ModelSpec(
+    'parakeet-unified-en-0.6b-int8/tokens.txt',
+    '$_parakeetEnglishBaseUrl/tokens.txt',
+    8952,
+    large: true,
+  ),
   _ModelSpec(
     'parakeet-tdt-0.6b-v3-int8/encoder.int8.onnx',
     '$_parakeetBaseUrl/encoder.int8.onnx',

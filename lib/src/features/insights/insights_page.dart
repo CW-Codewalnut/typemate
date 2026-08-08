@@ -15,7 +15,12 @@ class InsightsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final stats = InsightsStats.fromEntries(historyController.entries);
+    // Successful entries only: a failed dictation has no text, so counting
+    // it deflates words-per-session, and a day of nothing but failures
+    // would land in the activity map with 0 words and extend the streak.
+    final stats = InsightsStats.fromEntries(
+      historyController.successfulEntries,
+    );
 
     return ContentPageShell(
       scrollKey: const Key('insights-page'),

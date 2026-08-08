@@ -26,6 +26,30 @@ void main() {
     expect(controller.statusMessage, contains('Ready'));
   });
 
+  test('a release during start never leaves an unowned recorder', () async {
+    // startListening sets the phase and _activeRecorder synchronously, then
+    // suspends on the overlay before recorder.start(). A release in that
+    // window used to stop a recorder that had not begun and null the field,
+    // after which the suspended start opened one nothing would ever close —
+    // on Android, a live mic indicator after the user let go. Order is what
+    // matters: both calls happen either way, but 'stop' must not precede
+    // 'start'.
+    final overlayGate = Completer<void>();
+    final recorder = OrderedFakeAudioRecorder();
+    final controller = DictationController(
+      platformBridge: GatedOverlayPlatformBridge(overlayGate.future),
+      sttEngine: FakeSttEngine(),
+      audioRecorder: recorder,
+    );
+
+    final start = controller.startListening();
+    final stop = controller.stopListening();
+    overlayGate.complete();
+    await Future.wait([start, stop]);
+
+    expect(recorder.calls, ['start', 'stop']);
+  });
+
   test('markReady shows ready without loading the engine', () async {
     final engine = FakeSttEngine();
     final controller = DictationController(
@@ -1033,6 +1057,38 @@ class FakeAudioRecorder implements AudioRecorder {
   Future<AudioRecording> stop() async {
     stopped = true;
     return recording;
+  }
+}
+
+/// Records the order of start/stop, so an inverted pair is visible — both
+/// calls happen either way.
+class OrderedFakeAudioRecorder implements AudioRecorder {
+  final List<String> calls = [];
+
+  @override
+  Future<void> start() async => calls.add('start');
+
+  @override
+  Future<AudioRecording> stop() async {
+    calls.add('stop');
+    return const AudioRecording(
+      path: 'preview.wav',
+      duration: Duration(milliseconds: 800),
+    );
+  }
+}
+
+/// Holds showListeningOverlay open, reproducing the suspension point where
+/// a release can overtake the press.
+class GatedOverlayPlatformBridge extends MockPlatformBridge {
+  GatedOverlayPlatformBridge(this.gate);
+
+  final Future<void> gate;
+
+  @override
+  Future<void> showListeningOverlay() async {
+    await gate;
+    return super.showListeningOverlay();
   }
 }
 

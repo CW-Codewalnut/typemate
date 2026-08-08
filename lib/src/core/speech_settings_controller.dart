@@ -92,7 +92,25 @@ class SpeechSettingsController extends ChangeNotifier {
     orElse: () => speechLanguageOptions.first,
   );
 
-  Future<void> load() async {
+  /// Coalesces overlapping calls: app bootstrap and the home screen each
+  /// ask for a load on launch, which read the file twice.
+  Future<void>? _loading;
+
+  Future<void> load() {
+    final inFlight = _loading;
+    if (inFlight != null) {
+      return inFlight;
+    }
+    final attempt = _load();
+    _loading = attempt;
+    return attempt.whenComplete(() {
+      if (identical(_loading, attempt)) {
+        _loading = null;
+      }
+    });
+  }
+
+  Future<void> _load() async {
     final snapshot = await store.load();
     _languageCode = snapshot.languageCode;
     _noiseSuppressionEnabled = snapshot.noiseSuppressionEnabled;

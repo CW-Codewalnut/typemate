@@ -93,7 +93,10 @@ void main() {
     expect(config.sampleRate, 16000);
     expect(config.numChannels, 1);
     expect(config.device?.id, '{device-id}');
-    expect(backend.startedPath, endsWith('typemate-20260717-103000.wav'));
+    // Milliseconds are part of the name: at second resolution two
+    // recordings started in the same second collide on one path and the
+    // second silently overwrites the first.
+    expect(backend.startedPath, endsWith('typemate-20260717-103000-000.wav'));
 
     final recording = await recorder.stop();
     expect(backend.stopped, isTrue);

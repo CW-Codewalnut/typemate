@@ -37,8 +37,9 @@ class SettingsPage extends StatelessWidget {
   /// Parakeet subset only).
   final List<SpeechLanguageOption> languageOptions;
 
-  /// Hidden on Android: the noise-suppression runtime is a desktop helper
-  /// binary, and a visible toggle must work.
+  /// Shown on every platform now that GTCRN runs in-process through the
+  /// sherpa_onnx plugin; the flag survives so a platform that cannot run
+  /// it can still hide the toggle, because a visible toggle must work.
   final bool showNoiseSuppression;
 
   /// Anonymous error-reporting consent; null or unavailable hides the

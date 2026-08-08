@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../audio/audio_recorder.dart';
 import 'stt_engine.dart';
 import 'whisper_cli_stt_engine.dart';
@@ -28,7 +30,15 @@ class LanguageRoutingSttEngine implements DisposableSttEngine {
     final active = _activeEngine;
     for (final engine in _allEngines) {
       if (!identical(engine, active) && engine is DisposableSttEngine) {
-        await engine.shutdown();
+        // Best effort: releasing an engine we are not about to use is a
+        // memory optimisation, so a failure there must not take down the
+        // dictation running on the active one. It used to propagate
+        // straight out of prepare()/transcribe().
+        try {
+          await engine.shutdown();
+        } catch (error) {
+          debugPrint('TypeMate: idle engine failed to shut down: $error');
+        }
       }
     }
     return active;

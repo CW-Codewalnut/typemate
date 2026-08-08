@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -86,7 +88,23 @@ class _ShortcutSettingsPanelState extends State<ShortcutSettingsPanel> {
       return;
     }
 
-    _saveRecordedShortcut();
+    unawaited(_saveRecordedShortcut());
+  }
+
+  /// Keeps recording (rather than saving) when the capture so far cannot
+  /// be a global shortcut, so a lone letter never becomes hold-to-talk.
+  bool _rejectRecorded() {
+    final reason = holdShortcutRejectionReason(
+      _recordedVirtualKeyCodes.toList(),
+    );
+    if (reason == null) {
+      return false;
+    }
+    setState(() {
+      _recordingLabel = reason;
+      _recordedVirtualKeyCodes.clear();
+    });
+    return true;
   }
 
   void _handleKeyEvent(KeyEvent event) {
@@ -109,19 +127,35 @@ class _ShortcutSettingsPanelState extends State<ShortcutSettingsPanel> {
     });
 
     if (_recordedVirtualKeyCodes.length >= 3) {
-      _saveRecordedShortcut();
+      unawaited(_saveRecordedShortcut());
     }
   }
 
-  void _saveRecordedShortcut() {
+  Future<void> _saveRecordedShortcut() async {
+    if (_rejectRecorded()) {
+      return;
+    }
     final shortcut = customHoldShortcutOption(
       _recordedVirtualKeyCodes.toList(),
     );
-    widget.controller.selectShortcutOption(shortcut);
     setState(() {
       _isRecording = false;
-      _recordingLabel = 'Recorded ${shortcut.label}.';
+      _recordingLabel = 'Saving ${shortcut.label}...';
       _recordedVirtualKeyCodes.clear();
+    });
+    // Awaited: re-registering can fail, and reporting "Recorded X" before
+    // it resolves claimed success while the old shortcut was still live.
+    await widget.controller.selectShortcutOption(shortcut);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      // selectShortcutOption reports failure by leaving `shortcut` alone
+      // and explaining itself in statusMessage, so surface that rather
+      // than a guess.
+      _recordingLabel = widget.controller.shortcut.id == shortcut.id
+          ? 'Recorded ${shortcut.label}.'
+          : widget.controller.statusMessage;
     });
   }
 }

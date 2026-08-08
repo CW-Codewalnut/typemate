@@ -211,7 +211,14 @@ class RecordPackageAudioRecorder implements AudioRecorder {
   static String _timestamp(DateTime value) {
     String two(int number) => number.toString().padLeft(2, '0');
 
+    // Milliseconds included: at second resolution two recordings started
+    // in the same second write to one path, and the second one silently
+    // overwrites the first. Normally unreachable, but a start/stop race
+    // can reach it.
+    String three(int number) => number.toString().padLeft(3, '0');
+
     return '${value.year}${two(value.month)}${two(value.day)}-'
-        '${two(value.hour)}${two(value.minute)}${two(value.second)}';
+        '${two(value.hour)}${two(value.minute)}${two(value.second)}'
+        '-${three(value.millisecond)}';
   }
 }

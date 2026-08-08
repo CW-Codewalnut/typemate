@@ -29,6 +29,24 @@ class DictationHistoryEntry {
 
   bool get isFailed => failureReason != null;
 
+  /// Value equality, so an entry captured before a `load()` rebuilt the
+  /// list still matches its reloaded twin. Identity matching made a
+  /// delete or retry from a stale widget silently do nothing, and
+  /// createdAt alone is not a key: two dictations can land in the same
+  /// millisecond.
+  @override
+  bool operator ==(Object other) =>
+      other is DictationHistoryEntry &&
+      other.text == text &&
+      other.createdAt == createdAt &&
+      other.duration == duration &&
+      other.failureReason == failureReason &&
+      other.recordingPath == recordingPath;
+
+  @override
+  int get hashCode =>
+      Object.hash(text, createdAt, duration, failureReason, recordingPath);
+
   Map<String, Object?> toJson() => {
     'text': text,
     'createdAt': createdAt.toIso8601String(),
@@ -162,7 +180,26 @@ class DictationHistoryController extends ChangeNotifier {
   int get averageWordsPerMinute =>
       calculateAverageWordsPerMinute(totalWords, totalDuration);
 
-  Future<void> load() async {
+  /// Coalesces overlapping calls: app bootstrap and the home screen each
+  /// ask for a load on launch, which read the file twice and produced two
+  /// notify storms. A caller already waiting gets the in-flight read.
+  Future<void>? _loading;
+
+  Future<void> load() {
+    final inFlight = _loading;
+    if (inFlight != null) {
+      return inFlight;
+    }
+    final attempt = _load();
+    _loading = attempt;
+    return attempt.whenComplete(() {
+      if (identical(_loading, attempt)) {
+        _loading = null;
+      }
+    });
+  }
+
+  Future<void> _load() async {
     _isLoading = true;
     notifyListeners();
     final loaded = await store.loadEntries();
@@ -233,7 +270,7 @@ class DictationHistoryController extends ChangeNotifier {
     _deleteRecordingQuietly(entry);
     _entries = [
       for (final existing in _entries)
-        if (!identical(existing, entry))
+        if (existing != entry)
           existing
         // Silence on retry means there is nothing worth keeping.
         else if (trimmed.isNotEmpty && !isSilentAudioTranscript(trimmed))
@@ -259,7 +296,7 @@ class DictationHistoryController extends ChangeNotifier {
     _deleteRecordingQuietly(entry);
     _entries = [
       for (final existing in _entries)
-        if (!identical(existing, entry)) existing,
+        if (existing != entry) existing,
     ];
     notifyListeners();
     await store.saveEntries(_entries);
@@ -273,7 +310,7 @@ class DictationHistoryController extends ChangeNotifier {
   ) async {
     _entries = [
       for (final existing in _entries)
-        if (identical(existing, entry))
+        if (existing == entry)
           DictationHistoryEntry(
             text: '',
             createdAt: entry.createdAt,

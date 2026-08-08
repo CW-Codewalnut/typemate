@@ -136,6 +136,14 @@ class DictationController extends ChangeNotifier {
       'Your text is ready but couldn\'t be typed into the app you were using. Copy it from History.';
 
   AudioRecorder? _activeRecorder;
+
+  /// The in-flight [startListening] work, so a release that beats the press
+  /// waits for the recorder to actually start before stopping it. The three
+  /// desktop shortcut registrars each suppress the release until the press
+  /// callback resolves, but the Dictate-tab mic tile and the Android
+  /// accessibility service both fire the two independently, so the
+  /// invariant belongs here rather than in each adapter by convention.
+  Future<void>? _startInFlight;
   DictationPhase _phase = DictationPhase.idle;
   String _latestTranscript = '';
   String _statusMessage = 'Ready to set up local dictation.';
@@ -229,6 +237,23 @@ class DictationController extends ChangeNotifier {
     _setPhase(DictationPhase.listening, 'Listening while shortcut is held...');
     _activeRecorder = recorder;
 
+    // Published so a release arriving mid-start waits for it. The phase and
+    // _activeRecorder are set synchronously above, but the recorder is only
+    // actually started after two awaits — a stop in that window used to
+    // stop a recorder that had not begun, null the field, and then let the
+    // suspended start run, leaving a live recorder nothing owns or disposes.
+    final starting = _beginRecording(recorder);
+    _startInFlight = starting;
+    try {
+      await starting;
+    } finally {
+      if (identical(_startInFlight, starting)) {
+        _startInFlight = null;
+      }
+    }
+  }
+
+  Future<void> _beginRecording(AudioRecorder recorder) async {
     try {
       await _platformBridge.showListeningOverlay();
       try {
@@ -256,6 +281,18 @@ class DictationController extends ChangeNotifier {
   /// [startListening] ignore every later shortcut press, which reads as
   /// "TypeMate keeps transcribing" with no error.
   Future<void> stopListening() async {
+    // Let an in-flight start finish first: stopping a recorder that has not
+    // begun leaves the suspended start to open one nothing will ever close.
+    // (_beginRecording handles its own failures, so this never throws; the
+    // catch is belt and braces against a future change.)
+    final starting = _startInFlight;
+    if (starting != null) {
+      try {
+        await starting;
+      } catch (_) {
+        // The failure has already been reported and the phase reset.
+      }
+    }
     if (_phase != DictationPhase.listening) {
       return;
     }

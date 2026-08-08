@@ -29,10 +29,13 @@ class SttModelFile {
   final String? expectedSha256;
 }
 
-/// Streams [file] to [target]. [resumeFromBytes] > 0 asks the server for
-/// the remainder (HTTP Range) and appends. [onProgress] reports the total
-/// bytes present in the file so far — including resumed bytes, and
-/// restarting from zero when the server ignored the range request.
+/// Streams [file] to [target]. [onProgress] reports the total bytes
+/// present in the file so far.
+///
+/// [resumeFromBytes] is a hint only: the production implementation ignores
+/// it, because background_downloader owns resume itself and downloads into
+/// its own temp area. Kept because the fake downloader in tests asserts on
+/// it; do not build behaviour on it being honoured.
 typedef SttModelFileDownloader =
     Future<void> Function(
       SttModelFile file,
@@ -151,6 +154,11 @@ class SttModelProvisioner extends SpeechModelProvisioner {
   /// A completed file must also still have the pinned revision's exact
   /// size: the validated rename guarantees it was right once, but this
   /// additionally catches outside interference with app storage.
+  ///
+  /// Size only, deliberately. The SHA-256 gate runs once, on the download
+  /// path, before the file is renamed into place — re-hashing 654 MB on
+  /// every launch would cost seconds for no new information, since a file
+  /// that passed the hash and has not changed size is the file we verified.
   bool _isIntact(SttModelFile file) {
     final target = _targetFor(file);
     return target.existsSync() && target.lengthSync() == file.expectedBytes;
@@ -460,6 +468,7 @@ Future<bool> _adoptRunningDownload(
   void Function(int fileBytes) onProgress,
 ) async {
   final cacheFile = File(await task.filePath());
+  var resumeAttempted = false;
   while (true) {
     final record = await FileDownloader().database.recordForId(task.taskId);
     if (record == null) {
@@ -475,10 +484,22 @@ Future<bool> _adoptRunningDownload(
       // The user canceled the adopted download from its notification.
       throw const SttDownloadCanceled();
     }
+    if (record.status == TaskStatus.paused) {
+      // A paused task makes no progress on its own, and nothing else in
+      // the app resumes one — polling it forever left the progress bar
+      // frozen with no way out, and a restart re-adopted and re-hung.
+      // Resume once; if that is refused, fall through to a fresh download
+      // rather than waiting on a task that will never move.
+      if (resumeAttempted || !await FileDownloader().resume(task)) {
+        return false;
+      }
+      resumeAttempted = true;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      continue;
+    }
     if (record.status == TaskStatus.enqueued ||
         record.status == TaskStatus.running ||
-        record.status == TaskStatus.waitingToRetry ||
-        record.status == TaskStatus.paused) {
+        record.status == TaskStatus.waitingToRetry) {
       await Future<void>.delayed(const Duration(milliseconds: 500));
       continue;
     }

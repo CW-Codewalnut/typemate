@@ -22,8 +22,123 @@ void main() {
     expect(registrar.shortcut?.virtualKeyCodes, [0x11, 0x5B]);
   });
 
+  test('holdShortcutRejectionReason accepts and refuses the right shapes', () {
+    // Accepted: every shape the picker offers.
+    for (final option in holdShortcutOptions) {
+      expect(
+        holdShortcutRejectionReason(option.virtualKeyCodes),
+        isNull,
+        reason: '${option.label} is offered, so it must be usable',
+      );
+    }
+
+    // Refused: a bare key binds dictation to it system-wide, and the user
+    // cannot type their way to Settings to undo it.
+    expect(holdShortcutRejectionReason([0x41]), isNotNull); // A
+    expect(holdShortcutRejectionReason([]), isNotNull);
+    // Two keys but no modifier is just as unusable.
+    expect(holdShortcutRejectionReason([0x41, 0x42]), isNotNull); // A+B
+    // Combinations the OS owns.
+    expect(holdShortcutRejectionReason([0x11, 0x43]), isNotNull); // Ctrl+C
+    expect(holdShortcutRejectionReason([0x12, 0x09]), isNotNull); // Alt+Tab
+    // A modifier plus a key is the minimum that leaves the keyboard usable.
+    expect(holdShortcutRejectionReason([0x11, 0x78]), isNull); // Ctrl+F9
+  });
+
+  test('an unusable custom shortcut on disk never binds', () async {
+    // A build older than the recorder's validation (or a hand-edited
+    // settings file) can leave `custom:65` — the A key — persisted.
+    // Validating only where shortcuts are recorded would let it load and
+    // bind on every launch, which is the state the user cannot escape.
+    final registrar = FakeHoldShortcutRegistrar();
+    final store = MemoryHoldShortcutSettingsStore('custom:65');
+    final controller = HoldShortcutController(
+      dictationController: createDictationController(),
+      registrar: registrar,
+      store: store,
+    );
+
+    await controller.register();
+
+    expect(controller.shortcut.id, defaultHoldShortcutId);
+    expect(registrar.shortcut?.id, defaultHoldShortcutId);
+  });
+
+  test('selecting an unusable shortcut leaves the current one live', () async {
+    final registrar = FakeHoldShortcutRegistrar();
+    final controller = HoldShortcutController(
+      dictationController: createDictationController(),
+      registrar: registrar,
+      store: MemoryHoldShortcutSettingsStore(defaultHoldShortcutId),
+    );
+    await controller.register();
+
+    await controller.selectShortcutOption(customHoldShortcutOption([0x41]));
+
+    expect(controller.shortcut.id, defaultHoldShortcutId);
+    expect(registrar.shortcut?.id, defaultHoldShortcutId);
+    expect(controller.statusMessage, contains('modifier'));
+  });
+
+  test('a failed re-register keeps the previous shortcut working', () async {
+    // selectShortcutOption assigned the new shortcut before registering, so
+    // a failure both looked like success to anyone reading `shortcut` and
+    // escaped as an unhandled Future error.
+    final registrar = FakeHoldShortcutRegistrar();
+    final controller = HoldShortcutController(
+      dictationController: createDictationController(),
+      registrar: registrar,
+      store: MemoryHoldShortcutSettingsStore(defaultHoldShortcutId),
+    );
+    await controller.register();
+    registrar.failNextRegister = true;
+
+    await expectLater(
+      controller.selectShortcutOption(holdShortcutOptionById('ctrl-shift-f9')),
+      completes,
+    );
+
+    expect(controller.shortcut.id, defaultHoldShortcutId);
+    expect(controller.statusMessage, contains('Could not apply'));
+  });
+
+  test('every offered shortcut survives a save and reload', () async {
+    // legacyShortcutIds is the migration list; an id in BOTH it and the
+    // picker can never persist, because loading rewrites it to the
+    // default. Iterating the picker catches that, where iterating the
+    // constant only ever asserts whatever the constant already says.
+    for (final option in holdShortcutOptions) {
+      final registrar = FakeHoldShortcutRegistrar();
+      final store = MemoryHoldShortcutSettingsStore(option.id);
+      final controller = HoldShortcutController(
+        dictationController: createDictationController(),
+        registrar: registrar,
+        store: store,
+      );
+
+      await controller.register();
+
+      expect(
+        controller.shortcut.id,
+        option.id,
+        reason: '${option.label} must load back as itself',
+      );
+      expect(registrar.shortcut?.id, option.id);
+    }
+  });
+
   test('migrates old shortcuts to Ctrl+Win hold', () async {
-    for (final legacyShortcutId in legacyShortcutIds) {
+    // An explicit list: iterating legacyShortcutIds would make this test
+    // agree with the constant no matter what the constant contains.
+    const retiredShortcutIds = [
+      'ctrl-double-tap-hold',
+      'ctrl-shift',
+      'ctrl',
+      'ctrl-alt-space',
+      'ctrl-shift-space',
+      'alt-shift-space',
+    ];
+    for (final legacyShortcutId in retiredShortcutIds) {
       final registrar = FakeHoldShortcutRegistrar();
       final store = MemoryHoldShortcutSettingsStore(legacyShortcutId);
       final controller = HoldShortcutController(
@@ -167,12 +282,20 @@ class FakeHoldShortcutRegistrar implements HoldShortcutRegistrar {
   bool isRegistered = false;
   int registerCount = 0;
 
+  /// Fails the next register only, so a test can check the recovery path
+  /// puts the previous shortcut back.
+  bool failNextRegister = false;
+
   @override
   Future<void> registerHoldShortcut({
     required HoldShortcutOption shortcut,
     required ShortcutCallback onPressed,
     required ShortcutCallback onReleased,
   }) async {
+    if (failNextRegister) {
+      failNextRegister = false;
+      throw StateError('registrar refused the shortcut');
+    }
     this.shortcut = shortcut;
     this.onPressed = onPressed;
     this.onReleased = onReleased;

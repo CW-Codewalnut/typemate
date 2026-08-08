@@ -6,7 +6,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:typemate/src/app.dart';
 import 'package:typemate/src/core/platform/mock_platform_bridge.dart';
 
-import 'support/fakes.dart';
+import '../support/fakes.dart';
 
 /// The product loop, end to end, on the real desktop embedder of whichever
 /// OS this runs on: hold the shortcut, speak, release, and the transcript

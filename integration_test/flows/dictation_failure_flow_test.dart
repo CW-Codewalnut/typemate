@@ -10,7 +10,7 @@ import 'package:typemate/src/core/dictation_controller.dart';
 import 'package:typemate/src/core/platform/mock_platform_bridge.dart';
 import 'package:typemate/src/core/stt/stt_engine.dart';
 
-import 'support/fakes.dart';
+import '../support/fakes.dart';
 
 /// Hangs (times out) until [hangs] is cleared, then transcribes — the
 /// shape of a wedged native decoder that later recovers.
