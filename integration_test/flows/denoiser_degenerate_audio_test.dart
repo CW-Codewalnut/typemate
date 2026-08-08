@@ -20,6 +20,20 @@ import 'package:typemate/src/core/audio/audio_denoiser.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
+  // Windows and Linux only, and deliberately an early return rather than a
+  // skip-when-the-model-is-missing: those are the two targets whose build
+  // fetches GTCRN, so there the model MUST be present and its absence has
+  // to fail loudly. Making it conditional everywhere would let this test
+  // pass by doing nothing on the platforms that matter.
+  //
+  // Android is excluded because GTCRN is never bundled there — it rides a
+  // Parakeet download that CI does not perform. macOS is excluded because
+  // its build has no fetch step and its e2e runs on flutter-tester, which
+  // cannot load the sherpa dylib at all.
+  if (!Platform.isWindows && !Platform.isLinux) {
+    return;
+  }
+
   late Directory workspace;
 
   setUp(() {
@@ -32,8 +46,11 @@ void main() {
     }
   });
 
-  /// The same search production uses: next to the working directory, then
-  /// next to the executable.
+  /// The bundled half of production's search: next to the working
+  /// directory, then next to the executable. Production has a third step —
+  /// falling back to a downloaded copy under the data directory — which is
+  /// deliberately not repeated here, because on these two platforms a
+  /// bundled model is exactly what must be present.
   String? bundledGtcrn() {
     final directories = [
       Directory.current.path.replaceAll('\\', '/'),

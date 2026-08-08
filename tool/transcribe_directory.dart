@@ -253,50 +253,55 @@ Future<_Engine> _whisperGgmlEngine({
   );
 }
 
-/// Whether a WAV is too degenerate to hand to any engine, from its header
-/// alone — engine-agnostic on purpose.
+/// The fields of a PCM WAV header that matter here, or null when the file
+/// is too short, unopenable or malformed to parse — which is exactly the
+/// state that comes back with sampleRate 0 and aborts the native engines.
+({int sampleRate, int bytesPerFrame})? _wavHeader(File file) {
+  RandomAccessFile? handle;
+  try {
+    if (!file.existsSync() || file.lengthSync() < 44) {
+      return null;
+    }
+    // Opened inside the try: a file that vanished or is unreadable between
+    // the check and the open must skip the clip, not kill the run.
+    handle = file.openSync()..setPositionSync(0);
+    final bytes = ByteData.sublistView(handle.readSync(44));
+    return (
+      sampleRate: bytes.getUint32(24, Endian.little),
+      bytesPerFrame:
+          bytes.getUint16(22, Endian.little) *
+          (bytes.getUint16(34, Endian.little) ~/ 8),
+    );
+  } catch (_) {
+    return null;
+  } finally {
+    handle?.closeSync();
+  }
+}
+
+/// Whether a WAV is too degenerate to hand to any engine — engine-agnostic
+/// on purpose.
 ///
 /// The sherpa engines abort the PROCESS on this input rather than failing,
 /// and whisper has no such guard of its own, so the check has to happen
 /// before dispatch: guarding only the sherpa path left every Hindi,
 /// Hinglish and Tamil clip able to be scored as a fully-wrong hypothesis.
 bool _unreadableWav(File file) {
-  if (!file.existsSync() || file.lengthSync() <= 44) {
-    return true;
-  }
-  final header = file.openSync()..setPositionSync(0);
-  try {
-    final bytes = ByteData.sublistView(header.readSync(44));
-    final channels = bytes.getUint16(22, Endian.little);
-    final sampleRate = bytes.getUint32(24, Endian.little);
-    final bitsPerSample = bytes.getUint16(34, Endian.little);
-    return sampleRate == 0 || channels * (bitsPerSample ~/ 8) == 0;
-  } catch (_) {
-    // A header too short or malformed to parse is exactly the case that
-    // comes back with sampleRate 0 and crashes the native engine.
-    return true;
-  } finally {
-    header.closeSync();
-  }
+  final header = _wavHeader(file);
+  return header == null ||
+      header.sampleRate == 0 ||
+      header.bytesPerFrame == 0 ||
+      file.lengthSync() <= 44;
 }
 
 /// Seconds of audio in a PCM WAV, from its header — engine-agnostic, so
 /// both runners can report it.
 double _wavSeconds(File file) {
-  final header = file.openSync()..setPositionSync(0);
-  try {
-    final bytes = ByteData.sublistView(header.readSync(44));
-    final channels = bytes.getUint16(22, Endian.little);
-    final sampleRate = bytes.getUint32(24, Endian.little);
-    final bitsPerSample = bytes.getUint16(34, Endian.little);
-    final bytesPerFrame = channels * (bitsPerSample ~/ 8);
-    if (sampleRate == 0 || bytesPerFrame == 0) {
-      return 0;
-    }
-    return (file.lengthSync() - 44) / (sampleRate * bytesPerFrame);
-  } finally {
-    header.closeSync();
+  final header = _wavHeader(file);
+  if (header == null || header.sampleRate == 0 || header.bytesPerFrame == 0) {
+    return 0;
   }
+  return (file.lengthSync() - 44) / (header.sampleRate * header.bytesPerFrame);
 }
 
 /// Lowercases, strips punctuation, and splits into words so WER measures
@@ -460,6 +465,12 @@ Future<void> _runDirectories(_Engine engine, List<String> directories) async {
             .toList()
           ..sort((a, b) => a.path.compareTo(b.path));
     for (final wavFile in wavFiles) {
+      if (_unreadableWav(wavFile)) {
+        stdout.writeln(
+          'clip=${wavFile.uri.pathSegments.last} SKIPPED (no readable audio)',
+        );
+        continue;
+      }
       final decodeStopwatch = Stopwatch()..start();
       final text = await engine.transcribe(wavFile.path);
       stdout
